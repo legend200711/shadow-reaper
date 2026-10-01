@@ -1,0 +1,1956 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#080c14" />
+<meta name="description" content="Shadow Reaper — AI That Learns With You" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<title>Shadow Reaper</title>
+<style>
+/* ── RESET ──────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── DESIGN TOKENS ──────────────────────────────────────────────────────── */
+:root {
+  --bg-void:       #050811;
+  --bg-deep:       #080c14;
+  --bg-panel:      #0d1220;
+  --bg-surface:    #111826;
+  --bg-hover:      #161f30;
+  --bg-input:      #0e1525;
+
+  --electric:      #1e90ff;
+  --electric-dim:  #1060cc;
+  --electric-glow: rgba(30,144,255,0.18);
+  --electric-edge: rgba(30,144,255,0.5);
+
+  --accent:        #00bfff;
+  --accent-dim:    rgba(0,191,255,0.12);
+
+  --text-primary:  #e8edf5;
+  --text-secondary:#94a3b8;
+  --text-dim:      #5a6880;
+  --text-muted:    #3d4f68;
+
+  --success:       #22c55e;
+  --warn:          #f59e0b;
+  --danger:        #ef4444;
+
+  --border:        rgba(30,144,255,0.12);
+  --border-bright: rgba(30,144,255,0.3);
+
+  --msg-user-bg:   #0f1e3a;
+  --msg-sr-bg:     #0d1422;
+
+  --header-h:      60px;
+  --sidebar-w:     280px;
+  --transition:    0.18s ease;
+}
+
+/* ── BASE ───────────────────────────────────────────────────────────────── */
+html, body {
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-void);
+  color: var(--text-primary);
+  font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+/* ── ATMOSPHERIC BG ─────────────────────────────────────────────────────── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 70% 40% at 50% -5%, rgba(20,80,180,0.16) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 60% at 95% 50%, rgba(10,40,120,0.08) 0%, transparent 60%),
+    radial-gradient(ellipse 30% 50% at 5%  80%, rgba(8,30,80,0.07)  0%, transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── APP SHELL ──────────────────────────────────────────────────────────── */
+.sr-app {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  height: 100vh;
+}
+
+/* ── HEADER ─────────────────────────────────────────────────────────────── */
+.sr-header {
+  flex: 0 0 auto;
+  height: var(--header-h);
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  gap: 10px;
+  background: var(--bg-deep);
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  z-index: 10;
+}
+
+.sr-header::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, var(--electric-edge) 50%, transparent 100%);
+  opacity: 0.5;
+}
+
+/* Skull avatar */
+.sr-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--bg-panel);
+  border: 1.5px solid var(--electric-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex: 0 0 40px;
+  box-shadow: 0 0 10px rgba(30,144,255,0.2);
+  line-height: 1;
+}
+
+.sr-header-info {
+  flex: 1;
+  min-width: 0;
+}
+.sr-header-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+}
+.sr-header-status {
+  font-size: 10px;
+  color: var(--text-secondary);
+  margin-top: 1px;
+}
+.sr-header-status.ready   { color: var(--success); }
+.sr-header-status.loading { color: var(--electric); }
+.sr-header-status.warn    { color: var(--warn); }
+.sr-header-status.error   { color: var(--danger); }
+
+.sr-header-actions {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+/* ── LOGIN / SIGNUP BUTTON (signed-out) ─────────────────────────────────── */
+.sr-auth-btn {
+  height: 34px;
+  padding: 0 14px;
+  background: transparent;
+  border: 1.5px solid var(--electric-dim);
+  border-radius: 8px;
+  color: var(--electric);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all var(--transition);
+  white-space: nowrap;
+  font-family: inherit;
+}
+.sr-auth-btn:hover {
+  background: var(--electric-glow);
+  border-color: var(--electric);
+  color: var(--accent);
+}
+
+/* ── USER PROFILE BUTTON (signed-in) ───────────────────────────────────── */
+.sr-profile-btn {
+  height: 34px;
+  padding: 0 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-bright);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all var(--transition);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: inherit;
+  max-width: 160px;
+  overflow: hidden;
+}
+.sr-profile-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.sr-profile-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+/* ── ICON BUTTONS ───────────────────────────────────────────────────────── */
+.sr-icon-btn {
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 17px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--transition), background var(--transition);
+  line-height: 1;
+}
+.sr-icon-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
+
+/* ── MAIN BODY ──────────────────────────────────────────────────────────── */
+.sr-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+/* ── LEFT NAV SIDEBAR (signed-in only, desktop) ─────────────────────────── */
+.sr-nav {
+  display: none; /* hidden by default; shown when signed-in on ≥900px */
+  flex: 0 0 220px;
+  width: 220px;
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border);
+  flex-direction: column;
+  overflow: hidden;
+}
+.sr-nav.visible { display: flex; }
+
+.sr-nav-section {
+  padding: 14px 12px 6px;
+}
+.sr-nav-section-label {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0 6px 6px;
+}
+.sr-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 13px;
+  transition: all var(--transition);
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+}
+.sr-nav-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+.sr-nav-item.active { background: var(--electric-glow); color: var(--electric); }
+.sr-nav-icon { font-size: 14px; flex: 0 0 auto; }
+.sr-nav-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Recent conversations list in nav */
+.sr-recent-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 12px 16px;
+}
+.sr-recent-list::-webkit-scrollbar { width: 2px; }
+.sr-recent-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.sr-recent-item {
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.4;
+  transition: all var(--transition);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  display: block;
+}
+.sr-recent-item:hover { background: var(--bg-hover); color: var(--text-secondary); }
+
+.sr-nav-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 12px;
+}
+
+/* ── MAIN COLUMN ────────────────────────────────────────────────────────── */
+.sr-main-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  max-width: 780px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* ── CONVERSATION AREA ──────────────────────────────────────────────────── */
+.sr-conversation-wrap {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+.sr-conversation {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  padding: 20px 14px 0;
+  scroll-behavior: smooth;
+}
+.sr-conversation::-webkit-scrollbar { width: 3px; }
+.sr-conversation::-webkit-scrollbar-track { background: transparent; }
+.sr-conversation::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
+
+/* ── WELCOME SCREEN ─────────────────────────────────────────────────────── */
+.sr-welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 65vh;
+  text-align: center;
+  padding: 32px 16px 24px;
+  gap: 14px;
+}
+.sr-welcome-glyph {
+  font-size: 56px;
+  line-height: 1;
+  filter: drop-shadow(0 0 20px rgba(30,144,255,0.55));
+}
+.sr-welcome h1 {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: var(--text-primary);
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+.sr-welcome-tagline {
+  font-size: 12px;
+  color: var(--text-dim);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-top: -4px;
+}
+.sr-welcome p {
+  font-size: 14px;
+  color: var(--text-secondary);
+  max-width: 340px;
+  line-height: 1.7;
+  margin-top: 4px;
+}
+.sr-welcome-hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 8px;
+  max-width: 420px;
+}
+.sr-hint-chip {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-bright);
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all var(--transition);
+  letter-spacing: 0.02em;
+}
+.sr-hint-chip:hover {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+/* ── MESSAGES ───────────────────────────────────────────────────────────── */
+.sr-msg {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+  align-items: flex-end;
+}
+.sr-msg.user { flex-direction: row-reverse; }
+.sr-msg-content { max-width: 76%; }
+@media (max-width: 480px) { .sr-msg-content { max-width: 90%; } }
+
+.sr-msg-body {
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-size: 14px;
+  line-height: 1.65;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+.sr-msg.sr   .sr-msg-body {
+  background: var(--msg-sr-bg);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 4px;
+  color: var(--text-primary);
+}
+.sr-msg.user .sr-msg-body {
+  background: var(--msg-user-bg);
+  border: 1px solid var(--border-bright);
+  border-bottom-right-radius: 4px;
+  color: var(--text-primary);
+}
+.sr-msg-meta {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  padding: 0 4px;
+}
+.sr-msg.user .sr-msg-meta { text-align: right; }
+
+/* ── TYPING INDICATOR ───────────────────────────────────────────────────── */
+.sr-typing {
+  display: flex;
+  gap: 5px;
+  padding: 12px 16px;
+  background: var(--msg-sr-bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  border-bottom-left-radius: 4px;
+  width: fit-content;
+}
+.sr-typing-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--electric);
+  opacity: 0.4;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .sr-typing-dot:nth-child(1) { animation: srPulse 1s 0s   infinite; }
+  .sr-typing-dot:nth-child(2) { animation: srPulse 1s 0.2s infinite; }
+  .sr-typing-dot:nth-child(3) { animation: srPulse 1s 0.4s infinite; }
+  @keyframes srPulse {
+    0%,100% { opacity: 0.2; transform: scale(1);   }
+    50%     { opacity: 1;   transform: scale(1.2); }
+  }
+}
+
+/* ── DIVIDERS ───────────────────────────────────────────────────────────── */
+.sr-divider {
+  display: flex;
+  align-items: center;
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 14px 0;
+  gap: 10px;
+}
+.sr-divider::before, .sr-divider::after {
+  content: ''; flex: 1; height: 1px; background: var(--border);
+}
+
+/* ── VOICE BAR ──────────────────────────────────────────────────────────── */
+.sr-voice-bar {
+  display: none;
+  padding: 7px 16px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--electric);
+  letter-spacing: 0.06em;
+  border-top: 1px solid var(--border);
+  background: var(--bg-deep);
+}
+.sr-voice-bar.visible { display: block; }
+
+/* ── INPUT AREA ─────────────────────────────────────────────────────────── */
+.sr-input-area {
+  flex: 0 0 auto;
+  padding: 10px 14px 14px;
+  background: var(--bg-deep);
+  border-top: 1px solid var(--border);
+}
+.sr-input-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  background: var(--bg-input);
+  border: 1.5px solid var(--border);
+  border-radius: 16px;
+  padding: 8px 8px 8px 14px;
+  transition: border-color var(--transition);
+}
+.sr-input-row:focus-within {
+  border-color: var(--electric-edge);
+  box-shadow: 0 0 0 3px rgba(30,144,255,0.07);
+}
+.sr-textarea {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: inherit;
+  line-height: 1.6;
+  resize: none;
+  max-height: 120px;
+  min-height: 24px;
+}
+.sr-textarea::placeholder { color: var(--text-dim); }
+.sr-textarea::-webkit-scrollbar { width: 2px; }
+.sr-textarea::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.sr-voice-btn {
+  width: 36px; height: 36px; flex: 0 0 36px;
+  border: 1.5px solid var(--border);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 15px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all var(--transition);
+  line-height: 1;
+}
+.sr-voice-btn:hover { border-color: var(--electric); color: var(--electric); }
+.sr-voice-btn.listening { border-color: var(--danger); color: var(--danger); background: rgba(239,68,68,0.1); }
+.sr-voice-btn.unavailable { opacity: 0.3; cursor: not-allowed; }
+
+.sr-send-btn {
+  width: 36px; height: 36px; flex: 0 0 36px;
+  border-radius: 50%;
+  border: none;
+  background: var(--electric);
+  color: #fff;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background var(--transition), opacity var(--transition);
+  line-height: 1;
+}
+.sr-send-btn:hover:not(:disabled) { background: var(--accent); }
+.sr-send-btn:disabled { background: var(--bg-surface); color: var(--text-muted); cursor: not-allowed; }
+
+/* ── RIGHT SETTINGS SIDEBAR ─────────────────────────────────────────────── */
+.sr-scrim {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(5,8,17,0.72);
+  z-index: 40;
+}
+.sr-scrim.visible { display: block; }
+
+.sr-settings {
+  position: fixed;
+  top: 0; right: 0;
+  width: var(--sidebar-w);
+  max-width: 92vw;
+  height: 100dvh;
+  height: 100vh;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border-bright);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.22s cubic-bezier(0.3,0,0.1,1);
+  overflow: hidden;
+}
+.sr-settings.open { transform: translateX(0); }
+
+.sr-settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 14px 12px;
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+.sr-settings-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.sr-settings-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+}
+.sr-settings-section { margin-bottom: 22px; }
+.sr-settings-label {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-dim);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.sr-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+  gap: 10px;
+}
+.sr-toggle-row:last-child { border-bottom: none; }
+.sr-toggle-label { font-size: 13px; color: var(--text-primary); line-height: 1.3; }
+.sr-toggle-desc  { font-size: 11px; color: var(--text-dim); margin-top: 2px; line-height: 1.4; }
+.sr-toggle { flex: 0 0 auto; position: relative; display: inline-flex; cursor: pointer; }
+.sr-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+.sr-toggle-track {
+  width: 38px; height: 22px;
+  background: var(--bg-surface);
+  border: 1.5px solid var(--border);
+  border-radius: 11px;
+  transition: all var(--transition);
+  position: relative;
+}
+.sr-toggle-track::after {
+  content: '';
+  position: absolute;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  top: 2px; left: 2px;
+  transition: all var(--transition);
+}
+.sr-toggle input:checked + .sr-toggle-track { background: var(--electric-dim); border-color: var(--electric); }
+.sr-toggle input:checked + .sr-toggle-track::after { background: var(--text-primary); transform: translateX(16px); }
+
+.sr-status-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 14px; }
+.sr-chip {
+  padding: 3px 9px;
+  border-radius: 12px;
+  font-size: 9px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.sr-chip.on   { border-color: var(--success); color: var(--success); }
+.sr-chip.off  { border-color: var(--danger);  color: var(--danger); }
+.sr-chip.warn { border-color: var(--warn);    color: var(--warn); }
+
+.sr-action-btn {
+  width: 100%;
+  padding: 9px 14px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: all var(--transition);
+  display: block;
+  margin-bottom: 5px;
+  font-family: inherit;
+}
+.sr-action-btn:hover { background: var(--bg-hover); border-color: var(--border-bright); color: var(--text-primary); }
+.sr-action-btn.danger { border-color: var(--danger); color: var(--danger); }
+.sr-action-btn.danger:hover { background: rgba(239,68,68,0.1); }
+
+/* Device controls in settings (auth-gated) */
+.sr-device-controls {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.sr-device-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  gap: 8px;
+}
+.sr-device-item:last-child { border-bottom: none; }
+.sr-device-name { color: var(--text-secondary); }
+.sr-device-state {
+  font-size: 10px; font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.sr-device-state.available   { background: rgba(34,197,94,0.12);  color: var(--success); }
+.sr-device-state.allowed     { background: rgba(30,144,255,0.12); color: var(--electric); }
+.sr-device-state.permission  { background: rgba(245,158,11,0.12); color: var(--warn); }
+.sr-device-state.denied      { background: rgba(239,68,68,0.12);  color: var(--danger); }
+.sr-device-state.unsupported { background: var(--bg-panel);       color: var(--text-muted); }
+
+/* Auth-required prompt in settings */
+.sr-auth-gate {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 14px 16px;
+  text-align: center;
+}
+.sr-auth-gate-text {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+.sr-auth-gate-btn {
+  display: inline-block;
+  padding: 7px 18px;
+  background: var(--electric-dim);
+  border: 1px solid var(--electric);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  transition: all var(--transition);
+  font-family: inherit;
+}
+.sr-auth-gate-btn:hover { background: var(--electric); }
+
+/* ── AUTH PROMPT INLINE (in conversation) ───────────────────────────────── */
+.sr-auth-prompt {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-bright);
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin: 8px 0 16px;
+  max-width: 400px;
+}
+.sr-auth-prompt-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+.sr-auth-prompt-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.sr-auth-prompt-btn {
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  transition: all var(--transition);
+  font-family: inherit;
+}
+.sr-auth-prompt-btn.primary {
+  background: var(--electric-dim);
+  border: 1px solid var(--electric);
+  color: #fff;
+}
+.sr-auth-prompt-btn.primary:hover { background: var(--electric); }
+.sr-auth-prompt-btn.secondary {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+.sr-auth-prompt-btn.secondary:hover { border-color: var(--border-bright); color: var(--text-secondary); }
+.sr-auth-prompt-btn.ghost {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 7px 8px;
+}
+.sr-auth-prompt-btn.ghost:hover { color: var(--text-secondary); }
+
+.sr-build-info {
+  margin-top: 20px;
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 1.9;
+  letter-spacing: 0.03em;
+}
+
+/* ── MOBILE NAV DRAWER (signed-in, <900px) ──────────────────────────────── */
+.sr-mobile-nav {
+  display: none;
+  position: fixed;
+  top: 0; left: 0;
+  width: 260px;
+  max-width: 86vw;
+  height: 100dvh;
+  height: 100vh;
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border-bright);
+  z-index: 50;
+  flex-direction: column;
+  transform: translateX(-100%);
+  transition: transform 0.22s cubic-bezier(0.3,0,0.1,1);
+  overflow: hidden;
+}
+.sr-mobile-nav.open { transform: translateX(0); }
+.sr-mobile-nav-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 14px 12px;
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+.sr-mobile-nav-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+/* ── RESPONSIVE ─────────────────────────────────────────────────────────── */
+@media (min-width: 600px) {
+  .sr-conversation { padding: 24px 22px 0; }
+  .sr-input-area   { padding: 10px 22px 18px; }
+}
+
+@media (min-width: 900px) {
+  .sr-nav { display: none; } /* controlled by JS .visible class */
+  .sr-mobile-nav { display: none !important; }
+  .sr-scrim { display: none !important; }
+}
+
+@media (max-width: 899px) {
+  .sr-nav { display: none !important; }
+  .sr-mobile-nav { display: flex; }
+}
+
+</style>
+</head>
+<body>
+
+<div class="sr-app" id="srApp">
+
+  <!-- Header -->
+  <header class="sr-header" role="banner">
+    <!-- Hamburger (signed-in mobile only) -->
+    <button class="sr-icon-btn" id="srMenuBtn" style="display:none" title="Menu" aria-label="Open navigation">&#9776;</button>
+
+    <!-- Avatar -->
+    <div class="sr-avatar" aria-hidden="true">&#9760;</div>
+
+    <!-- Title / status -->
+    <div class="sr-header-info">
+      <div class="sr-header-title">Shadow Reaper</div>
+      <div class="sr-header-status" id="srStatusLabel">Initializing…</div>
+    </div>
+
+    <!-- Header actions (right side) -->
+    <div class="sr-header-actions">
+      <!-- New conversation (always visible) -->
+      <button class="sr-icon-btn" id="srNewConvoBtn" title="New conversation" aria-label="New conversation">&#8635;</button>
+
+      <!-- Settings gear (always visible) -->
+      <button class="sr-icon-btn" id="srSettingsBtn" title="Settings" aria-label="Settings">&#9881;</button>
+
+      <!-- LOGIN / SIGN UP — shown when signed out -->
+      <button class="sr-auth-btn" id="srAuthBtn" aria-label="Log in or sign up">LOG IN / SIGN UP</button>
+
+      <!-- Profile / account — shown when signed in -->
+      <button class="sr-profile-btn" id="srProfileBtn" style="display:none" aria-label="Account options">
+        <span>&#9760;</span>
+        <span class="sr-profile-email" id="srProfileEmail"></span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ── BODY ────────────────────────────────────────────────────────────── -->
+  <div class="sr-body">
+
+    <!-- Left nav (desktop, signed-in) -->
+    <nav class="sr-nav" id="srNav" aria-label="Navigation">
+      <div class="sr-nav-section">
+        <button class="sr-nav-item active" id="srNavNewConvo">
+          <span class="sr-nav-icon">&#43;</span>
+          <span class="sr-nav-label">New Conversation</span>
+        </button>
+      </div>
+
+      <div class="sr-nav-divider"></div>
+
+      <!-- Recent conversations -->
+      <div class="sr-nav-section">
+        <div class="sr-nav-section-label">Recent</div>
+      </div>
+      <div class="sr-recent-list" id="srRecentList">
+        <!-- populated by JS -->
+      </div>
+
+      <div class="sr-nav-divider"></div>
+
+      <div class="sr-nav-section">
+        <button class="sr-nav-item" id="srNavProjects">
+          <span class="sr-nav-icon">&#128193;</span>
+          <span class="sr-nav-label">Projects</span>
+        </button>
+        <button class="sr-nav-item" id="srNavDevices">
+          <span class="sr-nav-icon">&#128241;</span>
+          <span class="sr-nav-label">Devices</span>
+        </button>
+      </div>
+
+      <div style="flex:1"></div>
+
+      <div style="padding:12px;font-size:9px;color:var(--text-muted);text-align:center;border-top:1px solid var(--border);line-height:1.9;">
+        Shadow Reaper Standalone<br>
+        SR-V2-PUBLIC-UI-1
+      </div>
+    </nav>
+
+    <!-- Main column -->
+    <div class="sr-main-col">
+
+      <!-- Conversation area -->
+      <div class="sr-conversation-wrap">
+        <div class="sr-conversation" id="srConversation" role="log" aria-live="polite" aria-label="Conversation with Shadow Reaper">
+
+          <!-- Welcome / landing screen -->
+          <div class="sr-welcome" id="srWelcome">
+            <div class="sr-welcome-glyph" aria-hidden="true">&#9760;</div>
+            <h1>Shadow Reaper</h1>
+            <div class="sr-welcome-tagline">AI That Learns With You</div>
+            <p>Ask anything. Start talking and Shadow Reaper responds immediately — no account needed.</p>
+            <div class="sr-welcome-hints" role="list" aria-label="Quick start">
+              <div class="sr-hint-chip" data-msg="yo" role="listitem">yo</div>
+              <div class="sr-hint-chip" data-msg="What can you do?" role="listitem">what can you do?</div>
+              <div class="sr-hint-chip" data-msg="Help me write something" role="listitem">help me write</div>
+              <div class="sr-hint-chip" data-msg="I need coding help" role="listitem">coding help</div>
+              <div class="sr-hint-chip" data-msg="Translate hello to Spanish" role="listitem">translate</div>
+              <div class="sr-hint-chip" data-msg="I have a new project idea" role="listitem">new project</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Voice listening bar -->
+      <div class="sr-voice-bar" id="srVoiceBar" aria-live="polite">
+        Listening… speak now
+      </div>
+
+      <!-- Input area -->
+      <div class="sr-input-area">
+        <div class="sr-input-row">
+          <textarea
+            id="srInput"
+            class="sr-textarea"
+            placeholder="Message Shadow Reaper…"
+            rows="1"
+            aria-label="Message input"
+            autocomplete="off"
+            autocorrect="on"
+            spellcheck="true"
+          ></textarea>
+          <button class="sr-voice-btn" id="srVoiceBtn" title="Voice input" aria-label="Voice input">&#127908;</button>
+          <button class="sr-send-btn" id="srSendBtn" title="Send" aria-label="Send message" disabled>&#9658;</button>
+        </div>
+      </div>
+
+    </div><!-- /main-col -->
+
+    <!-- Right settings sidebar -->
+    <aside class="sr-settings" id="srSettings" aria-label="Shadow Reaper settings">
+      <div class="sr-settings-header">
+        <span class="sr-settings-title">Settings</span>
+        <button class="sr-icon-btn" id="srSettingsClose" aria-label="Close settings">&#215;</button>
+      </div>
+
+      <div class="sr-settings-body">
+
+        <!-- System status -->
+        <div class="sr-settings-section">
+          <div class="sr-settings-label">System Status</div>
+          <div class="sr-status-chips" id="srStatusChips">
+            <span class="sr-chip" id="schipHistory">History</span>
+            <span class="sr-chip" id="schipMemory">Memory</span>
+            <span class="sr-chip" id="schipAdaptive">Adaptive</span>
+            <span class="sr-chip" id="schipVoice">Voice</span>
+            <span class="sr-chip" id="schipKnowledge">Knowledge</span>
+            <span class="sr-chip" id="schipTranslation">Translate</span>
+          </div>
+        </div>
+
+        <!-- Intelligence (always shown) -->
+        <div class="sr-settings-section">
+          <div class="sr-settings-label">Intelligence</div>
+
+          <div class="sr-toggle-row">
+            <div>
+              <div class="sr-toggle-label">Conversation History</div>
+              <div class="sr-toggle-desc">Remember past sessions</div>
+            </div>
+            <label class="sr-toggle" aria-label="Conversation history">
+              <input type="checkbox" id="srToggleHistory" checked />
+              <span class="sr-toggle-track"></span>
+            </label>
+          </div>
+
+          <div class="sr-toggle-row">
+            <div>
+              <div class="sr-toggle-label">Personal Memory</div>
+              <div class="sr-toggle-desc">Explicit "remember…" commands</div>
+            </div>
+            <label class="sr-toggle" aria-label="Personal memory">
+              <input type="checkbox" id="srToggleMemory" checked />
+              <span class="sr-toggle-track"></span>
+            </label>
+          </div>
+
+          <div class="sr-toggle-row">
+            <div>
+              <div class="sr-toggle-label">Adaptive Learning</div>
+              <div class="sr-toggle-desc">Learn your context over time</div>
+            </div>
+            <label class="sr-toggle" aria-label="Adaptive learning">
+              <input type="checkbox" id="srToggleAdaptive" checked />
+              <span class="sr-toggle-track"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Voice (always shown) -->
+        <div class="sr-settings-section">
+          <div class="sr-settings-label">Voice</div>
+
+          <div class="sr-toggle-row">
+            <div>
+              <div class="sr-toggle-label">Voice Input</div>
+              <div class="sr-toggle-desc">Microphone speech-to-text</div>
+            </div>
+            <label class="sr-toggle" aria-label="Voice input">
+              <input type="checkbox" id="srToggleVoice" checked />
+              <span class="sr-toggle-track"></span>
+            </label>
+          </div>
+
+          <div class="sr-toggle-row">
+            <div>
+              <div class="sr-toggle-label">Voice Response (TTS)</div>
+              <div class="sr-toggle-desc">Speak responses aloud</div>
+            </div>
+            <label class="sr-toggle" aria-label="Text to speech">
+              <input type="checkbox" id="srToggleTTS" />
+              <span class="sr-toggle-track"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Devices section — gated by auth -->
+        <div class="sr-settings-section" id="srDeviceSection">
+          <div class="sr-settings-label">Device Controls</div>
+          <!-- Auth gate shown when signed out -->
+          <div class="sr-auth-gate" id="srDeviceAuthGate">
+            <div class="sr-auth-gate-text">Sign in to pair and control your devices securely.</div>
+            <button class="sr-auth-gate-btn" id="srDeviceAuthBtn">LOG IN / SIGN UP</button>
+          </div>
+          <!-- Device controls shown when signed in -->
+          <div id="srDeviceControlsWrap" style="display:none">
+            <div class="sr-device-controls" id="srDeviceControls">
+              <div class="sr-device-item" id="srNoDeviceMsg">
+                <span class="sr-device-name">Loading…</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="sr-settings-section">
+          <div class="sr-settings-label">Actions</div>
+          <button class="sr-action-btn" id="srClearHistoryBtn">&#8635; New Conversation</button>
+          <!-- Clear memories only shown when signed in -->
+          <button class="sr-action-btn danger" id="srClearMemoryBtn" style="display:none">&#8998; Clear All Memories</button>
+          <!-- Sign out (signed-in only) -->
+          <button class="sr-action-btn" id="srSignOutBtn" style="display:none">&#8594; Sign Out</button>
+        </div>
+
+        <!-- Build info -->
+        <div class="sr-build-info" id="srBuildInfo">
+          Shadow Reaper Standalone<br>
+          SR-V2-PUBLIC-UI-1<br>
+          <span id="srBuildPlatform"></span>
+        </div>
+
+      </div>
+    </aside>
+
+  </div><!-- /body -->
+
+  <!-- Mobile nav drawer (signed-in, <900px) -->
+  <nav class="sr-mobile-nav" id="srMobileNav" aria-label="Navigation">
+    <div class="sr-mobile-nav-header">
+      <span style="font-size:13px;font-weight:700;color:var(--text-primary);letter-spacing:0.05em;text-transform:uppercase;">Menu</span>
+      <button class="sr-icon-btn" id="srMobileNavClose" aria-label="Close menu">&#215;</button>
+    </div>
+    <div class="sr-mobile-nav-body">
+      <div style="padding:6px 8px;">
+        <button class="sr-nav-item" id="srMobileNavNewConvo">
+          <span class="sr-nav-icon">&#43;</span>
+          <span class="sr-nav-label">New Conversation</span>
+        </button>
+
+        <div style="font-size:9px;font-weight:700;color:var(--text-muted);letter-spacing:0.1em;text-transform:uppercase;padding:12px 10px 6px;">Recent</div>
+        <div id="srMobileRecentList"><!-- populated by JS --></div>
+
+        <div style="height:1px;background:var(--border);margin:8px 2px;"></div>
+
+        <button class="sr-nav-item" id="srMobileNavProjects">
+          <span class="sr-nav-icon">&#128193;</span>
+          <span class="sr-nav-label">Projects</span>
+        </button>
+        <button class="sr-nav-item" id="srMobileNavDevices">
+          <span class="sr-nav-icon">&#128241;</span>
+          <span class="sr-nav-label">Devices</span>
+        </button>
+        <button class="sr-nav-item" id="srMobileNavSettings">
+          <span class="sr-nav-icon">&#9881;</span>
+          <span class="sr-nav-label">Settings</span>
+        </button>
+
+        <div style="height:1px;background:var(--border);margin:8px 2px;"></div>
+
+        <button class="sr-nav-item" id="srMobileNavSignOut">
+          <span class="sr-nav-icon">&#8594;</span>
+          <span class="sr-nav-label">Sign Out</span>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Scrim -->
+  <div class="sr-scrim" id="srScrim"></div>
+
+</div><!-- /sr-app -->
+
+<!-- ── SCRIPTS ────────────────────────────────────────────────────────────── -->
+<!-- Firebase v8 compat SDK (must load before firebase-config.js and firebase-adapter.js) -->
+<!-- Using compat SDK because firebase-adapter.js uses window.firebase.auth() / firestore() globals -->
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+
+<script src="./firebase/firebase-config.js"></script>
+<script src="./config/environment.js"></script>
+<script src="./security/security-policy.js"></script>
+<script src="./security/web-research-guard.js"></script>
+<script src="./adapters/firebase-adapter.js"></script>
+<script src="./adapters/cloudflare-adapter.js"></script>
+
+<script src="./platform/sr-platform-detector.js"></script>
+<script src="./platform/sr-capability-manager.js"></script>
+<script src="./platform/sr-permission-manager.js"></script>
+<script src="./platform/sr-device-action-router.js"></script>
+<script src="./platform/adapters/sr-web-adapter.js"></script>
+<script src="./platform/adapters/sr-android-adapter.js"></script>
+<script src="./platform/adapters/sr-ios-adapter.js"></script>
+
+<script src="./snx-shadow-conv-history.js"></script>
+<script src="./snx-shadow-memory.js"></script>
+<script src="./snx-shadow-adaptive.js"></script>
+
+<script src="./history/sr-conversation-history.js"></script>
+<script src="./memory/sr-personal-memory.js"></script>
+<script src="./global-learning/sr-global-learning.js"></script>
+<script src="./research/sr-web-research.js"></script>
+
+<script src="./core/adaptive-brain.js"></script>
+<script src="./core/understanding-engine.js"></script>
+<script src="./core/context-engine.js"></script>
+<script src="./core/conversation-engine.js"></script>
+<script src="./core/response-engine.js"></script>
+<script src="./core/persistence-bridge.js"></script>
+<script src="./core/local-model.js"></script>
+
+<script src="./knowledge/knowledge-engine.js"></script>
+<script src="./knowledge/sr-knowledge-learner.js"></script>
+<script src="./translation/translation-engine.js"></script>
+<script src="./voice/voice-engine.js"></script>
+
+<script src="./adapters/founder-controls.js"></script>
+<script src="./security/sr-founder-security.js"></script>
+<script src="./shadow-reaper.js"></script>
+
+<!-- Auth UI (must load after Firebase adapter) -->
+<script src="./sr-auth-ui.js"></script>
+
+<script>
+/* ─────────────────────────────────────────────────────────────────────────
+   SHADOW REAPER — PUBLIC-FIRST UI
+   Build: SR-V2-PUBLIC-UI-1
+
+   SECURITY MODEL:
+   - AI conversation requires NO authentication (session-only)
+   - Private data (History/Memory/Adaptive/Devices) requires authentication
+   - Firebase Firestore rules enforce auth at the DB level (not just CSS)
+   - Device commands require auth before dispatch
+   - Unsigned users get zero persistent storage — all modules handle this
+     internally via _isGuest() → uid === null checks
+   - No SNS globals, no cross-user data
+
+   XSS SAFETY:
+   - All user-generated content appended via textContent only (never innerHTML)
+   - Auth modal built in sr-auth-ui.js without user-generated innerHTML
+─────────────────────────────────────────────────────────────────────────── */
+(function () {
+  'use strict';
+
+  // ── Module refs ──────────────────────────────────────────────────────────
+  var SR      = window.ShadowReaper;
+  var SRVoice = window.SRVoice;
+  var SRPlat  = window.SRPlatformDetector;
+  var SRCaps  = window.SRCapabilityManager;
+  var SRWeb   = window.SRWebAdapter;
+  var SRAuth  = window.SRAuthUI;
+  var SRHist  = window.SNXShadowConvHistory;
+
+  // ── DOM refs ─────────────────────────────────────────────────────────────
+  var $conv         = document.getElementById('srConversation');
+  var $welcome      = document.getElementById('srWelcome');
+  var $input        = document.getElementById('srInput');
+  var $sendBtn      = document.getElementById('srSendBtn');
+  var $voiceBtn     = document.getElementById('srVoiceBtn');
+  var $voiceBar     = document.getElementById('srVoiceBar');
+  var $statusLabel  = document.getElementById('srStatusLabel');
+  var $settings     = document.getElementById('srSettings');
+  var $scrim        = document.getElementById('srScrim');
+  var $buildPlat    = document.getElementById('srBuildPlatform');
+  var $nav          = document.getElementById('srNav');
+  var $mobileNav    = document.getElementById('srMobileNav');
+  var $menuBtn      = document.getElementById('srMenuBtn');
+  var $authBtn      = document.getElementById('srAuthBtn');
+  var $profileBtn   = document.getElementById('srProfileBtn');
+  var $profileEmail = document.getElementById('srProfileEmail');
+  var $recentList   = document.getElementById('srRecentList');
+  var $mobileRecent = document.getElementById('srMobileRecentList');
+
+  var $tHistory  = document.getElementById('srToggleHistory');
+  var $tMemory   = document.getElementById('srToggleMemory');
+  var $tAdaptive = document.getElementById('srToggleAdaptive');
+  var $tVoice    = document.getElementById('srToggleVoice');
+  var $tTTS      = document.getElementById('srToggleTTS');
+
+  // ── State ─────────────────────────────────────────────────────────────────
+  var _isProcessing = false;
+  var _isListening  = false;
+  var _msgCount     = 0;
+  var _isAuth       = false;            // current auth state
+  var _sessionMsgs  = [];              // [{role,text}] — unsigned session buffer
+
+  // ── BOOT ──────────────────────────────────────────────────────────────────
+  function boot() {
+    if (!SR) {
+      _setStatus('Error — AI module not loaded', 'error');
+      console.error('[SR-UI] ShadowReaper module not loaded.');
+      return;
+    }
+
+    // Platform info
+    if (SRPlat && $buildPlat) $buildPlat.textContent = SRPlat.getRuntime();
+
+    // Initialize Shadow Reaper AI (no auth required)
+    var ok = SR.init();
+    if (!ok) {
+      _setStatus('Init failed — check console', 'error');
+      return;
+    }
+
+    _setStatus('Ready', 'ready');
+    _updateStatusChips();
+    _syncToggles();
+
+    // Initialize Auth UI and listen for auth state changes
+    if (SRAuth) {
+      SRAuth.init();
+      SRAuth.onAuthChange(_onAuthChange);
+    } else {
+      // No auth module — treat as signed out
+      _onAuthChange(null);
+    }
+  }
+
+  // ── AUTH STATE CHANGE ─────────────────────────────────────────────────────
+  // This is the single source of truth for all UI auth-dependent changes.
+  function _onAuthChange(user) {
+    _isAuth = !!user;
+
+    if (_isAuth) {
+      // ── SIGNED IN ──
+      $authBtn.style.display    = 'none';
+      $profileBtn.style.display = '';
+
+      var email = user.email || user.displayName || 'Account';
+      $profileEmail.textContent = email;
+
+      // Show hamburger on mobile (signed-in only)
+      if (_isMobile()) $menuBtn.style.display = '';
+
+      // Show desktop nav
+      if (!_isMobile()) $nav.classList.add('visible');
+
+      // Show settings items that require auth
+      var cmb = document.getElementById('srClearMemoryBtn');
+      var sob = document.getElementById('srSignOutBtn');
+      if (cmb) cmb.style.display = '';
+      if (sob) sob.style.display = '';
+
+      // Device controls: show real controls, hide gate
+      var gate = document.getElementById('srDeviceAuthGate');
+      var wrap = document.getElementById('srDeviceControlsWrap');
+      if (gate) gate.style.display = 'none';
+      if (wrap) wrap.style.display = '';
+      _initDeviceControls();
+
+      // Update status: reflect persistence now active
+      _setStatus('Ready', 'ready');
+      _updateStatusChips();
+      _syncToggles();
+
+      // Load recent conversations for sidebar
+      _loadRecentConversations();
+
+    } else {
+      // ── SIGNED OUT ──
+      $authBtn.style.display    = '';
+      $profileBtn.style.display = 'none';
+      $menuBtn.style.display    = 'none';
+
+      // Hide desktop nav
+      $nav.classList.remove('visible');
+
+      // Close mobile nav if open
+      $mobileNav.classList.remove('open');
+
+      // Hide auth-only settings items
+      var cmb = document.getElementById('srClearMemoryBtn');
+      var sob = document.getElementById('srSignOutBtn');
+      if (cmb) cmb.style.display = 'none';
+      if (sob) sob.style.display = 'none';
+
+      // Device controls: show gate, hide controls
+      var gate = document.getElementById('srDeviceAuthGate');
+      var wrap = document.getElementById('srDeviceControlsWrap');
+      if (gate) gate.style.display = '';
+      if (wrap) wrap.style.display = 'none';
+
+      // Clear recent lists
+      if ($recentList)   $recentList.innerHTML   = '';
+      if ($mobileRecent) $mobileRecent.innerHTML = '';
+
+      // Status: session mode
+      _setStatus('Session mode', 'warn');
+    }
+  }
+
+  // ── DEVICE CONTROLS (auth-gated) ─────────────────────────────────────────
+  function _initDeviceControls() {
+    if (!_isAuth) return; // never show device controls without auth
+    var $deviceCtrl = document.getElementById('srDeviceControls');
+    if (!SRPlat || !SRCaps || !$deviceCtrl) return;
+
+    if (SRPlat.isDesktop()) {
+      var sec = document.getElementById('srDeviceSection');
+      if (sec) sec.style.display = 'none';
+      return;
+    }
+
+    $deviceCtrl.innerHTML = '';
+    var info = SRWeb ? SRWeb.getDeviceControlsInfo() : [];
+    if (!info.length) {
+      var msg = document.createElement('div');
+      msg.className   = 'sr-device-item';
+      msg.textContent = 'No device controls available.';
+      $deviceCtrl.appendChild(msg);
+      return;
+    }
+
+    info.forEach(function (cap) {
+      var row  = document.createElement('div');
+      row.className = 'sr-device-item';
+
+      var name = document.createElement('span');
+      name.className   = 'sr-device-name';
+      name.textContent = cap.label;
+
+      var badge = document.createElement('span');
+      badge.className  = 'sr-device-state';
+      var s = cap.state;
+      if      (s === 'ALLOWED')             { badge.textContent = 'Allowed';          badge.className += ' allowed'; }
+      else if (s === 'AVAILABLE')           { badge.textContent = 'Available';         badge.className += ' available'; }
+      else if (s === 'PERMISSION_REQUIRED') { badge.textContent = 'Needs Permission';  badge.className += ' permission'; }
+      else if (s === 'DENIED')              { badge.textContent = 'Denied';            badge.className += ' denied'; }
+      else                                  { badge.textContent = 'Unsupported';       badge.className += ' unsupported'; }
+
+      row.appendChild(name);
+      row.appendChild(badge);
+      $deviceCtrl.appendChild(row);
+    });
+  }
+
+  // ── RECENT CONVERSATIONS ──────────────────────────────────────────────────
+  function _loadRecentConversations() {
+    if (!_isAuth || !SRHist || typeof SRHist.listRecent !== 'function') return;
+
+    SRHist.listRecent(function (result) {
+      var convs = (result && result.conversations) ? result.conversations : [];
+      _renderRecentList($recentList,   convs, false);
+      _renderRecentList($mobileRecent, convs, true);
+    });
+  }
+
+  function _renderRecentList(container, convs, isMobile) {
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (!convs.length) {
+      var empty = document.createElement('div');
+      empty.style.cssText = 'padding:8px 16px;font-size:11px;color:var(--text-muted);';
+      empty.textContent   = 'No saved conversations yet.';
+      container.appendChild(empty);
+      return;
+    }
+
+    convs.forEach(function (c) {
+      var btn = document.createElement('button');
+      btn.className = isMobile ? 'sr-nav-item' : 'sr-recent-item';
+      btn.textContent = c.preview || 'Conversation';
+      btn.title       = c.preview || '';
+      btn.setAttribute('data-convid', c.convId);
+      btn.addEventListener('click', function () {
+        _openConversation(c.convId, c.preview);
+        if (isMobile) {
+          $mobileNav.classList.remove('open');
+          $scrim.classList.remove('visible');
+        }
+      });
+      container.appendChild(btn);
+    });
+  }
+
+  function _openConversation(convId, preview) {
+    if (!_isAuth) { _showAuthPrompt('save'); return; }
+    if (!SRHist || typeof SRHist.loadConversation !== 'function') return;
+
+    SRHist.loadConversation(convId, function (result) {
+      // Clear current conversation display
+      $conv.innerHTML = '';
+      $welcome.style.display = 'none';
+      _msgCount = 0;
+
+      _appendDivider('Conversation: ' + (preview || convId));
+
+      var turns = (result && result.turns) ? result.turns : [];
+      if (!turns.length) {
+        _appendMessage('sr', 'This conversation could not be loaded.');
+        return;
+      }
+      turns.forEach(function (t) {
+        if (t && t.role && t.text) {
+          _appendMessage(t.role === 'user' ? 'user' : 'sr', t.text);
+        }
+      });
+    });
+  }
+
+  // ── DEVICE COMMAND AUTH GATE ──────────────────────────────────────────────
+  // Intercepts any device-related user message and requires auth first.
+  function _requiresDeviceAuth(text) {
+    if (!text) return false;
+    var t = text.toLowerCase();
+    // Simple heuristic patterns for device-related requests
+    return /\b(turn on|turn off|switch on|switch off|set alarm|remind me|open app|send notification|call|text message|vibrate|location)\b/i.test(t);
+  }
+
+  // ── AUTH PROMPTS ──────────────────────────────────────────────────────────
+  function _showAuthPrompt(reason) {
+    // Build prompt text based on reason
+    var text = 'Sign in or create an account to access this feature.';
+    var loginLabel  = 'LOG IN';
+    var signupLabel = 'SIGN UP';
+
+    if (reason === 'save') {
+      text = 'Sign in or create an account to save this conversation and continue it later.';
+    } else if (reason === 'device') {
+      text = 'Sign in to securely pair and control your devices.';
+    } else if (reason === 'history') {
+      text = 'Sign in to access your saved conversations and pick up where you left off.';
+    } else if (reason === 'memory') {
+      text = 'Sign in to use Personal Memory — save and recall information across sessions.';
+    }
+
+    // Build inline prompt DOM
+    var wrap = document.createElement('div');
+    wrap.className = 'sr-auth-prompt';
+
+    var textEl = document.createElement('div');
+    textEl.className   = 'sr-auth-prompt-text';
+    textEl.textContent = text;
+
+    var actions = document.createElement('div');
+    actions.className = 'sr-auth-prompt-actions';
+
+    var loginBtn = document.createElement('button');
+    loginBtn.className   = 'sr-auth-prompt-btn primary';
+    loginBtn.textContent = loginLabel;
+    loginBtn.addEventListener('click', function () {
+      if (SRAuth) SRAuth.showModal('login');
+      wrap.remove();
+    });
+
+    var signupBtn = document.createElement('button');
+    signupBtn.className   = 'sr-auth-prompt-btn secondary';
+    signupBtn.textContent = signupLabel;
+    signupBtn.addEventListener('click', function () {
+      if (SRAuth) SRAuth.showModal('signup');
+      wrap.remove();
+    });
+
+    var notNowBtn = document.createElement('button');
+    notNowBtn.className   = 'sr-auth-prompt-btn ghost';
+    notNowBtn.textContent = 'Not now';
+    notNowBtn.addEventListener('click', function () { wrap.remove(); });
+
+    actions.appendChild(loginBtn);
+    actions.appendChild(signupBtn);
+    actions.appendChild(notNowBtn);
+    wrap.appendChild(textEl);
+    wrap.appendChild(actions);
+    $conv.appendChild(wrap);
+    _scrollToBottom();
+  }
+
+  // ── STATUS ────────────────────────────────────────────────────────────────
+  function _setStatus(text, cls) {
+    $statusLabel.textContent = text;
+    $statusLabel.className = 'sr-header-status' + (cls ? ' ' + cls : '');
+  }
+
+  function _updateStatusChips() {
+    if (!SR) return;
+    var s = SR.getStatus();
+    _chip('schipHistory',     s.historyEnabled,       'History');
+    _chip('schipMemory',      s.memoryEnabled,        'Memory');
+    _chip('schipAdaptive',    s.adaptiveEnabled,      'Adaptive');
+    _chip('schipVoice',       s.voiceConnected,       'Voice');
+    _chip('schipKnowledge',   s.knowledgeConnected,   'Knowledge');
+    _chip('schipTranslation', s.translationConnected, 'Translate');
+  }
+
+  function _chip(id, on, label) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = label;
+    el.className = 'sr-chip ' + (on ? 'on' : 'off');
+  }
+
+  function _syncToggles() {
+    if (!SR) return;
+    var s = SR.getStatus();
+    if ($tHistory)  $tHistory.checked  = s.historyEnabled  !== false;
+    if ($tMemory)   $tMemory.checked   = s.memoryEnabled   !== false;
+    if ($tAdaptive) $tAdaptive.checked = s.adaptiveEnabled !== false;
+    if (SRVoice) {
+      if ($tVoice) $tVoice.checked = SRVoice.isVoiceEnabled();
+      if ($tTTS)   $tTTS.checked   = SRVoice.isTTSEnabled();
+    }
+  }
+
+  // ── MESSAGES ──────────────────────────────────────────────────────────────
+  function _appendMessage(role, text) {
+    if (_msgCount === 0 && $welcome) $welcome.style.display = 'none';
+    _msgCount++;
+
+    // Buffer unsigned-session messages for potential save-on-login
+    if (!_isAuth && (role === 'user' || role === 'sr')) {
+      _sessionMsgs.push({ role: role, text: text });
+    }
+
+    var wrapper = document.createElement('div');
+    wrapper.className = 'sr-msg ' + (role === 'user' ? 'user' : 'sr');
+
+    var content = document.createElement('div');
+    content.className = 'sr-msg-content';
+
+    var body = document.createElement('div');
+    body.className   = 'sr-msg-body';
+    body.textContent = text;   // XSS-SAFE: textContent only
+
+    var meta = document.createElement('div');
+    meta.className   = 'sr-msg-meta';
+    meta.textContent = _timeLabel();
+
+    content.appendChild(body);
+    content.appendChild(meta);
+    wrapper.appendChild(content);
+    $conv.appendChild(wrapper);
+    _scrollToBottom();
+  }
+
+  function _showTyping() {
+    var el = document.createElement('div');
+    el.className = 'sr-msg sr';
+    el.id = 'srTyping';
+    var c = document.createElement('div');
+    c.className = 'sr-msg-content';
+    var t = document.createElement('div');
+    t.className = 'sr-typing';
+    for (var i = 0; i < 3; i++) {
+      var d = document.createElement('div');
+      d.className = 'sr-typing-dot';
+      t.appendChild(d);
+    }
+    c.appendChild(t);
+    el.appendChild(c);
+    $conv.appendChild(el);
+    _scrollToBottom();
+  }
+
+  function _hideTyping() {
+    var el = document.getElementById('srTyping');
+    if (el) el.remove();
+  }
+
+  function _appendDivider(text) {
+    var d = document.createElement('div');
+    d.className   = 'sr-divider';
+    d.textContent = text;
+    $conv.appendChild(d);
+  }
+
+  function _timeLabel() {
+    var now = new Date();
+    var h   = now.getHours();
+    var m   = now.getMinutes().toString().padStart(2, '0');
+    var ap  = h >= 12 ? 'PM' : 'AM';
+    h = h % 12 || 12;
+    return h + ':' + m + ' ' + ap;
+  }
+
+  function _scrollToBottom() {
+    requestAnimationFrame(function () { $conv.scrollTop = $conv.scrollHeight; });
+  }
+
+  // ── SEND ──────────────────────────────────────────────────────────────────
+  function _send(text) {
+    if (!text || !text.trim() || _isProcessing) return;
+    var msg = text.trim();
+    $input.value = '';
+    $input.style.height = 'auto';
+    $sendBtn.disabled = true;
+    _isProcessing = true;
+    _setStatus('Thinking…', 'loading');
+
+    // ── AUTH GATES ────────────────────────────────────────────────────────
+    // 1. Device commands: require auth, block execution
+    if (!_isAuth && _requiresDeviceAuth(msg)) {
+      _appendMessage('user', msg);
+      _isProcessing = false;
+      _setStatus('Ready', 'ready');
+      $sendBtn.disabled = $input.value.trim() === '';
+      _showAuthPrompt('device');
+      return;
+    }
+
+    // 2. Explicit save request: require auth
+    if (!_isAuth && /\b(save|keep|store)\s+(this|the)?\s*(conversation|chat)\b/i.test(msg)) {
+      _appendMessage('user', msg);
+      _isProcessing = false;
+      _setStatus('Ready', 'ready');
+      $sendBtn.disabled = $input.value.trim() === '';
+      _showAuthPrompt('save');
+      return;
+    }
+
+    _appendMessage('user', msg);
+    _showTyping();
+
+    SR.ask(msg, function (response) {
+      _hideTyping();
+      _appendMessage('sr', response);
+      _isProcessing = false;
+      _setStatus('Ready', 'ready');
+      $sendBtn.disabled = $input.value.trim() === '';
+      _updateStatusChips();
+
+      if (SRVoice && SRVoice.isTTSEnabled()) {
+        SRVoice.speak(response);
+      }
+    });
+  }
+
+  // ── VOICE ──────────────────────────────────────────────────────────────────
+  function _toggleVoice() {
+    if (!SRVoice || !SRVoice.isSupported()) {
+      _appendMessage('sr', 'Voice input is not supported in this browser.');
+      return;
+    }
+    if (!SRVoice.isVoiceEnabled()) {
+      _appendMessage('sr', 'Voice is currently disabled. Enable it in Settings.');
+      return;
+    }
+    if (_isListening) {
+      SRVoice.stopListening();
+      _setVoiceUI(false);
+      return;
+    }
+    _setVoiceUI(true);
+    SRVoice.startListening(
+      function (transcript) {
+        _setVoiceUI(false);
+        if (transcript && transcript.trim()) {
+          $input.value = transcript;
+          _send(transcript);
+        }
+      },
+      function (err) {
+        _setVoiceUI(false);
+        _appendMessage('sr', 'Voice input error: ' + (err || 'microphone not available.'));
+      }
+    );
+  }
+
+  function _setVoiceUI(listening) {
+    _isListening = listening;
+    $voiceBtn.classList.toggle('listening', listening);
+    $voiceBar.classList.toggle('visible', listening);
+  }
+
+  // ── HELPERS ────────────────────────────────────────────────────────────────
+  function _isMobile() {
+    return window.innerWidth < 900;
+  }
+
+  function _closeSidebars() {
+    $settings.classList.remove('open');
+    $mobileNav.classList.remove('open');
+    $scrim.classList.remove('visible');
+  }
+
+  // ── INPUT EVENTS ──────────────────────────────────────────────────────────
+  $input.addEventListener('input', function () {
+    $sendBtn.disabled = $input.value.trim() === '';
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+  });
+
+  $input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (!$sendBtn.disabled) _send($input.value);
+    }
+  });
+
+  // ── BUTTON EVENTS ─────────────────────────────────────────────────────────
+  $sendBtn.addEventListener('click', function () { _send($input.value); });
+  $voiceBtn.addEventListener('click', _toggleVoice);
+
+  // New conversation
+  document.getElementById('srNewConvoBtn').addEventListener('click', function () {
+    SR.newConversation();
+    _appendDivider('New conversation');
+    _setStatus('Ready', 'ready');
+    _sessionMsgs = [];
+  });
+
+  // Nav: new conversation (desktop + mobile)
+  document.getElementById('srNavNewConvo').addEventListener('click', function () {
+    SR.newConversation();
+    _appendDivider('New conversation');
+    _setStatus('Ready', 'ready');
+    _sessionMsgs = [];
+  });
+  document.getElementById('srMobileNavNewConvo').addEventListener('click', function () {
+    SR.newConversation();
+    _appendDivider('New conversation');
+    _sessionMsgs = [];
+    _closeSidebars();
+  });
+
+  // Projects — auth required
+  function _goProjects() {
+    if (!_isAuth) { _showAuthPrompt('save'); return; }
+    _appendMessage('sr', 'Projects are available in the full account experience. This feature will be expanded in a future update.');
+    _closeSidebars();
+  }
+  document.getElementById('srNavProjects').addEventListener('click', _goProjects);
+  document.getElementById('srMobileNavProjects').addEventListener('click', _goProjects);
+
+  // Devices — auth required
+  function _goDevices() {
+    if (!_isAuth) { _showAuthPrompt('device'); return; }
+    // Open settings panel at device controls
+    $settings.classList.add('open');
+    if (_isMobile()) $scrim.classList.add('visible');
+    _closeSidebars();
+    setTimeout(function () {
+      var sec = document.getElementById('srDeviceSection');
+      if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 250);
+  }
+  document.getElementById('srNavDevices').addEventListener('click', _goDevices);
+  document.getElementById('srMobileNavDevices').addEventListener('click', _goDevices);
+
+  // Settings button
+  document.getElementById('srSettingsBtn').addEventListener('click', function () {
+    $settings.classList.add('open');
+    if (_isMobile()) $scrim.classList.add('visible');
+    _syncToggles();
+  });
+  document.getElementById('srMobileNavSettings').addEventListener('click', function () {
+    _closeSidebars();
+    $settings.classList.add('open');
+    if (_isMobile()) $scrim.classList.add('visible');
+    _syncToggles();
+  });
+
+  // Close settings
+  document.getElementById('srSettingsClose').addEventListener('click', _closeSidebars);
+
+  // Hamburger menu (mobile, signed-in)
+  $menuBtn.addEventListener('click', function () {
+    $mobileNav.classList.add('open');
+    $scrim.classList.add('visible');
+  });
+
+  // Close mobile nav
+  document.getElementById('srMobileNavClose').addEventListener('click', _closeSidebars);
+
+  // Scrim
+  $scrim.addEventListener('click', _closeSidebars);
+
+  // Auth button (top-right, signed-out)
+  $authBtn.addEventListener('click', function () {
+    if (SRAuth) SRAuth.showModal('login');
+  });
+
+  // Profile button (top-right, signed-in)
+  $profileBtn.addEventListener('click', function () {
+    $settings.classList.add('open');
+    if (_isMobile()) $scrim.classList.add('visible');
+    _syncToggles();
+  });
+
+  // Device auth gate button
+  document.getElementById('srDeviceAuthBtn').addEventListener('click', function () {
+    if (SRAuth) SRAuth.showModal('login');
+    _closeSidebars();
+  });
+
+  // New conversation (settings panel)
+  document.getElementById('srClearHistoryBtn').addEventListener('click', function () {
+    SR.newConversation();
+    _appendDivider('New conversation started');
+    _sessionMsgs = [];
+    _closeSidebars();
+  });
+
+  // Clear memories (settings panel, auth-gated)
+  document.getElementById('srClearMemoryBtn').addEventListener('click', function () {
+    if (!_isAuth) { _showAuthPrompt('memory'); _closeSidebars(); return; }
+    SR.ask('forget everything', function (r) { _appendMessage('sr', r); });
+    _closeSidebars();
+  });
+
+  // Sign out
+  function _doSignOut() {
+    if (!SRAuth) return;
+    SRAuth.signOut(function () {
+      _closeSidebars();
+      _appendDivider('Signed out');
+      // Clear session buffer
+      _sessionMsgs = [];
+    });
+  }
+  document.getElementById('srSignOutBtn').addEventListener('click', _doSignOut);
+  document.getElementById('srMobileNavSignOut').addEventListener('click', _doSignOut);
+
+  // ── TOGGLE HANDLERS ────────────────────────────────────────────────────────
+  if ($tHistory)  $tHistory.addEventListener('change',  function () { SR.setHistoryEnabled(this.checked);  _updateStatusChips(); });
+  if ($tMemory)   $tMemory.addEventListener('change',   function () { SR.setMemoryEnabled(this.checked);   _updateStatusChips(); });
+  if ($tAdaptive) $tAdaptive.addEventListener('change', function () { SR.setAdaptiveEnabled(this.checked); _updateStatusChips(); });
+  if ($tVoice)    $tVoice.addEventListener('change',    function () { SR.setVoiceEnabled(this.checked);    _updateStatusChips(); });
+  if ($tTTS)      $tTTS.addEventListener('change',      function () { SR.setTTSEnabled(this.checked); });
+
+  // ── HINT CHIPS ─────────────────────────────────────────────────────────────
+  document.querySelectorAll('.sr-hint-chip').forEach(function (chip) {
+    chip.addEventListener('click', function () {
+      var msg = this.getAttribute('data-msg');
+      if (msg) _send(msg);
+    });
+  });
+
+  // ── VOICE STATE ─────────────────────────────────────────────────────────────
+  if (SRVoice) {
+    SRVoice.onStateChange(function (state) {
+      if (state === SRVoice.STATE.UNSUPPORTED) {
+        $voiceBtn.classList.add('unavailable');
+        $voiceBtn.title = 'Voice not supported in this browser';
+      }
+    });
+    if (!SRVoice.isSupported()) $voiceBtn.classList.add('unavailable');
+  } else {
+    $voiceBtn.classList.add('unavailable');
+  }
+
+  // ── RESPONSIVE HANDLER ──────────────────────────────────────────────────────
+  window.addEventListener('resize', function () {
+    if (!_isAuth) return;
+    if (!_isMobile()) {
+      // Desktop: show nav, hide hamburger, close mobile nav
+      $nav.classList.add('visible');
+      $menuBtn.style.display = 'none';
+      $mobileNav.classList.remove('open');
+    } else {
+      // Mobile: hide desktop nav, show hamburger
+      $nav.classList.remove('visible');
+      $menuBtn.style.display = '';
+    }
+  });
+
+  // ── START ─────────────────────────────────────────────────────────────────
+  boot();
+
+})();
+</script>
+</body>
+</html>

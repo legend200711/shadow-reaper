@@ -1,0 +1,41 @@
+# Shadow Reaper Standalone — .gitignore
+#
+# SECURITY: Never commit credentials, secrets, or environment files.
+
+# ── Environment / secrets ────────────────────────────────────────────────────
+.env
+.env.local
+.env.production
+.env.*.local
+*.env
+
+# ── Firebase service account keys (NEVER COMMIT) ────────────────────────────
+*serviceAccount*.json
+*firebase-adminsdk*.json
+firebase-debug.log
+firebase-debug.*.log
+.firebase/
+
+# ── Cloudflare secrets ───────────────────────────────────────────────────────
+.wrangler/
+wrangler.log
+
+# ── Node ─────────────────────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+
+# ── OS ───────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Editor ───────────────────────────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+
+# ── Build output ─────────────────────────────────────────────────────────────
+dist/
+build/
+.cache/
