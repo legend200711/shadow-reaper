@@ -2,7 +2,7 @@
  * shadow-reaper-standalone/platform/sr-device-action-router.js
  * Shadow Reaper Standalone — Device Action Router
  *
- * Build: SR-STANDALONE-DEVICE-ROUTER-1
+ * Build: SR-STANDALONE-DEVICE-ROUTER-2
  *
  * Exposes: window.SRDeviceActionRouter
  *
@@ -16,7 +16,7 @@
  *   → capability check
  *   → permission check
  *   → approved platform adapter
- *   → execution
+ *   → execution (Capacitor native bridge or Web API)
  *
  * SECURITY RULES:
  *   - Only allowlisted action types are ever executed.
@@ -35,7 +35,7 @@
 
 (function (global) {
 
-  var BUILD_ID = 'SR-STANDALONE-DEVICE-ROUTER-1';
+  var BUILD_ID = 'SR-STANDALONE-DEVICE-ROUTER-2';
 
   // ─── Strict action allowlist ──────────────────────────────────────────────
   // Only these action types may ever be dispatched through the router.
@@ -53,13 +53,27 @@
     VIBRATE:              'VIBRATE',
     REQUEST_LOCATION:     'REQUEST_LOCATION',
     OPEN_URL:             'OPEN_URL',
+    OPEN_APP:             'OPEN_APP',
     GET_NETWORK_STATUS:   'GET_NETWORK_STATUS',
+    REQUEST_CAMERA:       'REQUEST_CAMERA',
   };
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
-  function _caps()   { return global.SRCapabilityManager  || null; }
-  function _perms()  { return global.SRPermissionManager  || null; }
-  function _platform(){ return global.SRPlatformDetector  || null; }
+  function _caps()    { return global.SRCapabilityManager  || null; }
+  function _perms()   { return global.SRPermissionManager  || null; }
+  function _platform(){ return global.SRPlatformDetector   || null; }
+
+  // ─── Capacitor plugin bridge helper ───────────────────────────────────────
+  function _cap(pluginName) {
+    return (global.Capacitor && global.Capacitor.Plugins && global.Capacitor.Plugins[pluginName])
+      ? global.Capacitor.Plugins[pluginName]
+      : null;
+  }
+
+  function _isNative() {
+    var p = _platform();
+    return p ? p.isNative() : false;
+  }
 
   // ─── Capability → action mapping ──────────────────────────────────────────
   var _ACTION_CAPS = {
@@ -75,7 +89,9 @@
     VIBRATE:              'haptics',
     REQUEST_LOCATION:     'location',
     OPEN_URL:             'urlSchemes',
+    OPEN_APP:             'openApp',
     GET_NETWORK_STATUS:   'networkStatus',
+    REQUEST_CAMERA:       'camera',
   };
 
   // ─── Validate action schema ───────────────────────────────────────────────
@@ -92,12 +108,12 @@
     if (!capKey) { callback({ ok: true }); return; }
 
     var capsMgr = _caps();
-    if (!capsMgr) { callback({ ok: true }); return; }  // graceful — no capability manager
+    if (!capsMgr) { callback({ ok: true }); return; }
 
     var state = capsMgr.getState(capKey);
     var S = capsMgr.STATE;
 
-    if (state === S.ALLOWED || state === S.AVAILABLE) {
+    if (state === S.ALLOWED || state === S.WEB_AVAILABLE || state === S.AVAILABLE) {
       callback({ ok: true });
       return;
     }
@@ -109,17 +125,35 @@
       callback({ ok: false, reason: 'capability_not_supported', capability: capKey });
       return;
     }
+    if (state === S.NATIVE_APP_REQUIRED) {
+      callback({ ok: false, reason: 'native_app_required', capability: capKey });
+      return;
+    }
     if (state === S.PERMISSION_REQUIRED) {
-      // Some actions need explicit permission request first
       callback({ ok: false, reason: 'permission_required', capability: capKey });
       return;
     }
     callback({ ok: true });
   }
 
-  // ─── Platform adapters ────────────────────────────────────────────────────
+  // ─── EXECUTORS ────────────────────────────────────────────────────────────
 
   function _execSendNotification(params, callback) {
+    // Native: use Capacitor LocalNotifications
+    var localNotif = _cap('LocalNotifications');
+    if (_isNative() && localNotif) {
+      localNotif.schedule({
+        notifications: [{
+          title: params.title || 'Shadow Reaper',
+          body:  params.body  || '',
+          id:    Math.floor(Math.random() * 100000),
+          smallIcon: 'ic_stat_icon_config_sample',
+        }]
+      }).then(function () { callback({ ok: true }); })
+        .catch(function (e) { callback({ ok: false, reason: e.message }); });
+      return;
+    }
+    // Web: browser Notification API
     if (!('Notification' in global) || Notification.permission !== 'granted') {
       callback({ ok: false, reason: 'notifications_not_granted' });
       return;
@@ -136,26 +170,28 @@
   }
 
   function _execScheduleReminder(params, callback) {
-    // Web: Use Notification API + setTimeout for best-effort scheduling
-    // Native: Would use Capacitor LocalNotifications plugin
-    var cap = _platform();
-    if (cap && cap.isNative() && global.Capacitor && global.Capacitor.Plugins && global.Capacitor.Plugins.LocalNotifications) {
-      // Capacitor native path
-      global.Capacitor.Plugins.LocalNotifications.schedule({
+    // Native: Capacitor LocalNotifications plugin
+    var localNotif = _cap('LocalNotifications');
+    if (_isNative() && localNotif) {
+      localNotif.schedule({
         notifications: [{
           title: params.title || 'Shadow Reaper Reminder',
           body:  params.body  || '',
           id:    Math.floor(Math.random() * 100000),
           schedule: { at: new Date(params.at) },
+          smallIcon: 'ic_stat_icon_config_sample',
         }]
       }).then(function () { callback({ ok: true }); })
         .catch(function (e) { callback({ ok: false, reason: e.message }); });
       return;
     }
-    // Web best-effort: setTimeout (only works if tab remains open)
+    // Web best-effort: setTimeout (only works while tab remains open)
     var delay = params.at ? (new Date(params.at).getTime() - Date.now()) : 0;
     if (delay < 0) delay = 0;
-    if (delay > 86400000) { callback({ ok: false, reason: 'reminder_too_far_in_future_for_web' }); return; }
+    if (delay > 86400000) {
+      callback({ ok: false, reason: 'reminder_too_far_in_future_for_web' });
+      return;
+    }
     setTimeout(function () {
       if ('Notification' in global && Notification.permission === 'granted') {
         new Notification(params.title || 'Shadow Reaper Reminder', { body: params.body || '' });
@@ -171,18 +207,40 @@
   }
 
   function _execShareText(params, callback) {
-    if (!global.navigator || !global.navigator.share) {
-      // Fallback: copy to clipboard
-      _execCopyToClipboard(params, callback);
+    // Native: Capacitor Share plugin
+    var sharePlugin = _cap('Share');
+    if (_isNative() && sharePlugin) {
+      sharePlugin.share({
+        title: params.title || '',
+        text:  params.text  || '',
+        url:   params.url   || undefined,
+        dialogTitle: 'Share via...',
+      }).then(function () { callback({ ok: true }); })
+        .catch(function (e) { callback({ ok: false, reason: e.message }); });
       return;
     }
-    global.navigator.share({ title: params.title || '', text: params.text || '', url: params.url || '' })
-      .then(function () { callback({ ok: true }); })
-      .catch(function (e) { callback({ ok: false, reason: e.message }); });
+    // Web: navigator.share
+    if (global.navigator && global.navigator.share) {
+      global.navigator.share({ title: params.title || '', text: params.text || '', url: params.url || '' })
+        .then(function () { callback({ ok: true }); })
+        .catch(function (e) { callback({ ok: false, reason: e.message }); });
+      return;
+    }
+    // Fallback: copy to clipboard
+    _execCopyToClipboard(params, callback);
   }
 
   function _execCopyToClipboard(params, callback) {
     var text = params.text || '';
+    // Native: Capacitor Clipboard plugin
+    var clipPlugin = _cap('Clipboard');
+    if (_isNative() && clipPlugin) {
+      clipPlugin.write({ string: text })
+        .then(function () { callback({ ok: true }); })
+        .catch(function (e) { callback({ ok: false, reason: e.message }); });
+      return;
+    }
+    // Web: navigator.clipboard
     if (global.navigator && global.navigator.clipboard && global.navigator.clipboard.writeText) {
       global.navigator.clipboard.writeText(text)
         .then(function () { callback({ ok: true }); })
@@ -205,15 +263,26 @@
 
   function _execVibrate(params, callback) {
     var pattern = params.pattern || [200];
+    // Native: ShadowReaperBridgePlugin.vibrate (custom plugin)
+    var srBridge = _cap('ShadowReaperBridge');
+    if (_isNative() && srBridge) {
+      srBridge.vibrate({ pattern: pattern })
+        .then(function () { callback({ ok: true }); })
+        .catch(function (e) { callback({ ok: false, reason: e.message }); });
+      return;
+    }
+    // Native: Capacitor Haptics plugin
+    var haptics = _cap('Haptics');
+    if (_isNative() && haptics) {
+      haptics.vibrate({ duration: pattern[0] || 200 })
+        .then(function () { callback({ ok: true }); })
+        .catch(function (e) { callback({ ok: false, reason: e.message }); });
+      return;
+    }
+    // Web: navigator.vibrate
     if (global.navigator && global.navigator.vibrate) {
       global.navigator.vibrate(pattern);
       callback({ ok: true });
-      return;
-    }
-    if (global.Capacitor && global.Capacitor.Plugins && global.Capacitor.Plugins.Haptics) {
-      global.Capacitor.Plugins.Haptics.vibrate()
-        .then(function () { callback({ ok: true }); })
-        .catch(function (e) { callback({ ok: false, reason: e.message }); });
       return;
     }
     callback({ ok: false, reason: 'haptics_not_supported' });
@@ -227,6 +296,15 @@
       callback({ ok: false, reason: 'unsafe_url_scheme' });
       return;
     }
+    // Native: ShadowReaperBridgePlugin.openUrl (uses Android Intent — lets OS pick handler)
+    var srBridge = _cap('ShadowReaperBridge');
+    if (_isNative() && srBridge) {
+      srBridge.openUrl({ url: url })
+        .then(function (r) { callback({ ok: true, result: r }); })
+        .catch(function (e) { callback({ ok: false, reason: e.message }); });
+      return;
+    }
+    // Web fallback
     try {
       global.open(url, params.target || '_blank', 'noopener,noreferrer');
       callback({ ok: true });
@@ -235,12 +313,49 @@
     }
   }
 
+  function _execOpenApp(params, callback) {
+    var packageName = params.packageName || '';
+    var url         = params.url         || '';
+    var appName     = params.appName     || packageName || 'app';
+
+    // Native: ShadowReaperBridgePlugin.openApp (Android Intent by package name)
+    var srBridge = _cap('ShadowReaperBridge');
+    if (_isNative() && srBridge) {
+      srBridge.openApp({ packageName: packageName, url: url })
+        .then(function (r) { callback({ ok: true, result: r }); })
+        .catch(function (e) { callback({ ok: false, reason: e.message }); });
+      return;
+    }
+    // Web: can only open URLs, not package names
+    if (url) {
+      _execOpenUrl({ url: url }, callback);
+      return;
+    }
+    callback({
+      ok: false,
+      reason: 'native_app_required',
+      message: 'Opening ' + appName + ' by package name requires the native Android app.',
+    });
+  }
+
   function _execGetNetworkStatus(params, callback) {
+    // Native: ShadowReaperBridgePlugin.getNetworkStatus
+    var srBridge = _cap('ShadowReaperBridge');
+    if (_isNative() && srBridge) {
+      srBridge.getNetworkStatus()
+        .then(function (r) { callback({ ok: true, connected: r.connected, connectionType: r.connectionType }); })
+        .catch(function () {
+          // Fallback
+          callback({ ok: true, connected: global.navigator ? global.navigator.onLine : true });
+        });
+      return;
+    }
     if (!global.navigator) { callback({ ok: false, reason: 'navigator_unavailable' }); return; }
-    callback({ ok: true, online: global.navigator.onLine });
+    callback({ ok: true, connected: global.navigator.onLine, connectionType: 'unknown' });
   }
 
   function _execOpenFilePicker(params, callback) {
+    // Native: @capacitor/filesystem + file chooser intent (handled via file input on WebView)
     try {
       var input = document.createElement('input');
       input.type = 'file';
@@ -256,6 +371,15 @@
   }
 
   function _execOpenPhotoPicker(params, callback) {
+    // Native: @capacitor/camera
+    var camera = _cap('Camera');
+    if (_isNative() && camera) {
+      camera.pickImages({ quality: 90, limit: params.limit || 1 })
+        .then(function (r) { callback({ ok: true, photos: r.photos }); })
+        .catch(function (e) { callback({ ok: false, reason: e.message }); });
+      return;
+    }
+    // Web fallback: file input with image accept
     _execOpenFilePicker(Object.assign({}, params, { accept: 'image/*' }), callback);
   }
 
@@ -268,10 +392,11 @@
     COPY_TO_CLIPBOARD:  _execCopyToClipboard,
     VIBRATE:            _execVibrate,
     OPEN_URL:           _execOpenUrl,
+    OPEN_APP:           _execOpenApp,
     GET_NETWORK_STATUS: _execGetNetworkStatus,
     OPEN_FILE_PICKER:   _execOpenFilePicker,
     OPEN_PHOTO_PICKER:  _execOpenPhotoPicker,
-    // Voice input is delegated to SRVoice directly (permission already checked)
+    // Voice input — delegated to SRVoice (permission already checked)
     START_VOICE_INPUT:  function (params, cb) {
       var v = global.SRVoice;
       if (!v) { cb({ ok: false, reason: 'voice_not_loaded' }); return; }
@@ -280,17 +405,42 @@
         function (err)  { cb({ ok: false, reason: err }); }
       );
     },
+    // Permission requests — delegate to SRPermissionManager then ShadowReaperBridgePlugin
     REQUEST_MICROPHONE: function (params, cb) {
-      var pm = _perms();
-      if (!pm) { cb({ ok: false, reason: 'permission_manager_not_loaded' }); return; }
-      pm.request('microphone', function (r) { cb(r); });
+      _requestPermissionNativeFirst('microphone', cb);
     },
     REQUEST_LOCATION: function (params, cb) {
-      var pm = _perms();
-      if (!pm) { cb({ ok: false, reason: 'permission_manager_not_loaded' }); return; }
-      pm.request('location', function (r) { cb(r); });
+      _requestPermissionNativeFirst('location', cb);
+    },
+    REQUEST_CAMERA: function (params, cb) {
+      _requestPermissionNativeFirst('camera', cb);
     },
   };
+
+  // ─── Permission request — native-first ────────────────────────────────────
+  function _requestPermissionNativeFirst(permName, cb) {
+    // Native: ShadowReaperBridgePlugin.requestPermission
+    var srBridge = _cap('ShadowReaperBridge');
+    if (_isNative() && srBridge) {
+      srBridge.requestPermission({ permission: permName })
+        .then(function (r) {
+          var capsMgr = _caps();
+          if (capsMgr) {
+            capsMgr.updateState(permName === 'microphone' ? 'microphone'
+                              : permName === 'camera'    ? 'camera'
+                              : 'location',
+              r.ok ? 'ALLOWED' : 'DENIED');
+          }
+          cb({ ok: r.ok, granted: r.ok, state: r.state });
+        })
+        .catch(function (e) { cb({ ok: false, reason: e.message }); });
+      return;
+    }
+    // Web fallback
+    var pm = _perms();
+    if (!pm) { cb({ ok: false, reason: 'permission_manager_not_loaded' }); return; }
+    pm.request(permName, function (r) { cb(r); });
+  }
 
   // ─── MAIN DISPATCH ────────────────────────────────────────────────────────
   /**
@@ -347,38 +497,78 @@
     });
   }
 
+  // ─── App name to package name map ─────────────────────────────────────────
+  // Conservative list of well-known app package names.
+  // This is informational only — Android will show a chooser if multiple apps handle a URL.
+  var _APP_PACKAGES = {
+    youtube:     'com.google.android.youtube',
+    maps:        'com.google.android.apps.maps',
+    spotify:     'com.spotify.music',
+    netflix:     'com.netflix.mediaclient',
+    instagram:   'com.instagram.android',
+    whatsapp:    'com.whatsapp',
+    facebook:    'com.facebook.katana',
+    twitter:     'com.twitter.android',
+    x:           'com.twitter.android',
+    gmail:       'com.google.android.gm',
+    chrome:      'com.android.chrome',
+    settings:    'com.android.settings',
+    camera:      'android.media.action.IMAGE_CAPTURE',
+    calculator:  'com.android.calculator2',
+  };
+
   // ─── Parse intent from conversation ───────────────────────────────────────
   /**
    * detectDeviceIntent(text)
    * Returns a device action object if the text implies a device action,
    * or null if no device action is needed.
    *
-   * This is a conservative intent parser — it only returns actions
-   * for clear, explicit requests. Ambiguous text returns null.
+   * Conservative intent parser — only returns actions for clear, explicit
+   * requests. Ambiguous text returns null.
    */
   function detectDeviceIntent(text) {
     if (!text) return null;
-    var t = text.toLowerCase();
+    var t = text.toLowerCase().trim();
 
-    // Reminder / notification
-    var reminderMatch = t.match(/remind\s+me\s+(.+?)(?:\s+at|in)\s+(.+?)(?:\s+to\s+)?(.+)?/i);
+    // ── Open app ──────────────────────────────────────────────────────────
+    // "open YouTube", "launch Spotify", "start Maps", "go to Netflix"
+    var openAppMatch = t.match(/(?:open|launch|start|go\s+to|switch\s+to|take\s+me\s+to)\s+([a-z0-9\s]+?)(?:\s+app)?(?:\s+for\s+me)?$/i);
+    if (openAppMatch) {
+      var appName = openAppMatch[1].trim().toLowerCase();
+      var pkg = _APP_PACKAGES[appName];
+      if (pkg) {
+        return {
+          type: ALLOWED_ACTIONS.OPEN_APP,
+          params: { packageName: pkg, appName: openAppMatch[1].trim() },
+        };
+      }
+    }
+
+    // ── Open URL ──────────────────────────────────────────────────────────
+    var urlMatch = t.match(/(?:open|go\s+to|visit|browse\s+to)\s+(https?:\/\/[^\s]+)/i);
+    if (urlMatch) {
+      return { type: ALLOWED_ACTIONS.OPEN_URL, params: { url: urlMatch[1] } };
+    }
+
+    // ── Reminder ──────────────────────────────────────────────────────────
+    var reminderMatch = t.match(/remind\s+me\s+(.+?)(?:\s+at|in)\s+(.+?)(?:\s+to\s+)?(.+)?$/i);
     if (reminderMatch) {
       return {
         type: ALLOWED_ACTIONS.SCHEDULE_REMINDER,
         params: {
-          body: text,
+          body:  text,
           title: 'Shadow Reaper Reminder',
-          at: _parseTimeReference(reminderMatch[2]),
+          at:    _parseTimeReference(reminderMatch[2]),
         },
       };
     }
 
-    // Share
+    // ── Share ─────────────────────────────────────────────────────────────
     if (/\bshare\s+(this|that)\b/i.test(text)) {
       return { type: ALLOWED_ACTIONS.SHARE_TEXT, params: { text: text } };
     }
 
-    // Copy to clipboard
+    // ── Copy to clipboard ─────────────────────────────────────────────────
     if (/\bcopy\s+(this|that)\s+to\s+(my\s+)?clipboard\b/i.test(text)) {
       return { type: ALLOWED_ACTIONS.COPY_TO_CLIPBOARD, params: { text: text } };
     }
@@ -392,7 +582,6 @@
     var r = ref.toLowerCase().trim();
     var now = new Date();
 
-    // "tomorrow at 3pm"
     var hourMatch = r.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/);
     if (hourMatch) {
       var h = parseInt(hourMatch[1], 10);
@@ -406,7 +595,6 @@
       return target.toISOString();
     }
 
-    // "in X minutes"
     var minuteMatch = r.match(/in\s+(\d+)\s+min/);
     if (minuteMatch) {
       var d = new Date(now.getTime() + parseInt(minuteMatch[1], 10) * 60000);
@@ -420,6 +608,7 @@
   global.SRDeviceActionRouter = {
     build:              BUILD_ID,
     ALLOWED_ACTIONS:    ALLOWED_ACTIONS,
+    APP_PACKAGES:       _APP_PACKAGES,
 
     dispatch:           dispatch,
     detectDeviceIntent: detectDeviceIntent,

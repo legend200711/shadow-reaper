@@ -888,11 +888,51 @@ body::before {
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
-.sr-device-state.available   { background: rgba(34,197,94,0.12);  color: var(--success); }
-.sr-device-state.allowed     { background: rgba(30,144,255,0.12); color: var(--electric); }
-.sr-device-state.permission  { background: rgba(245,158,11,0.12); color: var(--warn); }
-.sr-device-state.denied      { background: rgba(239,68,68,0.12);  color: var(--danger); }
-.sr-device-state.unsupported { background: var(--bg-panel);       color: var(--text-muted); }
+.sr-device-state.available    { background: rgba(34,197,94,0.12);   color: var(--success); }
+.sr-device-state.allowed      { background: rgba(30,144,255,0.12);  color: var(--electric); }
+.sr-device-state.permission   { background: rgba(245,158,11,0.12);  color: var(--warn); }
+.sr-device-state.denied       { background: rgba(239,68,68,0.12);   color: var(--danger); }
+.sr-device-state.unsupported  { background: var(--bg-panel);        color: var(--text-muted); }
+.sr-device-state.native-only  { background: rgba(124,92,216,0.12);  color: #9d7ae8; }
+.sr-device-state.not-impl     { background: var(--bg-panel);        color: var(--text-muted); }
+
+/* Native-app-required info banner (shown in web/PWA runtime instead of phone controls) */
+.sr-native-info {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.sr-native-info p { margin-bottom: 8px; }
+.sr-native-info p:last-child { margin-bottom: 0; }
+
+/* Android download button */
+.sr-android-dl-btn {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px 14px;
+  background: rgba(30,144,255,0.08);
+  border: 1px solid rgba(30,144,255,0.4);
+  border-radius: 10px;
+  color: var(--electric);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  text-align: center;
+  text-decoration: none;
+  font-family: inherit;
+  transition: background 0.15s, border-color 0.15s;
+}
+.sr-android-dl-btn:hover {
+  background: var(--electric-glow);
+  border-color: var(--electric);
+}
 
 /* Auth-required prompt in settings */
 .sr-auth-gate {
@@ -1141,8 +1181,9 @@ body::before {
       <!-- Settings gear (always visible) -->
       <button class="sr-icon-btn" id="srSettingsBtn" title="Settings" aria-label="Settings">&#9881;</button>
 
-      <!-- PWA Install button — shown ONLY when SRPWAState confirms INSTALLABLE or IOS_MANUAL_INSTALL -->
-      <button class="sr-install-btn" id="srInstallBtn" aria-label="Install Shadow Reaper">&#11015; Install Shadow Reaper</button>
+      <!-- PWA Install button — shown ONLY when SRPWAState confirms INSTALLABLE or IOS_MANUAL_INSTALL.
+           Hidden on Android mobile (native APK is the preferred distribution). -->
+      <button class="sr-install-btn" id="srInstallBtn" aria-label="Install Web App">&#11015; Install Web App</button>
 
       <!-- LOGIN / SIGN UP — shown when signed out -->
       <button class="sr-auth-btn" id="srAuthBtn" aria-label="Log in or sign up">LOG IN / SIGN UP</button>
@@ -1359,19 +1400,48 @@ body::before {
 
         <!-- Devices section — gated by auth -->
         <div class="sr-settings-section" id="srDeviceSection">
-          <div class="sr-settings-label">Device Controls</div>
+          <div class="sr-settings-label">This Device</div>
+
           <!-- Auth gate shown when signed out -->
           <div class="sr-auth-gate" id="srDeviceAuthGate">
-            <div class="sr-auth-gate-text">Sign in to pair and control your devices securely.</div>
+            <div class="sr-auth-gate-text">Sign in to view device capabilities.</div>
             <button class="sr-auth-gate-btn" id="srDeviceAuthBtn">LOG IN / SIGN UP</button>
           </div>
-          <!-- Device controls shown when signed in -->
+
+          <!-- Phone controls: shown ONLY in ANDROID_NATIVE / IOS_NATIVE runtime -->
           <div id="srDeviceControlsWrap" style="display:none">
             <div class="sr-device-controls" id="srDeviceControls">
               <div class="sr-device-item" id="srNoDeviceMsg">
                 <span class="sr-device-name">Loading…</span>
               </div>
             </div>
+          </div>
+
+          <!-- Web/PWA info banner: shown instead of phone controls on web/PWA -->
+          <!-- Informs user that phone controls need the native app; does NOT advertise them. -->
+          <div id="srNativeInfoBanner" style="display:none">
+            <div class="sr-native-info">
+              <p>Phone controls require the <strong>Shadow Reaper native app</strong>.</p>
+              <p id="srNativeInfoAndroidLine" style="display:none">
+                Download the Android app below to control this phone directly.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Android download — shown on mobile; available everywhere as a fallback -->
+        <div class="sr-settings-section" id="srAndroidDownloadSection" style="display:none">
+          <div class="sr-settings-label">Android App</div>
+          <a href="./downloads/ShadowReaper.apk"
+             download="ShadowReaper.apk"
+             class="sr-android-dl-btn"
+             id="srAndroidDlBtn"
+             aria-label="Download Shadow Reaper for Android">
+            &#11015; Download Shadow Reaper for Android
+          </a>
+          <div style="margin-top:8px;font-size:11px;color:var(--text-muted);line-height:1.5;padding:0 2px;">
+            Open the downloaded file and follow Android's installation instructions.
+            If prompted, allow installation from this source in your Android settings.
           </div>
         </div>
 
@@ -1630,6 +1700,9 @@ body::before {
     _updateStatusChips();
     _syncToggles();
 
+    // Android download button — not auth-gated, runs on boot
+    _initAndroidDownload();
+
     // ── AUTH INIT ──────────────────────────────────────────────────────────
     // Show a brief "Connecting…" state so that on page reload, the user does
     // not see the signed-out nav flash before Firebase resolves the session.
@@ -1710,11 +1783,13 @@ body::before {
       if (cmb) cmb.style.display = 'none';
       if (sob) sob.style.display = 'none';
 
-      // Device controls: show gate, hide controls
-      var gate = document.getElementById('srDeviceAuthGate');
-      var wrap = document.getElementById('srDeviceControlsWrap');
-      if (gate) gate.style.display = '';
-      if (wrap) wrap.style.display = 'none';
+      // Device controls: show gate, hide controls and info banner
+      var gate   = document.getElementById('srDeviceAuthGate');
+      var wrap   = document.getElementById('srDeviceControlsWrap');
+      var banner = document.getElementById('srNativeInfoBanner');
+      if (gate)   gate.style.display   = '';
+      if (wrap)   wrap.style.display   = 'none';
+      if (banner) banner.style.display = 'none';
 
       // Hide Wake Name section when signed out
       var wns = document.getElementById('srWakeNameSection');
@@ -1732,24 +1807,97 @@ body::before {
     }
   }
 
+  // ── ANDROID DOWNLOAD — platform-aware visibility ──────────────────────────
+  function _initAndroidDownload() {
+    var sec        = document.getElementById('srAndroidDownloadSection');
+    var installBtn = document.getElementById('srInstallBtn');
+    if (!sec) return;
+
+    var runtime  = SRPlat ? SRPlat.getRuntime() : 'WEB_DESKTOP';
+    var isAndroid   = (runtime === 'ANDROID_NATIVE');
+    var isMobileWeb = (runtime === 'WEB_MOBILE' || runtime === 'PWA_MOBILE');
+    var isDesktop   = (runtime === 'WEB_DESKTOP' || runtime === 'PWA_DESKTOP');
+
+    if (isAndroid) {
+      // Running inside the native app — no download needed
+      sec.style.display = 'none';
+    } else if (isMobileWeb) {
+      // Mobile browser/PWA — Android UA — show the download section
+      var ua = (navigator.userAgent || '').toLowerCase();
+      var isAndroidUA = /android/.test(ua);
+      sec.style.display = isAndroidUA ? '' : 'none';
+      // Also suppress PWA install button on Android — native app is preferred
+      if (isAndroidUA && installBtn) installBtn.style.display = 'none';
+    } else if (isDesktop) {
+      // Desktop — show in settings as an option (useful for sideloading)
+      sec.style.display = '';
+    } else {
+      // iOS native / unknown — hide
+      sec.style.display = 'none';
+    }
+  }
+
   // ── DEVICE CONTROLS (auth-gated) ─────────────────────────────────────────
+  // Rules:
+  //   ANDROID_NATIVE / IOS_NATIVE → show real phone capability list
+  //   All other runtimes (web, PWA) → show info banner only (no phone controls list)
+  //   Desktop → hide the device section entirely
   function _initDeviceControls() {
     if (!_isAuth) return; // never show device controls without auth
-    var $deviceCtrl = document.getElementById('srDeviceControls');
-    if (!SRPlat || !SRCaps || !$deviceCtrl) return;
+    if (!SRPlat) return;
 
-    if (SRPlat.isDesktop()) {
-      var sec = document.getElementById('srDeviceSection');
-      if (sec) sec.style.display = 'none';
+    var runtime      = SRPlat.getRuntime();
+    var isNative     = SRPlat.isNative();
+    var isDesktopRT  = SRPlat.isDesktop();
+    var isWebOrPWA   = SRPlat.isWebOrPWA ? SRPlat.isWebOrPWA() : !isNative;
+
+    var $sec         = document.getElementById('srDeviceSection');
+    var $wrap        = document.getElementById('srDeviceControlsWrap');
+    var $banner      = document.getElementById('srNativeInfoBanner');
+    var $androidLine = document.getElementById('srNativeInfoAndroidLine');
+    var $deviceCtrl  = document.getElementById('srDeviceControls');
+
+    // Desktop: hide the entire device section (phone controls irrelevant on desktop)
+    if (isDesktopRT) {
+      if ($sec) $sec.style.display = 'none';
       return;
     }
 
+    // Show section
+    if ($sec) $sec.style.display = '';
+
+    if (isWebOrPWA) {
+      // Web or PWA: show the info banner, NOT the phone controls list.
+      // This prevents a misleading list of "NATIVE APP REQUIRED" badges.
+      if ($wrap)   $wrap.style.display   = 'none';
+      if ($banner) $banner.style.display = '';
+
+      // On Android web/PWA, tell user where to get the native app
+      var ua = (navigator.userAgent || '').toLowerCase();
+      if ($androidLine) {
+        $androidLine.style.display = /android/.test(ua) ? '' : 'none';
+      }
+      return;
+    }
+
+    // ANDROID_NATIVE or IOS_NATIVE: show the real capability list
+    if ($wrap)   $wrap.style.display   = '';
+    if ($banner) $banner.style.display = 'none';
+
+    if (!SRCaps || !$deviceCtrl) return;
+
     $deviceCtrl.innerHTML = '';
     var info = SRWeb ? SRWeb.getDeviceControlsInfo() : [];
+
+    // Filter: in native runtime, hide capabilities that are NOT_IMPLEMENTED or NOT_SUPPORTED
+    info = info.filter(function (cap) {
+      return cap.state !== 'NOT_IMPLEMENTED' && cap.state !== 'NOT_SUPPORTED';
+    });
+
     if (!info.length) {
       var msg = document.createElement('div');
       msg.className   = 'sr-device-item';
-      msg.textContent = 'No device controls available.';
+      msg.textContent = 'No device capabilities detected.';
       $deviceCtrl.appendChild(msg);
       return;
     }
@@ -1766,10 +1914,12 @@ body::before {
       badge.className  = 'sr-device-state';
       var s = cap.state;
       if      (s === 'ALLOWED')             { badge.textContent = 'Allowed';          badge.className += ' allowed'; }
-      else if (s === 'AVAILABLE')           { badge.textContent = 'Available';         badge.className += ' available'; }
-      else if (s === 'PERMISSION_REQUIRED') { badge.textContent = 'Needs Permission';  badge.className += ' permission'; }
-      else if (s === 'DENIED')              { badge.textContent = 'Denied';            badge.className += ' denied'; }
-      else                                  { badge.textContent = 'Unsupported';       badge.className += ' unsupported'; }
+      else if (s === 'WEB_AVAILABLE')       { badge.textContent = 'Available';        badge.className += ' available'; }
+      else if (s === 'AVAILABLE')           { badge.textContent = 'Available';        badge.className += ' available'; }
+      else if (s === 'PERMISSION_REQUIRED') { badge.textContent = 'Needs Permission'; badge.className += ' permission'; }
+      else if (s === 'DENIED')              { badge.textContent = 'Denied';           badge.className += ' denied'; }
+      else if (s === 'NOT_IMPLEMENTED')     { badge.textContent = 'Coming Soon';      badge.className += ' not-impl'; }
+      else                                  { badge.textContent = 'Unsupported';      badge.className += ' unsupported'; }
 
       row.appendChild(name);
       row.appendChild(badge);

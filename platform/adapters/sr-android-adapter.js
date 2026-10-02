@@ -2,7 +2,7 @@
  * shadow-reaper-standalone/platform/adapters/sr-android-adapter.js
  * Shadow Reaper Standalone — Android Native Adapter
  *
- * Build: SR-STANDALONE-ANDROID-ADAPTER-1
+ * Build: SR-STANDALONE-ANDROID-ADAPTER-2
  *
  * Exposes: window.SRAndroidAdapter
  *
@@ -12,27 +12,28 @@
  *   Delegates all actions through SRDeviceActionRouter (permission pipeline
  *   is always enforced — bypasses are not possible).
  *
- * REQUIRED CAPACITOR PLUGINS (install if building native):
- *   @capacitor/local-notifications
- *   @capacitor/haptics
- *   @capacitor/geolocation
- *   @capacitor/share
- *   @capacitor/clipboard
- *   @capacitor/camera
- *   @capacitor/filesystem   (user-selected files only)
+ * CAPACITOR PLUGINS USED:
+ *   @capacitor/local-notifications  — scheduled reminders
+ *   @capacitor/haptics              — haptic feedback
+ *   @capacitor/geolocation          — location
+ *   @capacitor/share                — native share sheet
+ *   @capacitor/clipboard            — clipboard read/write
+ *   @capacitor/camera               — photo picker
+ *   ShadowReaperBridge (custom)     — openApp, openUrl, vibrate, permissions
  *
  * SECURITY:
  *   - All capabilities go through SRDeviceActionRouter.
- *   - Permissions are requested via SRPermissionManager.
+ *   - Permissions are requested via SRPermissionManager or ShadowReaperBridgePlugin.
  *   - No capability is activated without user initiation.
  *   - Android system permissions are never bypassed.
+ *   - The ShadowReaperBridgePlugin does NOT expose arbitrary code execution.
  */
 
 'use strict';
 
 (function (global) {
 
-  var BUILD_ID = 'SR-STANDALONE-ANDROID-ADAPTER-1';
+  var BUILD_ID = 'SR-STANDALONE-ANDROID-ADAPTER-2';
 
   function _platform() { return global.SRPlatformDetector   || null; }
   function _router()   { return global.SRDeviceActionRouter || null; }
@@ -44,9 +45,9 @@
     return p && p.isAndroid();
   }
 
-  // ─── Check if Capacitor is available ──────────────────────────────────────
+  // ─── Capacitor plugin accessor ────────────────────────────────────────────
   function _cap(pluginName) {
-    return global.Capacitor && global.Capacitor.Plugins && global.Capacitor.Plugins[pluginName]
+    return (global.Capacitor && global.Capacitor.Plugins && global.Capacitor.Plugins[pluginName])
       ? global.Capacitor.Plugins[pluginName]
       : null;
   }
@@ -56,13 +57,22 @@
     var caps = _caps();
     if (!caps) return [];
     return caps.getVisibleCapabilities().filter(function (k) {
-      return caps.getState(k) !== (caps.STATE ? caps.STATE.NOT_SUPPORTED : 'NOT_SUPPORTED');
+      var s = caps.getState(k);
+      return s !== 'NOT_SUPPORTED';
     });
   }
 
   // ─── Request notification permission ──────────────────────────────────────
   function requestNotificationPermission(callback) {
     if (!_isActiveRuntime()) { if (callback) callback({ ok: false, reason: 'not_android' }); return; }
+    var srBridge = _cap('ShadowReaperBridge');
+    if (srBridge) {
+      srBridge.requestPermission({ permission: 'notifications' })
+        .then(function (r) { if (callback) callback({ ok: r.ok, state: r.state }); })
+        .catch(function (e) { if (callback) callback({ ok: false, reason: e.message }); });
+      return;
+    }
+    // Fallback to SRPermissionManager (web Notification API)
     var pm = _perms();
     if (!pm) { if (callback) callback({ ok: false, reason: 'permission_manager_unavailable' }); return; }
     pm.request('notifications', function (r) { if (callback) callback(r); });
@@ -90,14 +100,128 @@
     }, callback);
   }
 
+  // ─── Open another app (by package name or URL) ────────────────────────────
+  function openApp(packageNameOrUrl, callback) {
+    if (!_isActiveRuntime()) { if (callback) callback({ ok: false, reason: 'not_android' }); return; }
+    var router = _router();
+    if (!router) { if (callback) callback({ ok: false, reason: 'router_unavailable' }); return; }
+
+    var params;
+    if (/^https?:\/\//i.test(packageNameOrUrl)) {
+      params = { url: packageNameOrUrl };
+    } else {
+      params = { packageName: packageNameOrUrl };
+    }
+
+    router.dispatch({ type: router.ALLOWED_ACTIONS.OPEN_APP, params: params }, callback);
+  }
+
+  // ─── Share content ────────────────────────────────────────────────────────
+  function shareContent(text, title, callback) {
+    if (!_isActiveRuntime()) { if (callback) callback({ ok: false, reason: 'not_android' }); return; }
+    var router = _router();
+    if (!router) { if (callback) callback({ ok: false, reason: 'router_unavailable' }); return; }
+    router.dispatch({
+      type: router.ALLOWED_ACTIONS.SHARE_TEXT,
+      params: { text: text, title: title || '' },
+    }, callback);
+  }
+
+  // ─── Copy to clipboard ────────────────────────────────────────────────────
+  function copyToClipboard(text, callback) {
+    if (!_isActiveRuntime()) { if (callback) callback({ ok: false, reason: 'not_android' }); return; }
+    var router = _router();
+    if (!router) { if (callback) callback({ ok: false, reason: 'router_unavailable' }); return; }
+    router.dispatch({
+      type: router.ALLOWED_ACTIONS.COPY_TO_CLIPBOARD,
+      params: { text: text },
+    }, callback);
+  }
+
+  // ─── Get network status ───────────────────────────────────────────────────
+  function getNetworkStatus(callback) {
+    if (!_isActiveRuntime()) { if (callback) callback({ ok: false, reason: 'not_android' }); return; }
+    var router = _router();
+    if (!router) { if (callback) callback({ ok: false, reason: 'router_unavailable' }); return; }
+    router.dispatch({ type: router.ALLOWED_ACTIONS.GET_NETWORK_STATUS, params: {} }, callback);
+  }
+
+  // ─── Request camera permission ────────────────────────────────────────────
+  function requestCameraPermission(callback) {
+    if (!_isActiveRuntime()) { if (callback) callback({ ok: false, reason: 'not_android' }); return; }
+    var srBridge = _cap('ShadowReaperBridge');
+    if (srBridge) {
+      srBridge.requestPermission({ permission: 'camera' })
+        .then(function (r) { if (callback) callback({ ok: r.ok, state: r.state }); })
+        .catch(function (e) { if (callback) callback({ ok: false, reason: e.message }); });
+      return;
+    }
+    var pm = _perms();
+    if (!pm) { if (callback) callback({ ok: false, reason: 'permission_manager_unavailable' }); return; }
+    pm.request('camera', function (r) { if (callback) callback(r); });
+  }
+
+  // ─── Request microphone permission ────────────────────────────────────────
+  function requestMicrophonePermission(callback) {
+    if (!_isActiveRuntime()) { if (callback) callback({ ok: false, reason: 'not_android' }); return; }
+    var srBridge = _cap('ShadowReaperBridge');
+    if (srBridge) {
+      srBridge.requestPermission({ permission: 'microphone' })
+        .then(function (r) { if (callback) callback({ ok: r.ok, state: r.state }); })
+        .catch(function (e) { if (callback) callback({ ok: false, reason: e.message }); });
+      return;
+    }
+    var pm = _perms();
+    if (!pm) { if (callback) callback({ ok: false, reason: 'permission_manager_unavailable' }); return; }
+    pm.request('microphone', function (r) { if (callback) callback(r); });
+  }
+
+  // ─── Request location permission ──────────────────────────────────────────
+  function requestLocationPermission(callback) {
+    if (!_isActiveRuntime()) { if (callback) callback({ ok: false, reason: 'not_android' }); return; }
+    var srBridge = _cap('ShadowReaperBridge');
+    if (srBridge) {
+      srBridge.requestPermission({ permission: 'location' })
+        .then(function (r) { if (callback) callback({ ok: r.ok, state: r.state }); })
+        .catch(function (e) { if (callback) callback({ ok: false, reason: e.message }); });
+      return;
+    }
+    var pm = _perms();
+    if (!pm) { if (callback) callback({ ok: false, reason: 'permission_manager_unavailable' }); return; }
+    pm.request('location', function (r) { if (callback) callback(r); });
+  }
+
+  // ─── Check native runtime and Capacitor availability ─────────────────────
+  function getRuntimeInfo() {
+    return {
+      isAndroid:         _isActiveRuntime(),
+      hasCapacitor:      !!(global.Capacitor && global.Capacitor.isNative),
+      hasBridge:         !!_cap('ShadowReaperBridge'),
+      hasLocalNotif:     !!_cap('LocalNotifications'),
+      hasHaptics:        !!_cap('Haptics'),
+      hasGeolocation:    !!_cap('Geolocation'),
+      hasShare:          !!_cap('Share'),
+      hasClipboard:      !!_cap('Clipboard'),
+      hasCamera:         !!_cap('Camera'),
+    };
+  }
+
   // ─── Expose ───────────────────────────────────────────────────────────────
   global.SRAndroidAdapter = {
-    build:                    BUILD_ID,
-    isActiveRuntime:          _isActiveRuntime,
-    getSupportedCapabilities: getSupportedCapabilities,
+    build:                         BUILD_ID,
+    isActiveRuntime:               _isActiveRuntime,
+    getSupportedCapabilities:      getSupportedCapabilities,
     requestNotificationPermission: requestNotificationPermission,
-    scheduleReminder:         scheduleReminder,
-    vibrate:                  vibrate,
+    scheduleReminder:              scheduleReminder,
+    vibrate:                       vibrate,
+    openApp:                       openApp,
+    shareContent:                  shareContent,
+    copyToClipboard:               copyToClipboard,
+    getNetworkStatus:              getNetworkStatus,
+    requestCameraPermission:       requestCameraPermission,
+    requestMicrophonePermission:   requestMicrophonePermission,
+    requestLocationPermission:     requestLocationPermission,
+    getRuntimeInfo:                getRuntimeInfo,
   };
 
 })(typeof window !== 'undefined' ? window : global);

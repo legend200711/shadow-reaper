@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- ─── REQUIRED PERMISSIONS ─────────────────────────────────────────────────
+         Only permissions actually used by implemented features are declared.
+         Permissions marked (dangerous) require runtime approval by the user.
+         NEVER bypass Android permission controls.
+    ──────────────────────────────────────────────────────────────────────────── -->
+
+    <!-- Internet access — required for Firebase auth, AI, cloud sync -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Network state — required for "Get Network Status" capability -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Vibration — required for haptic feedback (VIBRATE action) -->
+    <!-- Not a dangerous permission — no runtime request needed -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- Camera (dangerous) — user must approve at runtime via Permission Manager -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+
+    <!-- Microphone (dangerous) — user must approve at runtime via Permission Manager -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+
+    <!-- Location — fine and coarse (dangerous) — user must approve at runtime -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!-- Notifications (API 33+) — user must approve at runtime -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Read media — for photo/file picker (API 33+ uses READ_MEDIA_IMAGES) -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"
+        android:minSdkVersion="33" />
+    <!-- Legacy read external for Android 12 and below -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
+    <!-- Schedule exact alarms — for LocalNotifications reminders (API 31+) -->
+    <!-- Required by @capacitor/local-notifications to schedule at exact time -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"
+        android:minSdkVersion="31" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM"
+        android:minSdkVersion="33" />
+
+    <!-- Receive boot complete — so scheduled reminders survive device reboot -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- Wake lock — LocalNotifications needs this to fire at exact times -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme"
+        android:hardwareAccelerated="true"
+        android:usesCleartextTraffic="false"
+        android:networkSecurityConfig="@xml/network_security_config">
+
+        <!-- Main activity — the Capacitor WebView host -->
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
+            android:name=".MainActivity"
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:launchMode="singleTask"
+            android:exported="true">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Deep link support for shadowreaper:// -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="shadowreaper" />
+            </intent-filter>
+        </activity>
+
+        <!-- FileProvider for camera/file sharing — required by @capacitor/camera -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <!-- Boot receiver — allows LocalNotifications to reschedule after reboot -->
+        <receiver
+            android:name="com.getcapacitor.plugin.localnotifications.LocalNotificationRestoreReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+    </application>
+
+</manifest>

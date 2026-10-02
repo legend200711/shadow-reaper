@@ -1,0 +1,25 @@
+{
+  "appId": "com.shadowreaper.standalone",
+  "appName": "Shadow Reaper",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https",
+    "hostname": "shadowreaper.app"
+  },
+  "android": {
+    "buildOptions": {
+      "keystorePath": null,
+      "keystoreAlias": null
+    }
+  },
+  "plugins": {
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_icon_config_sample",
+      "iconColor": "#1e90ff",
+      "sound": "beep.wav"
+    },
+    "SplashScreen": {
+      "launchShowDuration": 0
+    }
+  }
+}
