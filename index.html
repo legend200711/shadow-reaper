@@ -1745,6 +1745,12 @@ body::before {
       }
     }
 
+    // Start the invisible anonymous Firebase identity as early as possible.
+    // Memory/history are UID-scoped but Shadow Edition never requires a visible login.
+    if (SRAuth) {
+      SRAuth.init();
+    }
+
     // Initialize Shadow Reaper AI
     var ok = SR.init();
     if (!ok) {
@@ -1854,7 +1860,7 @@ body::before {
     // _onAnonReady() fires when the anonymous session is established
     // (or immediately if Firebase is unavailable — session-only mode).
     if (SRAuth) {
-      SRAuth.init();
+      // init() already started above; this listener receives the restored/new anonymous user.
       SRAuth.onAuthChange(_onAnonReady);
     } else {
       _onAnonReady(null);

@@ -59,6 +59,34 @@
 
   function _isGuest() { return !_getCurrentUID(); }
 
+  // Anonymous auth is automatic in Shadow Edition, but Firebase may still be
+  // restoring/creating the UID when a user sends a memory command immediately
+  // after launch. Never tell the user to sign in: wait briefly for the invisible
+  // anonymous identity to become ready, then continue the memory operation.
+  function _withIdentity(callback) {
+    if (_getCurrentUID()) { callback(true); return; }
+
+    var authUI = global.SRAuthUI || null;
+    if (!authUI || typeof authUI.onAuthChange !== 'function') {
+      callback(false);
+      return;
+    }
+
+    var settled = false;
+    var timer = setTimeout(function () {
+      if (settled) return;
+      settled = true;
+      callback(!!_getCurrentUID());
+    }, 5000);
+
+    authUI.onAuthChange(function (user) {
+      if (settled || !user) return;
+      settled = true;
+      clearTimeout(timer);
+      callback(true);
+    });
+  }
+
   function _memCol() {
     var fb  = _fb();
     var uid = _getCurrentUID();
@@ -143,7 +171,13 @@
       return;
     }
     if (_isGuest()) {
-      callback({ success: false, message: 'Sign in to save memories.' });
+      _withIdentity(function (ready) {
+        if (!ready) {
+          callback({ success: false, message: "Personal memory isn't available right now. Please try again in a moment." });
+          return;
+        }
+        save(text, callback);
+      });
       return;
     }
 
@@ -194,7 +228,13 @@
 
   function recall(text, callback) {
     callback = callback || function () {};
-    if (_isGuest()) { callback({ success: false, memories: [] }); return; }
+    if (_isGuest()) {
+      _withIdentity(function (ready) {
+        if (!ready) { callback({ success: false, memories: [], message: "Personal memory isn't available right now." }); return; }
+        recall(text, callback);
+      });
+      return;
+    }
 
     var col = _memCol();
     if (!col) { callback({ success: false, memories: [] }); return; }
@@ -215,7 +255,10 @@
   function forget(text, callback) {
     callback = callback || function () {};
     if (_isGuest()) {
-      callback({ success: false, message: 'Sign in to manage memories.' });
+      _withIdentity(function (ready) {
+        if (!ready) { callback({ success: false, message: "Personal memory isn't available right now." }); return; }
+        forget(text, callback);
+      });
       return;
     }
     var col = _memCol();
