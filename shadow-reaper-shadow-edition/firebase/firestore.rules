@@ -1,0 +1,122 @@
+// shadow-reaper-standalone/firebase/firestore.rules
+//
+// Shadow Reaper Standalone — Firestore Security Rules
+//
+// Architecture:
+//   users/{uid}/...              — PRIVATE per-user data (UID-isolated)
+//   sharedKnowledge/{docId}      — Approved public/general knowledge (read-only for users)
+//   globalLearning/{docId}       — Sanitized generalized learning (read-only for users)
+//   shadowReaperConfig/{docId}   — Founder/admin configuration
+//
+// Principles:
+//   - Private user data is ONLY accessible by that exact UID
+//   - Shared/global knowledge is read-only for authenticated users
+//   - Only server-verified Founders may write to config/shared/global
+//   - Guests (unauthenticated) have NO access to any collection
+//   - No collection is publicly readable
+//
+// ⚠️  DEPLOY THESE RULES BEFORE ENABLING ANY FIREBASE FEATURES IN PRODUCTION
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper functions ─────────────────────────────────────────────────────
+
+    // Is the request from an authenticated user?
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Is the authenticated user accessing their own data?
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    // Is the authenticated user a verified Founder?
+    // Requires a custom claim set server-side — never trusted from client.
+    function isFounder() {
+      return isAuthenticated()
+          && request.auth.token.get('role', '') == 'founder';
+    }
+
+    // Validate that a write does not contain any forbidden field names
+    // that could expose credentials or override system rules.
+    function noForbiddenFields() {
+      return !('apiKey' in request.resource.data)
+          && !('token' in request.resource.data)
+          && !('password' in request.resource.data)
+          && !('secret' in request.resource.data)
+          && !('firebaseConfig' in request.resource.data)
+          && !('_systemRule' in request.resource.data);
+    }
+
+    // ── Private user data ────────────────────────────────────────────────────
+    // ONLY the exact UID owner can read or write their own data.
+    // Founders cannot read other users' private data.
+
+    match /users/{uid}/shadowReaperConversations/{convId} {
+      allow read, write: if isOwner(uid) && noForbiddenFields();
+    }
+
+    match /users/{uid}/shadowReaperMemory/{memId} {
+      allow read, write: if isOwner(uid) && noForbiddenFields();
+    }
+
+    match /users/{uid}/shadowReaperLearnedContext/{itemId} {
+      allow read, write: if isOwner(uid) && noForbiddenFields();
+    }
+
+    match /users/{uid}/shadowReaperPreferences/{docId} {
+      allow read, write: if isOwner(uid) && noForbiddenFields();
+    }
+
+    // Catch-all for any future private subcollections under users/{uid}
+    match /users/{uid}/{privateCollection}/{document=**} {
+      allow read, write: if isOwner(uid) && noForbiddenFields();
+    }
+
+    // ── Shared Knowledge ─────────────────────────────────────────────────────
+    // Authenticated users can READ approved public knowledge.
+    // Only server-verified Founders can WRITE.
+
+    match /sharedKnowledge/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isFounder() && noForbiddenFields();
+    }
+
+    // ── Global Learning ──────────────────────────────────────────────────────
+    // Sanitized, non-personal generalized learning.
+    // Authenticated users can READ.
+    // Only Founders can WRITE (after server-side sanitization).
+
+    match /globalLearning/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isFounder() && noForbiddenFields();
+    }
+
+    // ── Founder / Admin Configuration ────────────────────────────────────────
+    // Global capability settings, system configuration.
+    // All authenticated users can READ (for capability state).
+    // Only verified Founders can WRITE.
+
+    match /shadowReaperConfig/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isFounder() && noForbiddenFields();
+    }
+
+    // ── Future: Web Research Results ─────────────────────────────────────────
+    // Placeholder for future internet research result storage.
+    // UNTRUSTED data — must never be promoted to system instructions.
+
+    match /webResearchCache/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isFounder() && noForbiddenFields();
+    }
+
+    // ── Deny everything else ─────────────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

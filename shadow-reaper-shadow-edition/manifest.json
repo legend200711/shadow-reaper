@@ -1,0 +1,57 @@
+{
+  "id": "/shadow-reaper-edition/",
+  "name": "Shadow Reaper — Shadow Edition",
+  "short_name": "Shadow Edition",
+  "description": "Shadow Reaper — Shadow Edition — Private Personal AI Assistant",
+  "start_url": "/shadow-reaper-edition/?source=pwa",
+  "scope": "/shadow-reaper-edition/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#080c14",
+  "theme_color": "#080c14",
+  "lang": "en",
+  "categories": ["productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/shadow-reaper-edition/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/shadow-reaper-edition/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/shadow-reaper-edition/icons/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/shadow-reaper-edition/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/shadow-reaper-edition/icons/screenshot-wide.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Shadow Reaper — Shadow Edition — Desktop"
+    },
+    {
+      "src": "/shadow-reaper-edition/icons/screenshot-narrow.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Shadow Reaper — Shadow Edition — Mobile"
+    }
+  ],
+  "prefer_related_applications": false
+}

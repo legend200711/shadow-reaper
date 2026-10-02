@@ -813,9 +813,19 @@
     }
 
     // ── Adaptive snippets path ────────────────────────────────────────────────
-    // If we have relevant adaptive snippets and no local model, use them.
+    // Only use adaptive snippets when the local model is explicitly FAILED (not
+    // just UNINITIALIZED). An UNINITIALIZED model should fall through to
+    // deterministic compose() for open-ended questions, not produce a potentially
+    // off-topic adaptive response based on session project context.
     var adaptiveSnippets = opts.adaptiveSnippets || [];
-    if (adaptiveSnippets.length && (intent === 'QUESTION' || intent === 'GENERAL_CONVERSATION')) {
+    var localModelForAdaptiveCheck = global.SRLocalModel;
+    var modelStatForAdaptive = localModelForAdaptiveCheck
+      ? localModelForAdaptiveCheck.getStatus().state
+      : 'NOT_LOADED';
+    var _adaptiveShouldFire = (modelStatForAdaptive === 'FAILED' || modelStatForAdaptive === 'NOT_LOADED');
+
+    if (_adaptiveShouldFire && adaptiveSnippets.length &&
+        (intent === 'QUESTION' || intent === 'GENERAL_CONVERSATION')) {
       var adaptiveResponse = _buildAdaptiveResponse(raw, adaptiveSnippets, intent, context);
       if (adaptiveResponse) {
         callback(adaptiveResponse, 'LEARNED');

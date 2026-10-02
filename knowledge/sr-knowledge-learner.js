@@ -726,6 +726,26 @@
       return { answered: false, response: null, items: [] };
     }
 
+    // Additional filter: for QUESTION intent, only use learned knowledge if the
+    // query tokens have real semantic overlap with the top item (not just confidence).
+    // This prevents project context ("darker", "NightGlass") from being served
+    // as answers to unrelated general knowledge questions like "What is JavaScript?".
+    if (intent === 'QUESTION') {
+      var queryTokens = _tokens(queryText);
+      var hasDirectOverlap = items.some(function (item) {
+        // At least one meaningful token (>= 5 chars) must overlap with item value or concept
+        return queryTokens.some(function (t) {
+          if (t.length < 5) return false;
+          var valLower = (item.value || '').toLowerCase();
+          var conLower = (item.concept || '').replace(/_/g, ' ').toLowerCase();
+          return valLower.indexOf(t) !== -1 || conLower.indexOf(t) !== -1;
+        });
+      });
+      if (!hasDirectOverlap) {
+        return { answered: false, response: null, items: [] };
+      }
+    }
+
     var response = buildLearnedResponse(queryText, items, contextProjectName);
     if (!response) {
       return { answered: false, response: null, items: items };

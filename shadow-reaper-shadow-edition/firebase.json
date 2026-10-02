@@ -1,0 +1,50 @@
+{
+  "firestore": {
+    "rules": "firebase/firestore.rules",
+    "indexes": "firebase/firestore.indexes.json"
+  },
+  "hosting": {
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "node_modules/**",
+      ".env",
+      ".env.*",
+      "cloudflare/**",
+      "tests/**",
+      "icons/gen-icons.js",
+      "icons/gen-icons.py",
+      "icons/*.svg"
+    ],
+    "headers": [
+      {
+        "source": "/manifest.json",
+        "headers": [
+          { "key": "Content-Type", "value": "application/manifest+json" },
+          { "key": "Cache-Control", "value": "public, max-age=86400" }
+        ]
+      },
+      {
+        "source": "/sw.js",
+        "headers": [
+          { "key": "Content-Type", "value": "application/javascript" },
+          { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" },
+          { "key": "Service-Worker-Allowed", "value": "/" }
+        ]
+      },
+      {
+        "source": "/icons/**",
+        "headers": [
+          { "key": "Cache-Control", "value": "public, max-age=604800, immutable" }
+        ]
+      }
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}

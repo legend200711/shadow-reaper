@@ -1,0 +1,95 @@
+{
+  "name": "shadow-desktop-companion",
+  "version": "1.0.0",
+  "description": "Shadow Desktop Companion — Shadow Edition",
+  "main": "main.js",
+  "author": "Shadow Edition <support@shadowedition.app>",
+  "homepage": "https://shadowedition.app",
+  "scripts": {
+    "start": "electron .",
+    "build:win":   "electron-builder --win",
+    "build:mac":   "electron-builder --mac",
+    "build:linux": "electron-builder --linux",
+    "build:all":   "electron-builder -mwl",
+    "test":        "node tests/desktop-companion.test.js",
+    "sync-devices": "node scripts/sync-device-modules.js"
+  },
+  "build": {
+    "appId": "com.shadowedition.desktop",
+    "productName": "Shadow Desktop Companion",
+    "copyright": "Shadow Edition",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "src/**/*",
+      "assets/**/*"
+    ],
+    "asarUnpack": [
+      "node_modules/keytar/**/*"
+    ],
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64", "ia32"] }],
+      "icon": "assets/icon.ico"
+    },
+    "mac": {
+      "target": [{ "target": "dmg", "arch": ["x64", "arm64"] }],
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.productivity"
+    },
+    "linux": {
+      "target": [
+        { "target": "deb",      "arch": ["x64"] },
+        { "target": "AppImage", "arch": ["x64"] },
+        { "target": "rpm",      "arch": ["x64"] }
+      ],
+      "icon": "assets/icons",
+      "category": "Utility",
+      "executableName": "shadow-desktop-companion",
+      "desktop": {
+        "Name": "Shadow Desktop Companion",
+        "Comment": "Shadow Edition AI Companion",
+        "Categories": "Utility;",
+        "StartupWMClass": "shadow-desktop-companion"
+      }
+    },
+    "deb": {
+      "artifactName": "ShadowDesktopCompanion-linux-x64.deb",
+      "maintainer": "Shadow Edition <support@shadowedition.app>",
+      "depends": ["libnotify4", "libsecret-1-0", "libappindicator3-1"],
+      "recommends": ["gnome-keyring", "pulseaudio-utils"],
+      "synopsis": "Shadow Edition AI Companion Desktop Application"
+    },
+    "rpm": {
+      "artifactName": "ShadowDesktopCompanion-linux-x64.rpm",
+      "depends": ["libsecret"]
+    },
+    "appImage": {
+      "artifactName": "ShadowDesktopCompanion-linux-x64.AppImage"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "assets/icon.ico",
+      "installerHeaderIcon": "assets/icon.ico"
+    },
+    "dmg": {
+      "contents": [
+        { "x": 410, "y": 150, "type": "link", "path": "/Applications" },
+        { "x": 130, "y": 150, "type": "file" }
+      ]
+    }
+  },
+  "dependencies": {
+    "ws": "^8.18.0",
+    "keytar": "^7.9.0",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  }
+}

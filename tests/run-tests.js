@@ -52,6 +52,7 @@ var SUITES = [
   { name: 'lexical-expansion',     file: 'sr-lexical-expansion.test.js' },
   { name: 'api-v1',                file: 'api-v1.test.js' },
   { name: 'product-split',         file: 'product-split.test.js' },
+  { name: 'offline-intelligence',  file: 'offline-intelligence.test.js' },
 ];
 
 var TESTS_DIR = __dirname;

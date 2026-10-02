@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';" />
+  <title>Shadow Desktop Companion</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- ── Top bar ──────────────────────────────────────────────────────────── -->
+  <header id="header">
+    <div id="header-left">
+      <span class="header-logo">SHADOW</span>
+      <span class="header-sub">Shadow Reaper — Desktop Companion</span>
+    </div>
+    <div id="header-right">
+      <span id="status-dot" class="status-dot offline" title="Connection status"></span>
+      <span id="status-label">DISCONNECTED</span>
+    </div>
+  </header>
+
+  <!-- ── Navigation ────────────────────────────────────────────────────────── -->
+  <nav id="nav">
+    <button class="nav-btn active" data-page="chat">CHAT</button>
+    <button class="nav-btn" data-page="devices">DEVICES</button>
+    <button class="nav-btn" data-page="apps">APPS</button>
+    <button class="nav-btn" data-page="settings">SETTINGS</button>
+    <button class="nav-btn" data-page="history">HISTORY</button>
+  </nav>
+
+  <!-- ── Pages ─────────────────────────────────────────────────────────────── -->
+  <main id="main">
+
+    <!-- ── CHAT page ──────────────────────────────────────────────────────── -->
+    <section id="page-chat" class="page active">
+      <div id="conversation" aria-live="polite" aria-label="Conversation"></div>
+      <div id="chat-input-row">
+        <input id="chat-input"
+               type="text"
+               placeholder="Type a message..."
+               autocomplete="off"
+               spellcheck="true"
+               aria-label="Message input" />
+        <button id="mic-btn" title="Voice input" aria-label="Start voice input">
+          <span id="mic-icon">🎤</span>
+        </button>
+        <button id="send-btn" aria-label="Send message">SEND</button>
+      </div>
+      <div id="status-bar">
+        <span id="sb-state">STANDBY</span>
+        <span class="sb-sep">•</span>
+        <span id="sb-voice">VOICE ON</span>
+        <span class="sb-sep">•</span>
+        <span id="sb-computer">COMPUTER ONLINE</span>
+        <span class="sb-sep">•</span>
+        <span id="sb-relay">RELAY NOT CONFIGURED</span>
+      </div>
+    </section>
+
+    <!-- ── DEVICES page ───────────────────────────────────────────────────── -->
+    <section id="page-devices" class="page">
+      <h2>DEVICES</h2>
+      <div id="devices-list">
+        <div class="device-card this-device">
+          <div class="device-name" id="this-computer-name">This Computer</div>
+          <div class="device-status" id="this-computer-status">LOADING...</div>
+          <div class="device-meta" id="this-computer-meta"></div>
+        </div>
+      </div>
+      <div id="pairing-section">
+        <h3>PAIR THIS COMPUTER</h3>
+        <div id="pairing-form">
+          <label for="pair-name">Computer Name</label>
+          <input id="pair-name" type="text" placeholder="e.g. Chris Linux PC" />
+          <button id="pair-btn">Generate Pairing Code</button>
+        </div>
+        <div id="pairing-code-display" style="display:none;">
+          <div class="pair-label">Pairing Code</div>
+          <div id="pair-code" class="pair-code">--- ---</div>
+          <button id="pair-qr-btn">Show QR Code</button>
+          <div id="pair-qr" style="display:none;"></div>
+          <div class="pair-wait">Waiting for Shadow Edition...</div>
+          <div class="pair-note">Code expires in 10 minutes</div>
+        </div>
+        <div id="pairing-complete-display" style="display:none;">
+          <div class="pair-complete-label">PAIRED</div>
+          <div id="pair-complete-name"></div>
+          <div id="pair-complete-status">ONLINE — REMOTE AVAILABLE</div>
+          <button id="unpair-btn" class="danger-btn">Unpair This Computer</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── APPS page ──────────────────────────────────────────────────────── -->
+    <section id="page-apps" class="page">
+      <div class="two-col">
+        <div class="col">
+          <h2>APPROVED APPLICATIONS</h2>
+          <p class="section-desc">Shadow may only open applications in this list.</p>
+          <div id="apps-list"></div>
+          <div id="add-app-form">
+            <input id="add-app-name" type="text" placeholder="Display name (e.g. VLC)" />
+            <input id="add-app-key"  type="text" placeholder="Key (e.g. vlc)" />
+            <input id="add-app-win"  type="text" placeholder="Windows exe (e.g. vlc.exe)" />
+            <input id="add-app-mac"  type="text" placeholder="macOS app (e.g. VLC)" />
+            <input id="add-app-lin"  type="text" placeholder="Linux cmd (e.g. vlc)" />
+            <button id="add-app-btn">+ Add Application</button>
+          </div>
+        </div>
+        <div class="col">
+          <h2>APPROVED WEBSITES</h2>
+          <p class="section-desc">Shadow may only open URLs in this list.</p>
+          <div id="urls-list"></div>
+          <div id="add-url-form">
+            <input id="add-url-name" type="text" placeholder="Name (e.g. Wikipedia)" />
+            <input id="add-url-url"  type="text" placeholder="https://www.wikipedia.org" />
+            <button id="add-url-btn">+ Add Website</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── SETTINGS page ──────────────────────────────────────────────────── -->
+    <section id="page-settings" class="page">
+      <h2>SETTINGS</h2>
+
+      <div class="setting-group">
+        <div class="setting-row">
+          <div class="setting-label">
+            <span>Shadow Voice</span>
+            <span class="setting-desc">Shadow speaks responses aloud</span>
+          </div>
+          <label class="toggle">
+            <input id="voice-toggle" type="checkbox" checked />
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">
+            <span>Start With Computer</span>
+            <span class="setting-desc">Launch Shadow Desktop Companion on login</span>
+          </div>
+          <label class="toggle">
+            <input id="startup-toggle" type="checkbox" />
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <h3>PERMISSIONS</h3>
+      <p class="section-desc">Control what Shadow is allowed to do on this computer.</p>
+      <div id="permissions-list" class="setting-group">
+        <!-- Populated by JS -->
+      </div>
+
+      <h3>CONNECTION STATUS</h3>
+      <div id="connection-status-panel" class="status-panel">
+        <!-- Populated by JS -->
+      </div>
+
+      <h3>SYSTEM INFORMATION</h3>
+      <div id="system-info-panel" class="status-panel">
+        <!-- Populated by JS -->
+      </div>
+    </section>
+
+    <!-- ── HISTORY page ───────────────────────────────────────────────────── -->
+    <section id="page-history" class="page">
+      <div class="history-header">
+        <h2>ACTION HISTORY</h2>
+        <button id="clear-history-btn" class="danger-btn-small">Clear History</button>
+      </div>
+      <div id="history-list">
+        <p class="empty-msg">No actions recorded yet.</p>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

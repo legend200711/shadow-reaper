@@ -29,7 +29,7 @@
 
 // Shadow Reaper-specific cache namespace.
 // Bump version here to force a full re-cache on next visit.
-const CACHE_VERSION = 'sr-shell-v3';
+const CACHE_VERSION = 'sr-shell-v4';
 
 // GitHub Pages subdirectory prefix.
 // All app URLs are under this path.
@@ -79,6 +79,29 @@ const APP_SHELL = [
   BASE + '/voice/voice-engine.js',
   BASE + '/sr-feature-registry.js',
   BASE + '/firebase/firebase-config.js',
+
+  // ── Language Foundation JS — all local, zero internet required ────────────
+  BASE + '/language/tokenizer/tokenizer.js',
+  BASE + '/language/morphology/morphology.js',
+  BASE + '/language/relationships/relationships.js',
+  BASE + '/language/semantics/semantics.js',
+  BASE + '/language/context/context-resolver.js',
+  BASE + '/language/learning/language-learning.js',
+  BASE + '/language/phrases/phrases.js',
+  BASE + '/language/lexicon/sr-word-definitions.js',
+  BASE + '/language/lexicon/sr-lexicon.js',
+  BASE + '/language/sr-language.js',
+
+  // ── Language Foundation data — ~38MB total; cached once for offline use ───
+  // NOTE: wordnet-index.json is ~27MB. It is cached here so that word
+  // definitions, morphology, and semantic analysis work fully offline.
+  // All other JSON indexes are small (< 8MB each).
+  BASE + '/language/data/vocab-index.json',
+  BASE + '/language/data/lemma-index.json',
+  BASE + '/language/data/wordnet-index.json',
+
+  // ── Offline Capability State System ──────────────────────────────────────
+  BASE + '/core/sr-capability-state.js',
 ];
 
 // Origins that must NEVER be served from cache.
@@ -187,9 +210,15 @@ self.addEventListener('fetch', function (event) {
               '<title>Shadow Reaper — Offline</title>' +
               '<style>body{background:#080c14;color:#e8edf5;font-family:system-ui,sans-serif;' +
               'display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center;}' +
-              'h1{font-size:2rem;margin-bottom:.5rem;}p{color:#5a6880;}</style></head>' +
+              'h1{font-size:2rem;margin-bottom:.5rem;}p{color:#5a6880;}' +
+              '.note{margin-top:1rem;font-size:0.85rem;color:#3d4f68;}' +
+              '</style></head>' +
               '<body><div><h1>&#9760;</h1><h1>Shadow Reaper</h1>' +
-              '<p>You\'re offline. Please reconnect to use Shadow Reaper AI.</p></div></body></html>',
+              '<p>You\'re offline.</p>' +
+              '<p class="note">Local conversation, Language Foundation, memory, and personality<br>' +
+              'are available. Live weather and research require internet.</p>' +
+              '<p class="note">Reload to resume with cached app shell.</p>' +
+              '</div></body></html>',
               { headers: { 'Content-Type': 'text/html' } }
             );
           });

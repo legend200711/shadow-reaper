@@ -1,0 +1,12 @@
+{
+  "build": "SR-LEXICON-BUILD-1",
+  "dataset": "Princeton WordNet 3.1",
+  "package": "wordnet-db@3.1.14",
+  "license": "WordNet 3.1 License (Princeton University)",
+  "generated": "2026-10-02T06:35:07.484Z",
+  "lemmaCount": 147477,
+  "senseCount": 204506,
+  "defCount": 204506,
+  "synsetCount": 117791,
+  "sizeMB": 26.19
+}

@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180" viewBox="0 0 180 180">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="40%" r="70%">
+      <stop offset="0%" stop-color="#0d1626"/>
+      <stop offset="100%" stop-color="#080c14"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#1e90ff" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#1e90ff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="180" height="180" rx="40" fill="url(#bg)"/>
+
+  <!-- Glow halo -->
+  <circle cx="90" cy="90" r="70.55" fill="url(#glow)"/>
+
+  <!-- Outer ring -->
+  <circle cx="90" cy="90" r="68.06" fill="none" stroke="#1e90ff" stroke-width="2.16" stroke-opacity="0.55"/>
+
+  <!-- Skull ☠ -->
+  <text
+    x="90" y="115.992"
+    text-anchor="middle"
+    font-size="68.4"
+    font-family="Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif"
+    fill="#e8edf5"
+  >&#9760;</text>
+
+  <!-- Word-mark below skull -->
+  <text
+    x="90" y="158.4"
+    text-anchor="middle"
+    font-size="15"
+    font-family="-apple-system, Segoe UI, system-ui, sans-serif"
+    font-weight="700"
+    fill="#1e90ff"
+    letter-spacing="2"
+    opacity="0.9"
+  >SR</text>
+</svg>

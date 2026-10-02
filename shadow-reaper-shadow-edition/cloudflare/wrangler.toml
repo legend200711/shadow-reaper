@@ -1,0 +1,25 @@
+# name = "sr-standalone-api"                  # PLACEHOLDER — set after account setup
+# account_id = "YOUR_CLOUDFLARE_ACCOUNT_ID"   # PLACEHOLDER — never commit to public repos
+
+main = "cloudflare/worker/index.js"
+compatibility_date = "2025-01-01"
+
+[vars]
+SR_PROJECT = "shadow-reaper-standalone"
+SR_ENV     = "development"
+# SR_ALLOWED_ORIGIN = "https://your-domain.com"  # PLACEHOLDER
+
+# ── Bindings (add when resources are created) ────────────────────────────────
+# Uncomment and fill in after running: wrangler kv:namespace create SR_SHARED_KNOWLEDGE
+# [[kv_namespaces]]
+# binding = "SR_SHARED_KNOWLEDGE"
+# id      = "YOUR_KV_NAMESPACE_ID"             # PLACEHOLDER
+
+# ── Workers AI — INTENTIONALLY NOT CONFIGURED ────────────────────────────────
+# Shadow Reaper does not use Cloudflare AI for intelligence.
+# The [ai] binding is disabled by design.
+# [ai]
+# binding = "AI"   ← DO NOT ENABLE
+
+# ── Secrets (set via CLI, never in this file) ─────────────────────────────────
+# wrangler secret put SR_INTERNAL_API_KEY

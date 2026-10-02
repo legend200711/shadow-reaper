@@ -1,0 +1,46 @@
+{
+  "name": "shadow-reaper-v2",
+  "version": "1.0.0",
+  "description": "Shadow Reaper — AI That Learns With You (Android native + Web PWA)",
+  "main": "shadow-reaper.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "build:android": "node scripts/build-www.js && npx cap sync android",
+    "open:android": "npx cap open android",
+    "sync": "node scripts/build-www.js && npx cap sync android",
+    "cap:sync": "npx cap sync android",
+    "cap:open": "npx cap open android",
+    "test": "node tests/run-tests.js",
+    "test:api": "SR_API_TEST_MODE=true node tests/api-v1.test.js",
+    "api:start": "SR_API_TEST_MODE=true node api/v1/server.js",
+    "api:test": "node tests/run-tests.js --suite api-v1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/legend200711/shadow-reaper.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/legend200711/shadow-reaper/issues"
+  },
+  "homepage": "https://github.com/legend200711/shadow-reaper#readme",
+  "dependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/camera": "^8.2.4",
+    "@capacitor/cli": "^8.5.2",
+    "@capacitor/clipboard": "^8.0.1",
+    "@capacitor/core": "^8.5.2",
+    "@capacitor/filesystem": "^8.1.3",
+    "@capacitor/geolocation": "^8.2.2",
+    "@capacitor/haptics": "^8.0.2",
+    "@capacitor/local-notifications": "^8.3.1",
+    "@capacitor/share": "^8.0.2"
+  },
+  "devDependencies": {
+    "wordnet-db": "^3.1.14"
+  }
+}

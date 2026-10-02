@@ -573,6 +573,18 @@
         global.SRPersistence.init();
       }
 
+      // Initialize offline capability state system (non-blocking, always)
+      if (global.SRCapabilityState) {
+        global.SRCapabilityState.init();
+        // Wire model state changes so capability state stays current
+        if (global.SRLocalModel && global.SRLocalModel.onStateChange) {
+          global.SRLocalModel.onStateChange(function () {
+            if (global.SRCapabilityState) global.SRCapabilityState.refresh();
+          });
+        }
+        console.log('[ShadowReaper V2] Capability state:', global.SRCapabilityState.getSnapshot().uiStatus);
+      }
+
       // Load Founder controls (non-blocking)
       if (global.SRFounderControls) {
         global.SRFounderControls.load(function () {
@@ -883,6 +895,11 @@
           generative:      _lastResponseSource === 'LOCAL_MODEL',
           conversationContextTurns: _initialized ? global.SRConversation.getTurnCount() : 0,
         },
+
+        // Offline capability state — truthful local/model/network dimensions
+        capabilityState: global.SRCapabilityState
+          ? global.SRCapabilityState.getSnapshot()
+          : { localState: 'UNKNOWN', modelState: 'UNKNOWN', networkState: 'UNKNOWN' },
       };
     },
 

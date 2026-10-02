@@ -1339,6 +1339,21 @@ body::before {
           <button class="sr-action-btn" id="srNativeDiagBtn" style="margin-top:6px;font-size:10px;opacity:0.6;" type="button">
             &#9881; Native Bridge Diagnostics
           </button>
+          <!-- Developer offline diagnostics — shows real pipeline state -->
+          <button class="sr-action-btn" id="srOfflineDiagBtn" style="margin-top:6px;font-size:10px;opacity:0.6;" type="button">
+            &#128268; Offline Intelligence Diagnostics
+          </button>
+        </div>
+
+        <!-- Offline Intelligence Diagnostics Panel — dev only, hidden by default -->
+        <div id="srOfflineDiagPanel" style="display:none;">
+          <div class="sr-settings-section" style="background:var(--bg-void);border:1px solid var(--border);border-radius:8px;padding:10px;margin-top:4px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+              <div class="sr-settings-label" style="margin:0;color:var(--electric);">&#128268; Offline Intelligence Diagnostics</div>
+              <button class="sr-icon-btn" id="srOfflineDiagRefresh" title="Refresh" style="font-size:13px;opacity:0.7;">&#8635;</button>
+            </div>
+            <pre id="srOfflineDiagOutput" style="font-size:10px;color:var(--text-secondary);line-height:1.55;white-space:pre-wrap;word-break:break-all;margin:0;max-height:320px;overflow-y:auto;"></pre>
+          </div>
         </div>
 
         <!-- Build info -->
@@ -1475,8 +1490,24 @@ body::before {
 <script src="./knowledge/sr-knowledge-learner.js"></script>
 <script src="./translation/translation-engine.js"></script>
 <script src="./voice/voice-engine.js"></script>
+
+<!-- ── Language Foundation — OFFLINE-CAPABLE local language subsystems ── -->
+<!-- Load order: tokenizer → morphology → relationships → semantics →      -->
+<!--             context-resolver → learning → phrases → lexicon → facade  -->
+<script src="./language/tokenizer/tokenizer.js"></script>
+<script src="./language/morphology/morphology.js"></script>
+<script src="./language/relationships/relationships.js"></script>
+<script src="./language/semantics/semantics.js"></script>
+<script src="./language/context/context-resolver.js"></script>
+<script src="./language/learning/language-learning.js"></script>
+<script src="./language/phrases/phrases.js"></script>
 <script src="./language/lexicon/sr-word-definitions.js"></script>
 <script src="./language/lexicon/sr-lexicon.js"></script>
+<script src="./language/sr-language.js"></script>
+
+<!-- ── Offline Capability State System ───────────────────────────────── -->
+<script src="./core/sr-capability-state.js"></script>
+
 <script src="./shadow-reaper.js"></script>
 
 <!-- PWA Install-State Manager (must load before the PWA init block below) -->
@@ -1582,7 +1613,19 @@ body::before {
       return;
     }
 
-    _setStatus('Ready', 'ready');
+    // Wire capability state → UI status (truthful local/model/network state)
+    if (window.SRCapabilityState) {
+      window.SRCapabilityState.onChange(function (dim, newState, reason, snap) {
+        // Only update status if not in a "transient" UI state (thinking, listening)
+        if (!_isProcessing && !_isListening) {
+          _setStatus(snap.uiStatus, snap.uiClass);
+        }
+      });
+      var _initSnap = window.SRCapabilityState.getSnapshot();
+      _setStatus(_initSnap.uiStatus, _initSnap.uiClass);
+    } else {
+      _setStatus('Ready', 'ready');
+    }
     _updateStatusChips();
     _syncToggles();
 
@@ -1634,7 +1677,12 @@ body::before {
       if (sob) sob.style.display = '';
 
       // Update status: reflect persistence now active
-      _setStatus('Ready', 'ready');
+      if (window.SRCapabilityState) {
+        var _authSnap = window.SRCapabilityState.getSnapshot();
+        _setStatus(_authSnap.uiStatus, _authSnap.uiClass);
+      } else {
+        _setStatus('Ready', 'ready');
+      }
       _updateStatusChips();
       _syncToggles();
 
@@ -1666,8 +1714,17 @@ body::before {
       if ($recentList)   $recentList.innerHTML   = '';
       if ($mobileRecent) $mobileRecent.innerHTML = '';
 
-      // Status: session mode
-      _setStatus('Session mode', 'warn');
+      // Status: session-only mode — but local intelligence is still available
+      if (window.SRCapabilityState) {
+        var _soSnap = window.SRCapabilityState.getSnapshot();
+        // Show "Session mode" prefix but preserve offline intelligence info
+        var _soText = _soSnap.localState === 'LOCAL_READY'
+          ? 'Session mode · Local intelligence'
+          : 'Session mode';
+        _setStatus(_soText, _soSnap.localState === 'LOCAL_READY' ? 'ready' : 'warn');
+      } else {
+        _setStatus('Session mode', 'warn');
+      }
     }
   }
 
@@ -2172,6 +2229,135 @@ body::before {
           alert('SRNativeDiagnostics module not loaded.');
         }
       });
+    }
+  })();
+
+  // ── OFFLINE INTELLIGENCE DIAGNOSTICS BUTTON ───────────────────────────────
+  (function () {
+    var diagBtn     = document.getElementById('srOfflineDiagBtn');
+    var diagPanel   = document.getElementById('srOfflineDiagPanel');
+    var diagOutput  = document.getElementById('srOfflineDiagOutput');
+    var diagRefresh = document.getElementById('srOfflineDiagRefresh');
+    var _diagOpen   = false;
+
+    function _renderDiag() {
+      if (!diagOutput) return;
+      var lines = [];
+
+      // ── Capability State ────────────────────────────────────────────────────
+      var cap = window.SRCapabilityState ? window.SRCapabilityState.getSnapshot() : null;
+      lines.push('═══ OFFLINE INTELLIGENCE DIAGNOSTICS ═══');
+      lines.push('');
+
+      if (cap) {
+        lines.push('── CAPABILITY STATE ──');
+        lines.push('Local Intelligence  : ' + cap.localState + (cap.localReason ? ' — ' + cap.localReason : ''));
+        lines.push('Local Model         : ' + cap.modelState + (cap.modelReason ? ' — ' + cap.modelReason : ''));
+        lines.push('Network             : ' + cap.networkState);
+        lines.push('UI Status           : ' + cap.uiStatus);
+        lines.push('Conversation avail  : ' + cap.conversationAvailable);
+        lines.push('Model inference     : ' + cap.modelInferenceAvailable);
+        lines.push('Live data avail     : ' + cap.liveDataAvailable);
+      } else {
+        lines.push('SRCapabilityState   : NOT LOADED');
+      }
+      lines.push('');
+
+      // ── Language Foundation ─────────────────────────────────────────────────
+      var lf = window.SRLanguage;
+      lines.push('── LANGUAGE FOUNDATION ──');
+      lines.push('SRLanguage loaded   : ' + (!!lf));
+      lines.push('SRTokenizer         : ' + (!!window.SRTokenizer));
+      lines.push('SRMorphology        : ' + (!!window.SRMorphology));
+      lines.push('SRRelationships     : ' + (!!window.SRRelationships));
+      lines.push('SRSemantics         : ' + (!!window.SRSemantics));
+      lines.push('SRContextResolver   : ' + (!!window.SRContextResolver));
+      lines.push('SRLanguageLearning  : ' + (!!window.SRLanguageLearning));
+      lines.push('SRPhrases           : ' + (!!window.SRPhrases));
+      lines.push('SRLexicon           : ' + (!!window.SRLexicon));
+      lines.push('SRMorphology loaded : ' + (window.SRMorphology ? (window.SRMorphology.getVocabStats ? window.SRMorphology.getVocabStats().loaded : 'unknown') : 'n/a'));
+      if (lf && lf.getLanguageStatus) {
+        try {
+          var ls = lf.getLanguageStatus();
+          lines.push('LF vocab entries    : ' + (ls.vocabulary ? ls.vocabulary.totalEntries : '?'));
+          lines.push('LF vocab loaded     : ' + (ls.vocabulary ? ls.vocabulary.indexLoaded : '?'));
+        } catch (_) { lines.push('LF status           : error reading status'); }
+      }
+      lines.push('');
+
+      // ── Local Model ─────────────────────────────────────────────────────────
+      var lm = window.SRLocalModel;
+      lines.push('── LOCAL MODEL ──');
+      if (lm) {
+        var ms = lm.getStatus();
+        lines.push('Model state         : ' + ms.state);
+        lines.push('Model ID            : ' + (ms.modelId || 'none'));
+        lines.push('Load progress       : ' + ms.loadPct + '%');
+        lines.push('Last error          : ' + (ms.lastError || 'none'));
+        var md = lm.getDiagnostics ? lm.getDiagnostics() : {};
+        lines.push('Error code          : ' + (md.errorCode || 'none'));
+        lines.push('WebLLM import       : ' + (md.webllmImportStatus || '?'));
+        lines.push('WebGPU available    : ' + (md.webgpuAvailable != null ? md.webgpuAvailable : '?'));
+        lines.push('GPU adapter         : ' + (md.webgpuAdapterAvailable != null ? md.webgpuAdapterAvailable : '?'));
+        lines.push('Model in registry   : ' + (md.modelExistsInRegistry != null ? md.modelExistsInRegistry : '?'));
+        lines.push('Cache status        : ' + (md.modelCacheStatus || '?'));
+        lines.push('Verify result       : ' + (md.verifyResult || '?'));
+        lines.push('Note: Model requires internet for first download (WebLLM CDN).');
+        lines.push('      Once downloaded, cached by browser storage (IndexedDB).');
+      } else {
+        lines.push('SRLocalModel        : NOT LOADED');
+      }
+      lines.push('');
+
+      // ── Memory ──────────────────────────────────────────────────────────────
+      lines.push('── MEMORY ──');
+      lines.push('SNXShadowMemory     : ' + (!!window.SNXShadowMemory));
+      lines.push('Memory enabled      : ' + (window.SNXShadowMemory ? window.SNXShadowMemory.isEnabled() : 'n/a'));
+      lines.push('Firebase connected  : ' + (window.SRFirebaseAdapter ? window.SRFirebaseAdapter.isAuthenticated() : false));
+      lines.push('');
+
+      // ── Personality ─────────────────────────────────────────────────────────
+      lines.push('── PERSONALITY ──');
+      lines.push('SRResponse loaded   : ' + (!!window.SRResponse));
+      lines.push('SRContext loaded     : ' + (!!window.SRContext));
+      lines.push('Personality source  : Deterministic response pools (always local, always offline-capable)');
+      lines.push('');
+
+      // ── Last Response ───────────────────────────────────────────────────────
+      if (window.ShadowReaper) {
+        lines.push('── LAST RESPONSE ──');
+        var diag = window.ShadowReaper.getLastDiagnostics ? window.ShadowReaper.getLastDiagnostics() : {};
+        lines.push('Response source     : ' + (diag.RESPONSE_SOURCE || 'none yet'));
+        lines.push('Intent              : ' + (diag.INTENT || 'none yet'));
+        lines.push('Language Foundation : ' + (diag.LANGUAGE_FOUNDATION || 'n/a'));
+        lines.push('Knowledge used      : ' + (diag.KNOWLEDGE_USED || 'NO'));
+        lines.push('Adaptive context    : ' + (diag.ADAPTIVE_CONTEXT_USED || 'NO'));
+        lines.push('Fallback active     : ' + (diag.RESPONSE_SOURCE === 'DETERMINISTIC' ? 'YES (response pools)' : 'NO'));
+        if (diag.RESPONSE_SOURCE === 'DETERMINISTIC') {
+          lines.push('Fallback reason     : Local model not READY — using intent/tone pools');
+        }
+        lines.push('');
+      }
+
+      // ── Connectivity ────────────────────────────────────────────────────────
+      lines.push('── NETWORK ──');
+      lines.push('navigator.onLine    : ' + (typeof navigator !== 'undefined' ? navigator.onLine : 'unknown'));
+      lines.push('Firebase adapter    : ' + (window.SRFirebaseAdapter ? 'loaded' : 'not loaded'));
+      lines.push('');
+      lines.push('Last updated        : ' + new Date().toLocaleTimeString());
+
+      diagOutput.textContent = lines.join('\n');
+    }
+
+    if (diagBtn) {
+      diagBtn.addEventListener('click', function () {
+        _diagOpen = !_diagOpen;
+        diagPanel.style.display = _diagOpen ? '' : 'none';
+        if (_diagOpen) _renderDiag();
+      });
+    }
+    if (diagRefresh) {
+      diagRefresh.addEventListener('click', function () { _renderDiag(); });
     }
   })();
 
