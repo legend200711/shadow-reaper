@@ -368,9 +368,9 @@ test('getStatus() returns object', function () {
   assert(st && typeof st === 'object', 'Expected object');
 });
 
-test('getStatus() version is SR-V2-STAGE6', function () {
+test('getStatus() version is SR-V2-STAGE12', function () {
   var st = SR.getStatus();
-  assert(st.version === 'SR-V2-STAGE6', 'Expected version SR-V2-STAGE6, got: ' + st.version);
+  assert(st.version === 'SR-V2-STAGE12', 'Expected version SR-V2-STAGE12, got: ' + st.version);
 });
 
 test('getStatus() API_READY is true when initialized', function () {

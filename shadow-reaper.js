@@ -2,7 +2,7 @@
  * shadow-reaper-v2/shadow-reaper.js
  * Shadow Reaper V2 — Main Entry Point
  *
- * Build: SR-V2-STAGE6
+ * Build: SR-V2-STAGE12
  *
  * Exposes: window.ShadowReaper
  *
@@ -88,6 +88,9 @@
     return;
   }
 
+  // ─── Stage 12 Build Tag ───────────────────────────────────────────────────
+  // Updated to SR-V2-STAGE12 (personality, session, assistant profiles, number intelligence, research router)
+
   // ─── State ───────────────────────────────────────────────────────────────────
 
   var _initialized = false;
@@ -146,6 +149,12 @@
     }
     if (!global.SRLanguage) {
       console.warn('[ShadowReaper V2] SRLanguage not loaded — running without language foundation (degraded mode).');
+    }
+    if (!global.SRNumberIntelligence) {
+      console.warn('[ShadowReaper V2] SRNumberIntelligence not loaded — number intelligence unavailable.');
+    }
+    if (!global.SRResearchRouter) {
+      console.warn('[ShadowReaper V2] SRResearchRouter not loaded — research routing unavailable.');
     }
     return missing;
   }
@@ -359,6 +368,17 @@
 
     global.SRConversation.addTurn('user', message, understood.intent, understood.tone);
 
+    // ── PERSONALITY ANALYSIS ──────────────────────────────────────────────────
+    // Analyze current turn for personality context.
+    // Returns humor/tone/length signals for response shaping.
+    var personalityCtx = null;
+    var personality = global.SRPersonality;
+    if (personality) {
+      try {
+        personalityCtx = personality.analyzeTurn(message, understood);
+      } catch (_) {}
+    }
+
     // Gather context for model injection
     var adaptiveSnippets = p ? p.getAdaptiveSnippets(message, context) : [];
     var recentTurns      = global.SRConversation.getRecentTurns(8);
@@ -430,100 +450,214 @@
       resolvedRef = context.recentSubjects[0];
     }
 
-    var composeOpts = {
-      recentTurns:      recentTurns,
-      adaptiveSnippets: adaptiveSnippets,
-      memorySnippets:   memorySnippets,
-      knowledgeSnippet: knowledgeSnippet,
-      // Language foundation enrichment passed through to the model context builder
-      langAnalysis:     langAnalysis,
-      resolvedRef:      resolvedRef,
-      negation:         langAnalysis ? langAnalysis.negation : null,
-      concepts:         langAnalysis ? langAnalysis.concepts : [],
-      unknownWords:     langAnalysis ? langAnalysis.unknownWords : [],
-    };
-
     _lastDiag.INTENT = understood.intent || 'UNKNOWN';
     _lastDiag.ADAPTIVE_CONTEXT_USED = (adaptiveSnippets && adaptiveSnippets.length > 0) ? 'YES' : 'NO';
 
-    global.SRResponse.composeAsync(understood, context, composeOpts, function (response, source) {
-      _lastResponseSource = source || 'DETERMINISTIC';
+    // ── NUMBER INTELLIGENCE — attach to understood for downstream use ──────────
+    // Run SRNumberIntelligence.analyze() on every message; attach result to
+    // understood so the response engine can reference numeric context.
+    // Never blocks; never replaces the pipeline.
+    var numIntl = global.SRNumberIntelligence;
+    if (numIntl) {
+      try {
+        var numAnalysis = numIntl.analyze(message);
+        if (numAnalysis && (numAnalysis.numbers.length || numAnalysis.calculation)) {
+          understood._numAnalysis = numAnalysis;
+        }
+      } catch (_) {}
+    }
 
-      // ── KNOWLEDGE SUBSTITUTION ────────────────────────────────────────────────
-      // If static knowledge is relevant and the response is a generic/unhelpful
-      // fallback from ANY source path, replace with the knowledge snippet.
-      //
-      // This applies to:
-      //   DETERMINISTIC — response engine gave a "tell me more" style generic reply
-      //   LEARNED       — learned brain had nothing; knowledge snippet should answer
-      //   ERROR         — local model failed; knowledge can still provide an answer
-      //   LOCAL_MODEL   — model is not ready; knowledge fills the gap
-      //
-      // Does NOT apply when the response is already a substantive answer.
-      if (knowledgeSnippet &&
-          (understood.intent === 'QUESTION' || understood.intent === 'GENERAL_CONVERSATION' ||
-           understood.intent === 'UNKNOWN')) {
-        var _shouldSubstitute = false;
+    // ── INTELLIGENCE ROUTING (Research / Weather / Calculation) ───────────────
+    // SRResearchRouter classifies the query and routes to the right data source.
+    // Results attach to composeOpts.researchSnippet (trusted or untrusted).
+    // Calculations that succeed short-circuit composeAsync entirely.
+    // Political exclusion: NOT_ALLOWED queries return a stock message directly.
+    //
+    // This hook runs AFTER all local sources (knowledge, memory, adaptive) have
+    // been checked so that local knowledge always takes priority.
+    // It is NON-BLOCKING for local routes (LOCAL_KNOWLEDGE, NOT_NEEDED):
+    // those call the continuation synchronously.
+    // ─────────────────────────────────────────────────────────────────────────
+    function _continueWithResearch(researchSnippet) {
+      // ── ASSISTANT NAME INJECTION ──────────────────────────────────────────
+      // Determine the currently selected assistant name so response engine
+      // and local model can use it for self-identification.
+      var assistantName = 'Shadow';
+      if (global.SRPersonality && typeof global.SRPersonality.getAssistantName === 'function') {
+        assistantName = global.SRPersonality.getAssistantName();
+      } else if (global.SRWakeName && typeof global.SRWakeName.getWakeName === 'function') {
+        assistantName = global.SRWakeName.getWakeName();
+      }
 
-        // Check for generic/fallback phrases from response pools
-        var _genericPhrases = [
-          "Tell me more", "I'm not sure I caught that", "Say more", "I want to follow",
-          "I don't have reliable information", "I don't have enough context",
-          "That's not something I have", "I don't know enough about",
-          "I haven't learned anything about", "LOCAL MODEL ERROR",
-          // Learned path generic patterns that should yield to static knowledge
-          "Based on what you've told me:", "Here's what I have from our conversations",
-          "Based on what you've shared with me:",
-        ];
-        _shouldSubstitute = _genericPhrases.some(function (f) {
-          return response.indexOf(f) !== -1;
-        });
+      var composeOpts = {
+        recentTurns:      recentTurns,
+        adaptiveSnippets: adaptiveSnippets,
+        memorySnippets:   memorySnippets,
+        knowledgeSnippet: knowledgeSnippet,
+        researchSnippet:  researchSnippet || null,
+        // Language foundation enrichment passed through to the model context builder
+        langAnalysis:     langAnalysis,
+        resolvedRef:      resolvedRef,
+        negation:         langAnalysis ? langAnalysis.negation : null,
+        concepts:         langAnalysis ? langAnalysis.concepts : [],
+        unknownWords:     langAnalysis ? langAnalysis.unknownWords : [],
+        // Personality context for response shaping
+        personalityCtx:   personalityCtx,
+        assistantName:    assistantName,
+      };
 
-        if (_shouldSubstitute) {
-          response = knowledgeSnippet;
-          _lastResponseSource = 'KNOWLEDGE';
+      global.SRResponse.composeAsync(understood, context, composeOpts, function (response, source) {
+        _lastResponseSource = source || 'DETERMINISTIC';
+
+        // ── KNOWLEDGE SUBSTITUTION ────────────────────────────────────────────────
+        // If static knowledge is relevant and the response is a generic/unhelpful
+        // fallback from ANY source path, replace with the knowledge snippet.
+        //
+        // This applies to:
+        //   DETERMINISTIC — response engine gave a "tell me more" style generic reply
+        //   LEARNED       — learned brain had nothing; knowledge snippet should answer
+        //   ERROR         — local model failed; knowledge can still provide an answer
+        //   LOCAL_MODEL   — model is not ready; knowledge fills the gap
+        //
+        // Does NOT apply when the response is already a substantive answer.
+        if (knowledgeSnippet &&
+            (understood.intent === 'QUESTION' || understood.intent === 'GENERAL_CONVERSATION' ||
+             understood.intent === 'UNKNOWN')) {
+          var _shouldSubstitute = false;
+
+          // Check for generic/fallback phrases from response pools
+          var _genericPhrases = [
+            "Tell me more", "I'm not sure I caught that", "Say more", "I want to follow",
+            "I don't have reliable information", "I don't have enough context",
+            "That's not something I have", "I don't know enough about",
+            "I haven't learned anything about", "LOCAL MODEL ERROR",
+            // Learned path generic patterns that should yield to static knowledge
+            "Based on what you've told me:", "Here's what I have from our conversations",
+            "Based on what you've shared with me:",
+          ];
+          _shouldSubstitute = _genericPhrases.some(function (f) {
+            return response.indexOf(f) !== -1;
+          });
+
+          if (_shouldSubstitute) {
+            response = knowledgeSnippet;
+            _lastResponseSource = 'KNOWLEDGE';
+          }
+        }
+
+        // ── Finalize diagnostics ─────────────────────────────────────────────────
+        _lastDiag.KNOWLEDGE_USED  = (_lastResponseSource === 'KNOWLEDGE') ? 'YES' : 'NO';
+        _lastDiag.RESPONSE_SOURCE = _lastResponseSource;
+
+        global.SRConversation.addTurn('assistant', response, null, null);
+
+        // Feed the assistant response back into the language foundation context resolver
+        // so future pronoun resolution has access to both sides of the conversation.
+        if (langFdn) {
+          try { langFdn.initializeContextTurn('assistant', response, null); } catch (_) {}
+        }
+
+        if (p) {
+          p.saveTurn('user', message);
+          p.saveTurn('assistant', response);
+          p.processAdaptiveTurn(message, context);
+        }
+
+        // ── PERSONALITY LEARNING (fire-and-forget) ────────────────────────
+        // Learn from the completed turn to gradually adapt to the user's style.
+        if (personality) {
+          try {
+            personality.learnFromTurn(message, understood, response);
+          } catch (_) {}
+        }
+
+        // ── KNOWLEDGE LEARNING — fire-and-forget after response ───────────────
+        // Process EVERY user turn through the knowledge learner. This extracts
+        // concepts, definitions, relationships, corrections and connects them
+        // to the adaptive brain — completely independent of the response path.
+        var learner = _learner();
+        if (learner && _capEnabled('adaptiveEnabled') !== false) {
+          var convId      = p ? (p.getStatus && p.getStatus().currentConvId) : null;
+          var projectName = context.projectName || null;
+          // Fire-and-forget — never blocks the pipeline
+          try {
+            learner.learn({
+              text:           message,
+              role:           'user',
+              convId:         convId,
+              projectName:    projectName,
+              sessionContext: context,
+            });
+          } catch (_) {}
+        }
+
+        callback(response);
+      });
+    }  // end _continueWithResearch
+
+    // ── DISPATCH through Research Router ──────────────────────────────────────
+    var researchRouter = global.SRResearchRouter;
+    if (!researchRouter) {
+      // Router not loaded — proceed with no research snippet
+      _continueWithResearch(null);
+      return;
+    }
+
+    var routeClass = researchRouter.classify(message);
+
+    // Short-circuit: NOT_ALLOWED (political exclusion)
+    if (routeClass.route === researchRouter.ROUTE.NOT_ALLOWED) {
+      var blockedResp = 'Shadow Reaper doesn\'t provide political or electoral research. I\'m happy to help with other topics.';
+      global.SRConversation.addTurn('assistant', blockedResp, null, null);
+      if (p) { p.saveTurn('user', message); p.saveTurn('assistant', blockedResp); }
+      _lastResponseSource = 'DETERMINISTIC';
+      callback(blockedResp);
+      return;
+    }
+
+    // Short-circuit: CALCULATION with local knowledge already available
+    // (local knowledge takes priority over calculation intercept)
+    if (routeClass.route === researchRouter.ROUTE.CALCULATION && !knowledgeSnippet) {
+      var numI = global.SRNumberIntelligence;
+      if (numI && numI.detectCalculation && numI.detectCalculation(message)) {
+        var calcResult = numI.calculate(message);
+        if (calcResult && calcResult.ok) {
+          var calcResp = calcResult.expression + ' = ' + calcResult.result;
+          if (calcResult.formatted && calcResult.formatted !== String(calcResult.result)) {
+            calcResp += ' (' + calcResult.formatted + ')';
+          }
+          global.SRConversation.addTurn('assistant', calcResp, null, null);
+          if (p) { p.saveTurn('user', message); p.saveTurn('assistant', calcResp); }
+          _lastResponseSource = 'CALCULATION';
+          callback(calcResp);
+          return;
         }
       }
+      // Calculation parsing failed — fall through to normal pipeline
+      _continueWithResearch(null);
+      return;
+    }
 
-      // ── Finalize diagnostics ─────────────────────────────────────────────────
-      _lastDiag.KNOWLEDGE_USED  = (_lastResponseSource === 'KNOWLEDGE') ? 'YES' : 'NO';
-      _lastDiag.RESPONSE_SOURCE = _lastResponseSource;
+    // Routes that don't need external data — proceed immediately
+    if (routeClass.route === researchRouter.ROUTE.LOCAL_KNOWLEDGE ||
+        routeClass.route === researchRouter.ROUTE.NOT_NEEDED) {
+      _continueWithResearch(null);
+      return;
+    }
 
-      global.SRConversation.addTurn('assistant', response, null, null);
+    // Routes that need external data (WEATHER, INTERNET_RESEARCH)
+    // Skip if local knowledge is already available
+    if (knowledgeSnippet) {
+      _continueWithResearch(null);
+      return;
+    }
 
-      // Feed the assistant response back into the language foundation context resolver
-      // so future pronoun resolution has access to both sides of the conversation.
-      if (langFdn) {
-        try { langFdn.initializeContextTurn('assistant', response, null); } catch (_) {}
+    researchRouter.dispatch(message, null, function (routeResult) {
+      var snippet = null;
+      if (routeResult && routeResult.ok) {
+        snippet = researchRouter.formatForContext(routeResult) || null;
       }
-
-      if (p) {
-        p.saveTurn('user', message);
-        p.saveTurn('assistant', response);
-        p.processAdaptiveTurn(message, context);
-      }
-
-      // ── KNOWLEDGE LEARNING — fire-and-forget after response ───────────────
-      // Process EVERY user turn through the knowledge learner. This extracts
-      // concepts, definitions, relationships, corrections and connects them
-      // to the adaptive brain — completely independent of the response path.
-      var learner = _learner();
-      if (learner && _capEnabled('adaptiveEnabled') !== false) {
-        var convId      = p ? (p.getStatus && p.getStatus().currentConvId) : null;
-        var projectName = context.projectName || null;
-        // Fire-and-forget — never blocks the pipeline
-        try {
-          learner.learn({
-            text:           message,
-            role:           'user',
-            convId:         convId,
-            projectName:    projectName,
-            sessionContext: context,
-          });
-        } catch (_) {}
-      }
-
-      callback(response);
+      _continueWithResearch(snippet);
     });
   }
 
@@ -547,7 +681,7 @@
   var ShadowReaper = {
 
     _initialized: false,
-    _version: 'SR-V2-STAGE6',
+    _version: 'SR-V2-STAGE12',
 
     /**
      * Initialize Shadow Reaper V2.
@@ -589,6 +723,13 @@
       if (global.SRFounderControls) {
         global.SRFounderControls.load(function () {
           console.log('[ShadowReaper V2] Founder controls loaded.');
+        });
+      }
+
+      // Load personality engine (non-blocking)
+      if (global.SRPersonality) {
+        global.SRPersonality.load(function () {
+          console.log('[ShadowReaper V2] Personality engine loaded.');
         });
       }
 

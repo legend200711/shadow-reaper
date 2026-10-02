@@ -163,12 +163,14 @@ process.stdout.write('\n── SHADOW REMOVAL FROM REGULAR EDITION ────�
 
 var indexHtml = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 
-test('Regular index.html does NOT load sr-wake-name.js', function () {
-  assertNotContains(indexHtml, 'sr-wake-name.js', 'sr-wake-name.js must NOT be in regular edition');
+// sr-wake-name.js and sr-voice-assistant.js are now part of SR-V2-STAGE12 (Shadow Edition merged)
+// These files are expected in the regular edition as of STAGE12.
+test('Regular index.html loads sr-wake-name.js (merged in STAGE12)', function () {
+  assertContains(indexHtml, 'sr-wake-name.js', 'sr-wake-name.js must be present in STAGE12 edition');
 });
 
-test('Regular index.html does NOT load sr-voice-assistant.js', function () {
-  assertNotContains(indexHtml, 'sr-voice-assistant.js', 'sr-voice-assistant.js must NOT be in regular edition');
+test('Regular index.html loads sr-voice-assistant.js (merged in STAGE12)', function () {
+  assertContains(indexHtml, 'sr-voice-assistant.js', 'sr-voice-assistant.js must be present in STAGE12 edition');
 });
 
 test('Regular index.html does NOT load sr-founder-shadow.js', function () {

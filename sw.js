@@ -29,7 +29,7 @@
 
 // Shadow Reaper-specific cache namespace.
 // Bump version here to force a full re-cache on next visit.
-const CACHE_VERSION = 'sr-shell-v4';
+const CACHE_VERSION = 'sr-shell-v5';
 
 // GitHub Pages subdirectory prefix.
 // All app URLs are under this path.
@@ -66,6 +66,8 @@ const APP_SHELL = [
   BASE + '/history/sr-conversation-history.js',
   BASE + '/memory/sr-personal-memory.js',
   BASE + '/research/sr-web-research.js',
+  BASE + '/research/sr-weather.js',
+  BASE + '/research/sr-research-router.js',
   BASE + '/core/adaptive-brain.js',
   BASE + '/core/understanding-engine.js',
   BASE + '/core/context-engine.js',
@@ -77,6 +79,9 @@ const APP_SHELL = [
   BASE + '/knowledge/sr-knowledge-learner.js',
   BASE + '/translation/translation-engine.js',
   BASE + '/voice/voice-engine.js',
+  BASE + '/voice/sr-wake-name.js',
+  BASE + '/voice/sr-conversation-session.js',
+  BASE + '/voice/sr-voice-assistant.js',
   BASE + '/sr-feature-registry.js',
   BASE + '/firebase/firebase-config.js',
 
@@ -91,6 +96,7 @@ const APP_SHELL = [
   BASE + '/language/lexicon/sr-word-definitions.js',
   BASE + '/language/lexicon/sr-lexicon.js',
   BASE + '/language/sr-language.js',
+  BASE + '/language/sr-number-intelligence.js',
 
   // ── Language Foundation data — ~38MB total; cached once for offline use ───
   // NOTE: wordnet-index.json is ~27MB. It is cached here so that word
@@ -100,8 +106,15 @@ const APP_SHELL = [
   BASE + '/language/data/lemma-index.json',
   BASE + '/language/data/wordnet-index.json',
 
+  // ── Connection + Offline State ────────────────────────────────────────────
+  BASE + '/sr-connection-monitor.js',
+  BASE + '/sr-offline-state.js',
+
   // ── Offline Capability State System ──────────────────────────────────────
   BASE + '/core/sr-capability-state.js',
+
+  // ── Personality Engine ────────────────────────────────────────────────────
+  BASE + '/core/personality-engine.js',
 ];
 
 // Origins that must NEVER be served from cache.

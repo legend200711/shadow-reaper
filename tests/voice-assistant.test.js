@@ -895,13 +895,13 @@ test('VoiceAssistantService: no arbitrary command execution in Java', function (
 // ═══════════════════════════════════════════════════════════════════════════
 process.stdout.write('\n── index.html INTEGRATION ────────────────────────────\n');
 
-// ── REGULAR SHADOW REAPER ISOLATION CHECKS ──────────────────────────────────
-// Shadow Edition voice assistant UI/scripts must NOT appear in regular edition.
+// ── REGULAR SHADOW REAPER STAGE12 CHECKS ────────────────────────────────────
+// As of SR-V2-STAGE12, voice assistant scripts are merged into the main edition.
 
-test('regular index.html does NOT load sr-voice-assistant.js (Shadow Edition only)', function () {
+test('regular index.html loads sr-voice-assistant.js (merged in STAGE12)', function () {
   var html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-  assert(!html.includes('voice/sr-voice-assistant.js'),
-    'sr-voice-assistant.js is Shadow Edition-only — must NOT be in regular edition');
+  assert(html.includes('voice/sr-voice-assistant.js'),
+    'sr-voice-assistant.js must be present in STAGE12 edition');
 });
 
 test('regular index.html does NOT have Shadow Voice Assistant toggle (Shadow Edition only)', function () {

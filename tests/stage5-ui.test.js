@@ -145,11 +145,10 @@ test('index.html loads all required JS modules (per ARCHITECTURE.md load order)'
   assertContains(src, 'response-engine.js',      'Must load response engine');
   assertContains(src, 'voice-engine.js',         'Must load voice engine');
   assertContains(src, 'translation-engine.js',   'Must load translation engine');
-  // Shadow Edition-only scripts must NOT be present in regular edition
+  // Founder-only security scripts must NOT be present in regular edition
   assertNotContains(src, 'founder-controls.js',  'founder-controls.js is Shadow Edition only');
   assertNotContains(src, 'sr-founder-shadow.js', 'sr-founder-shadow.js is Shadow Edition only');
-  assertNotContains(src, 'sr-wake-name.js',      'sr-wake-name.js is Shadow Edition only');
-  assertNotContains(src, 'sr-voice-assistant.js','sr-voice-assistant.js is Shadow Edition only');
+  // sr-wake-name.js and sr-voice-assistant.js are now included in SR-V2-STAGE12 (Shadow Edition merged)
 });
 
 test('index.html loads platform detector (Stage 2)', function () {
