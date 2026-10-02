@@ -362,13 +362,155 @@
     if (!auth) { _showError('Authentication not available.'); _setLoading('srAuthSignupBtn', false); return; }
 
     auth.createUserWithEmailAndPassword(email, password)
-      .then(function () {
-        hideModal();
+      .then(function (credential) {
+        // New account created — show Device Control Mode onboarding before entering app
+        _showDCMOnboarding(credential && credential.user ? credential.user.uid : null);
       })
       .catch(function (err) {
         _setLoading('srAuthSignupBtn', false);
         _showError(_friendlyAuthError(err.code));
       });
+  }
+
+  // ─── Device Control Mode onboarding ─────────────────────────────────────────
+  // Shown once: immediately after new sign-up, OR for returning users who have no
+  // saved mode (old accounts). Exposed publicly as SRAuthUI.showDCMOnboarding(uid)
+  // so the main UI can trigger it for returning users.
+  //
+  // Saves: deviceControlMode + onboardingDeviceModeComplete: true
+  // Path:  users/{uid}/shadowReaperPreferences/settings
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  var _DCM_ONBOARDING_MODES = [
+    {
+      value: 'AI_ONLY',
+      label: 'AI Only',
+      desc:  'Use Shadow Reaper for conversations, learning, projects, memory, voice, and AI features. No device control.',
+    },
+    {
+      value: 'SMART_DEVICES',
+      label: 'AI + Smart Devices',
+      desc:  'Everything in AI Only, plus control paired computers, laptops, TVs, AC/thermostats, and supported smart devices. Works from the web app and Android app.',
+    },
+    {
+      value: 'FULL_DEVICE_CONTROL',
+      label: 'AI + Full Device Control',
+      desc:  'Everything in AI + Smart Devices, plus control supported features on your Android phone. Android phone control requires the Shadow Reaper Android app.',
+    },
+  ];
+
+  function _showDCMOnboarding(uid) {
+    // If no modal exists yet, create a fresh one
+    if (!_modalEl) _ensureModal();
+    if (!_modalEl) return;
+
+    // Show the modal overlay (it may already be showing from sign-up)
+    _modalEl.style.display = 'flex';
+
+    var card = _modalEl.querySelector('#srAuthCard');
+    if (!card) { hideModal(); return; }
+
+    // Overwrite the modal card with the onboarding view
+    var rows = _DCM_ONBOARDING_MODES.map(function (m) {
+      return (
+        '<button class="sr-dcm-ob-opt" data-dcm="' + m.value + '" type="button" style="' +
+          'display:flex;align-items:flex-start;gap:10px;' +
+          'padding:11px 12px;border-radius:10px;' +
+          'border:1.5px solid rgba(30,144,255,0.18);background:#0e1525;' +
+          'cursor:pointer;width:100%;text-align:left;margin-bottom:8px;' +
+          'font-family:inherit;transition:border-color 0.15s,background 0.15s;">' +
+          '<div class="sr-dcm-ob-radio" style="' +
+            'width:16px;height:16px;border-radius:50%;' +
+            'border:2px solid #3a4a60;flex-shrink:0;margin-top:2px;"></div>' +
+          '<div style="flex:1;min-width:0;">' +
+            '<div style="font-size:12px;font-weight:700;color:#e8edf5;' +
+              'letter-spacing:0.04em;text-transform:uppercase;margin-bottom:3px;">' + m.label + '</div>' +
+            '<div style="font-size:11px;color:#7a8a9a;line-height:1.5;">' + m.desc + '</div>' +
+          '</div>' +
+        '</button>'
+      );
+    });
+
+    card.innerHTML =
+      '<div id="srDCMOnboarding" style="display:flex;flex-direction:column;gap:0;">' +
+        '<div style="text-align:center;margin-bottom:18px;">' +
+          '<div style="font-size:36px;margin-bottom:8px;' +
+            'filter:drop-shadow(0 0 12px rgba(30,144,255,0.5));">&#9760;</div>' +
+          '<div style="font-size:16px;font-weight:700;color:#e8edf5;' +
+            'letter-spacing:0.02em;">How do you want to use Shadow Reaper?</div>' +
+          '<div style="font-size:11px;color:#5a6880;margin-top:4px;">' +
+            'You can change this any time in Settings.</div>' +
+        '</div>' +
+        rows.join('') +
+        '<button id="srDCMOnboardingConfirm" type="button" disabled style="' +
+          'margin-top:4px;background:#1e90ff;border:none;border-radius:10px;' +
+          'padding:11px;color:#fff;font-size:14px;font-weight:700;' +
+          'cursor:pointer;letter-spacing:0.04em;opacity:0.4;' +
+          'transition:opacity 0.15s;font-family:inherit;">' +
+          'ENTER SHADOW REAPER' +
+        '</button>' +
+      '</div>';
+
+    var selectedMode = null;
+    var opts       = card.querySelectorAll('.sr-dcm-ob-opt');
+    var confirmBtn = card.querySelector('#srDCMOnboardingConfirm');
+
+    opts.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        selectedMode = btn.getAttribute('data-dcm');
+        opts.forEach(function (b) {
+          var radio = b.querySelector('.sr-dcm-ob-radio');
+          if (b === btn) {
+            b.style.borderColor = '#1e90ff';
+            b.style.background  = 'rgba(30,144,255,0.07)';
+            if (radio) { radio.style.borderColor = '#1e90ff'; radio.style.background = '#1e90ff'; }
+          } else {
+            b.style.borderColor = 'rgba(30,144,255,0.18)';
+            b.style.background  = '#0e1525';
+            if (radio) { radio.style.borderColor = '#3a4a60'; radio.style.background = 'transparent'; }
+          }
+        });
+        if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.style.opacity = '1'; }
+      });
+    });
+
+    if (confirmBtn) {
+      confirmBtn.addEventListener('click', function () {
+        if (!selectedMode) return;
+        _saveDCMPrefForUID(uid, selectedMode, function () {
+          hideModal();
+        });
+      });
+    }
+  }
+
+  // Save DCM preference + mark onboarding complete for a specific UID.
+  // Used for both new sign-ups and returning users shown the onboarding.
+  function _saveDCMPrefForUID(uid, mode, callback) {
+    callback = callback || function () {};
+
+    // Persist to localStorage immediately (UID-keyed for isolation)
+    try {
+      if (uid && typeof localStorage !== 'undefined') {
+        localStorage.setItem('srDCMPref_' + uid, mode);
+      }
+    } catch (_) {}
+
+    // Persist to Firestore
+    var fa = global.SRFirebaseAdapter;
+    if (!fa || typeof fa._db === 'undefined' || !fa._db || !uid) {
+      callback();
+      return;
+    }
+
+    try {
+      fa._db.doc('users/' + uid + '/shadowReaperPreferences/settings')
+        .set({ deviceControlMode: mode, onboardingDeviceModeComplete: true }, { merge: true })
+        .then(function ()  { callback(); })
+        .catch(function () { callback(); });
+    } catch (_) {
+      callback();
+    }
   }
 
   function _friendlyAuthError(code) {
@@ -387,15 +529,18 @@
 
   // ─── Expose ───────────────────────────────────────────────────────────────
   global.SRAuthUI = {
-    build:           BUILD_ID,
-    init:            init,
-    isAuthenticated: isAuthenticated,
-    getCurrentUser:  getCurrentUser,
-    getDisplayName:  getDisplayName,
-    onAuthChange:    onAuthChange,
-    showModal:       showModal,
-    hideModal:       hideModal,
-    signOut:         signOut,
+    build:              BUILD_ID,
+    init:               init,
+    isAuthenticated:    isAuthenticated,
+    getCurrentUser:     getCurrentUser,
+    getDisplayName:     getDisplayName,
+    onAuthChange:       onAuthChange,
+    showModal:          showModal,
+    hideModal:          hideModal,
+    signOut:            signOut,
+    // Exposed for the main UI to trigger onboarding for returning users
+    // with no saved Device Control Mode.
+    showDCMOnboarding:  _showDCMOnboarding,
   };
 
 })(typeof window !== 'undefined' ? window : global);

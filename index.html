@@ -863,51 +863,77 @@ body::before {
 .sr-action-btn.danger { border-color: var(--danger); color: var(--danger); }
 .sr-action-btn.danger:hover { background: rgba(239,68,68,0.1); }
 
-/* Device controls in settings (auth-gated) */
-.sr-device-controls {
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  overflow: hidden;
-}
-.sr-device-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 9px 12px;
-  border-bottom: 1px solid var(--border);
-  font-size: 12px;
-  gap: 8px;
-}
-.sr-device-item:last-child { border-bottom: none; }
-.sr-device-name { color: var(--text-secondary); }
-.sr-device-state {
-  font-size: 10px; font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 8px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-.sr-device-state.available    { background: rgba(34,197,94,0.12);   color: var(--success); }
-.sr-device-state.allowed      { background: rgba(30,144,255,0.12);  color: var(--electric); }
-.sr-device-state.permission   { background: rgba(245,158,11,0.12);  color: var(--warn); }
-.sr-device-state.denied       { background: rgba(239,68,68,0.12);   color: var(--danger); }
-.sr-device-state.unsupported  { background: var(--bg-panel);        color: var(--text-muted); }
-.sr-device-state.native-only  { background: rgba(124,92,216,0.12);  color: #9d7ae8; }
-.sr-device-state.not-impl     { background: var(--bg-panel);        color: var(--text-muted); }
+/* Device Control Mode selector in settings (auth-gated) */
+/* Internal capability matrix styles kept for diagnostic use — not shown in settings UI */
+.sr-device-controls { display: none !important; }
 
-/* Native-app-required info banner (shown in web/PWA runtime instead of phone controls) */
-.sr-native-info {
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
+.sr-dcm-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
   border-radius: 10px;
-  padding: 12px 14px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  margin-bottom: 8px;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+}
+.sr-dcm-option:last-of-type { margin-bottom: 0; }
+.sr-dcm-option:hover { border-color: var(--border-bright); background: var(--bg-panel); }
+.sr-dcm-option.selected {
+  border-color: var(--electric);
+  background: rgba(30,144,255,0.06);
+}
+.sr-dcm-radio {
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--border-bright);
+  flex-shrink: 0;
+  margin-top: 2px;
+  display: flex; align-items: center; justify-content: center;
+  transition: border-color 0.15s;
+}
+.sr-dcm-option.selected .sr-dcm-radio {
+  border-color: var(--electric);
+  background: var(--electric);
+  box-shadow: 0 0 6px rgba(30,144,255,0.4);
+}
+.sr-dcm-option.selected .sr-dcm-radio::after {
+  content: '';
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #fff;
+  display: block;
+}
+.sr-dcm-text { flex: 1; min-width: 0; }
+.sr-dcm-label {
   font-size: 12px;
-  color: var(--text-secondary);
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 3px;
+}
+.sr-dcm-desc {
+  font-size: 11px;
+  color: var(--text-muted);
   line-height: 1.5;
 }
-.sr-native-info p { margin-bottom: 8px; }
-.sr-native-info p:last-child { margin-bottom: 0; }
+.sr-dcm-pwa-note {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  display: none;
+}
 
 /* Android download button */
 .sr-android-dl-btn {
@@ -1398,50 +1424,90 @@ body::before {
           </div>
         </div>
 
-        <!-- Devices section — gated by auth -->
+        <!-- Device Control Mode — auth-gated -->
         <div class="sr-settings-section" id="srDeviceSection">
-          <div class="sr-settings-label">This Device</div>
+          <div class="sr-settings-label">Device Control Mode</div>
 
           <!-- Auth gate shown when signed out -->
           <div class="sr-auth-gate" id="srDeviceAuthGate">
-            <div class="sr-auth-gate-text">Sign in to view device capabilities.</div>
+            <div class="sr-auth-gate-text">Sign in to set your Device Control Mode.</div>
             <button class="sr-auth-gate-btn" id="srDeviceAuthBtn">LOG IN / SIGN UP</button>
           </div>
 
-          <!-- Phone controls: shown ONLY in ANDROID_NATIVE / IOS_NATIVE runtime -->
-          <div id="srDeviceControlsWrap" style="display:none">
-            <div class="sr-device-controls" id="srDeviceControls">
-              <div class="sr-device-item" id="srNoDeviceMsg">
-                <span class="sr-device-name">Loading…</span>
-              </div>
-            </div>
-          </div>
+          <!-- DCM selector: shown when signed in -->
+          <div id="srDCMWrap" style="display:none">
 
-          <!-- Web/PWA info banner: shown instead of phone controls on web/PWA -->
-          <!-- Informs user that phone controls need the native app; does NOT advertise them. -->
-          <div id="srNativeInfoBanner" style="display:none">
-            <div class="sr-native-info">
-              <p>Phone controls require the <strong>Shadow Reaper native app</strong>.</p>
-              <p id="srNativeInfoAndroidLine" style="display:none">
-                Download the Android app below to control this phone directly.
-              </p>
+            <button class="sr-dcm-option" id="srDCMAiOnly" data-dcm="AI_ONLY" aria-label="AI Only" type="button">
+              <div class="sr-dcm-radio"></div>
+              <div class="sr-dcm-text">
+                <div class="sr-dcm-label">AI Only</div>
+                <div class="sr-dcm-desc">Use Shadow Reaper for conversations, learning, projects, memory, voice, and AI features. No device control.</div>
+              </div>
+            </button>
+
+            <button class="sr-dcm-option" id="srDCMSmartDevices" data-dcm="SMART_DEVICES" aria-label="AI + Smart Devices" type="button">
+              <div class="sr-dcm-radio"></div>
+              <div class="sr-dcm-text">
+                <div class="sr-dcm-label">AI + Smart Devices</div>
+                <div class="sr-dcm-desc">Everything in AI Only, plus control paired computers, laptops, TVs, AC/thermostats, and supported smart devices. Works from the web app and Android app.</div>
+              </div>
+            </button>
+
+            <button class="sr-dcm-option" id="srDCMFullControl" data-dcm="FULL_DEVICE_CONTROL" aria-label="AI + Full Device Control" type="button">
+              <div class="sr-dcm-radio"></div>
+              <div class="sr-dcm-text">
+                <div class="sr-dcm-label">AI + Full Device Control</div>
+                <div class="sr-dcm-desc">Everything in AI + Smart Devices, plus control supported features on your Android phone. Android phone control requires the Shadow Reaper Android app.</div>
+              </div>
+            </button>
+
+            <!-- Note shown when FULL_DEVICE_CONTROL is selected outside ANDROID_NATIVE -->
+            <div class="sr-dcm-pwa-note" id="srDCMPWANote">
+              <span id="srDCMPWANoteMsg">Android phone control requires the Shadow Reaper Android app. Your web app and paired smart devices are not affected.</span>
             </div>
+
           </div>
+          <!-- Internal capability list (hidden from users — preserved for internal use) -->
+          <div id="srDeviceControlsWrap" style="display:none">
+            <div class="sr-device-controls" id="srDeviceControls"></div>
+          </div>
+          <!-- Internal banner (hidden from users — preserved for internal use) -->
+          <div id="srNativeInfoBanner" style="display:none"></div>
         </div>
 
-        <!-- Android download — shown on mobile; available everywhere as a fallback -->
-        <div class="sr-settings-section" id="srAndroidDownloadSection" style="display:none">
-          <div class="sr-settings-label">Android App</div>
-          <a href="./downloads/ShadowReaper.apk"
-             download="ShadowReaper.apk"
-             class="sr-android-dl-btn"
-             id="srAndroidDlBtn"
-             aria-label="Download Shadow Reaper for Android">
-            &#11015; Download Shadow Reaper for Android
-          </a>
-          <div style="margin-top:8px;font-size:11px;color:var(--text-muted);line-height:1.5;padding:0 2px;">
-            Open the downloaded file and follow Android's installation instructions.
-            If prompted, allow installation from this source in your Android settings.
+        <!-- App Options — install PWA or download Android app -->
+        <!-- Visibility of each sub-item is managed by _initAppOptions() -->
+        <div class="sr-settings-section" id="srAppOptionsSection">
+          <div class="sr-settings-label">App Options</div>
+
+          <!-- PWA install — shown when the browser offers an install prompt (not already installed, not Android native) -->
+          <div id="srAppOptsPWA" style="display:none">
+            <button class="sr-action-btn" id="srSettingsPWAInstallBtn" aria-label="Install Shadow Reaper web app" type="button">
+              &#11015; Install Web App
+            </button>
+            <div style="margin-top:6px;font-size:11px;color:var(--text-muted);line-height:1.5;padding:0 2px;">
+              Install Shadow Reaper as a web app. Includes AI features and supported smart-device control. Controlling the phone itself requires the Android app.
+            </div>
+          </div>
+
+          <!-- Android APK download — shown when relevant (not inside Android native app, not iOS) -->
+          <!-- Uses the existing download system — NOT a new downloader -->
+          <div id="srAndroidDownloadSection" style="display:none">
+            <a href="./downloads/ShadowReaper.apk"
+               download="ShadowReaper.apk"
+               class="sr-android-dl-btn"
+               id="srAndroidDlBtn"
+               aria-label="Download Shadow Reaper for Android">
+              &#11015; Download for Android
+            </a>
+            <div style="margin-top:6px;font-size:11px;color:var(--text-muted);line-height:1.5;padding:0 2px;">
+              Install the Android version for the full Shadow Reaper experience, including supported Android phone controls when Full Device Control is enabled.
+            </div>
+          </div>
+
+          <!-- Shown when no options are available for this platform -->
+          <div id="srAppOptsNone" style="display:none;font-size:11px;color:var(--text-muted);line-height:1.5;">
+            You are running Shadow Reaper natively on Android. No additional installation is needed.
           </div>
         </div>
 
@@ -1700,8 +1766,8 @@ body::before {
     _updateStatusChips();
     _syncToggles();
 
-    // Android download button — not auth-gated, runs on boot
-    _initAndroidDownload();
+    // App Options (PWA install + Android download) — not auth-gated, runs on boot
+    _initAppOptions();
 
     // ── AUTH INIT ──────────────────────────────────────────────────────────
     // Show a brief "Connecting…" state so that on page reload, the user does
@@ -1747,12 +1813,12 @@ body::before {
       if (cmb) cmb.style.display = '';
       if (sob) sob.style.display = '';
 
-      // Device controls: show real controls, hide gate
-      var gate = document.getElementById('srDeviceAuthGate');
-      var wrap = document.getElementById('srDeviceControlsWrap');
-      if (gate) gate.style.display = 'none';
-      if (wrap) wrap.style.display = '';
-      _initDeviceControls();
+      // Device Control Mode: hide gate, show DCM selector, load preference
+      var gate    = document.getElementById('srDeviceAuthGate');
+      var dcmWrap = document.getElementById('srDCMWrap');
+      if (gate)    gate.style.display    = 'none';
+      if (dcmWrap) dcmWrap.style.display = '';
+      _initDCMSection();
 
       // Update status: reflect persistence now active
       _setStatus('Ready', 'ready');
@@ -1783,13 +1849,11 @@ body::before {
       if (cmb) cmb.style.display = 'none';
       if (sob) sob.style.display = 'none';
 
-      // Device controls: show gate, hide controls and info banner
-      var gate   = document.getElementById('srDeviceAuthGate');
-      var wrap   = document.getElementById('srDeviceControlsWrap');
-      var banner = document.getElementById('srNativeInfoBanner');
-      if (gate)   gate.style.display   = '';
-      if (wrap)   wrap.style.display   = 'none';
-      if (banner) banner.style.display = 'none';
+      // Device Control Mode: show gate, hide DCM selector
+      var gate    = document.getElementById('srDeviceAuthGate');
+      var dcmWrap = document.getElementById('srDCMWrap');
+      if (gate)    gate.style.display    = '';
+      if (dcmWrap) dcmWrap.style.display = 'none';
 
       // Hide Wake Name section when signed out
       var wns = document.getElementById('srWakeNameSection');
@@ -1807,123 +1871,269 @@ body::before {
     }
   }
 
-  // ── ANDROID DOWNLOAD — platform-aware visibility ──────────────────────────
-  function _initAndroidDownload() {
-    var sec        = document.getElementById('srAndroidDownloadSection');
-    var installBtn = document.getElementById('srInstallBtn');
-    if (!sec) return;
+  // ── APP OPTIONS — platform-aware visibility ───────────────────────────────
+  // Manages the "App Options" settings section: PWA install + Android download.
+  // These are TWO SEPARATE concepts from Device Control Mode.
+  //
+  // Rules:
+  //   ANDROID_NATIVE     → already installed; show "no installation needed" msg
+  //   WEB/PWA on Android → show Android APK download; suppress header PWA install button
+  //   WEB/PWA on iOS     → show PWA install option; do NOT show Android APK
+  //   WEB/PWA desktop    → show both PWA and Android download as options
+  //   PWA (any, installed) → hide PWA install (already installed); show Android as upgrade
+  // ─────────────────────────────────────────────────────────────────────────
+  function _initAppOptions() {
+    var $pwaWrap     = document.getElementById('srAppOptsPWA');
+    var $androidWrap = document.getElementById('srAndroidDownloadSection');
+    var $noneMsg     = document.getElementById('srAppOptsNone');
+    var $headerInstall = document.getElementById('srInstallBtn'); // existing header install btn
 
     var runtime  = SRPlat ? SRPlat.getRuntime() : 'WEB_DESKTOP';
-    var isAndroid   = (runtime === 'ANDROID_NATIVE');
-    var isMobileWeb = (runtime === 'WEB_MOBILE' || runtime === 'PWA_MOBILE');
+    var ua       = (navigator.userAgent || '').toLowerCase();
+    var isAndroidUA = /android/.test(ua);
+    var isIOS       = /iphone|ipad|ipod/.test(ua);
+
+    var isNative    = (runtime === 'ANDROID_NATIVE' || runtime === 'IOS_NATIVE');
+    var isPWA       = (runtime === 'PWA_DESKTOP' || runtime === 'PWA_MOBILE');
+    var isMobileWeb = (runtime === 'WEB_MOBILE');
     var isDesktop   = (runtime === 'WEB_DESKTOP' || runtime === 'PWA_DESKTOP');
 
-    if (isAndroid) {
-      // Running inside the native app — no download needed
-      sec.style.display = 'none';
-    } else if (isMobileWeb) {
-      // Mobile browser/PWA — Android UA — show the download section
-      var ua = (navigator.userAgent || '').toLowerCase();
-      var isAndroidUA = /android/.test(ua);
-      sec.style.display = isAndroidUA ? '' : 'none';
-      // Also suppress PWA install button on Android — native app is preferred
-      if (isAndroidUA && installBtn) installBtn.style.display = 'none';
-    } else if (isDesktop) {
-      // Desktop — show in settings as an option (useful for sideloading)
-      sec.style.display = '';
+    // Wire the in-settings PWA install button to the existing SRPWAState system
+    var $settingsPWABtn = document.getElementById('srSettingsPWAInstallBtn');
+    if ($settingsPWABtn) {
+      $settingsPWABtn.addEventListener('click', function () {
+        // Delegate to the same handler as the header install button
+        if (window.SRPWAState) {
+          var state = window.SRPWAState.getState();
+          var S = window.SRPWAState.STATE;
+          if (state === S.IOS_MANUAL_INSTALL) {
+            var iosGuide = document.getElementById('srIosGuide');
+            if (iosGuide) iosGuide.classList.add('visible');
+          } else {
+            window.SRPWAState.triggerInstallPrompt(function () {});
+          }
+        }
+      });
+    }
+
+    if (runtime === 'ANDROID_NATIVE') {
+      // Already running the native app
+      if ($pwaWrap)     $pwaWrap.style.display     = 'none';
+      if ($androidWrap) $androidWrap.style.display = 'none';
+      if ($noneMsg)     $noneMsg.style.display      = '';
+      // Suppress header install button inside native app
+      if ($headerInstall) $headerInstall.style.display = 'none';
+      return;
+    }
+
+    if (runtime === 'IOS_NATIVE') {
+      // iOS native — no APK relevant, no need to install PWA
+      if ($pwaWrap)     $pwaWrap.style.display     = 'none';
+      if ($androidWrap) $androidWrap.style.display = 'none';
+      if ($noneMsg)     $noneMsg.style.display      = 'none';
+      return;
+    }
+
+    if (isPWA) {
+      // Already installed as a PWA — hide "Install Web App"
+      if ($pwaWrap) $pwaWrap.style.display = 'none';
+      if ($headerInstall) $headerInstall.style.display = 'none';
+      // Android PWA: show Android download as upgrade option
+      if (isAndroidUA) {
+        if ($androidWrap) $androidWrap.style.display = '';
+      } else if (isIOS) {
+        // iOS PWA: no APK
+        if ($androidWrap) $androidWrap.style.display = 'none';
+      } else {
+        // Desktop PWA: show Android download as sideload option
+        if ($androidWrap) $androidWrap.style.display = '';
+      }
+      if ($noneMsg) $noneMsg.style.display = 'none';
+      return;
+    }
+
+    // Web browser (not installed, not native)
+    if (isAndroidUA) {
+      // Android mobile browser — offer Android APK (preferred over PWA for Android)
+      if ($pwaWrap)     $pwaWrap.style.display     = 'none';
+      if ($androidWrap) $androidWrap.style.display = '';
+      // Suppress the header install button on Android web — APK is preferred
+      if ($headerInstall) $headerInstall.style.display = 'none';
+    } else if (isIOS) {
+      // iPhone/iPad browser — offer PWA install; do NOT offer Android APK
+      if ($pwaWrap)     $pwaWrap.style.display     = ''; // actual visibility managed by SRPWAState
+      if ($androidWrap) $androidWrap.style.display = 'none';
     } else {
-      // iOS native / unknown — hide
-      sec.style.display = 'none';
+      // Desktop browser — offer both
+      if ($pwaWrap)     $pwaWrap.style.display     = ''; // actual visibility managed by SRPWAState
+      if ($androidWrap) $androidWrap.style.display = '';
+    }
+    if ($noneMsg) $noneMsg.style.display = 'none';
+  }
+
+  // ── DEVICE CONTROL MODE (auth-gated) ─────────────────────────────────────
+  // Replaces the old capability-matrix UI with a clean three-option selector.
+  // The underlying SRCapabilityManager, SRDeviceActionRouter, and Android
+  // native code are preserved — they are used internally, not shown to users.
+  //
+  // Valid modes:
+  //   AI_ONLY            — AI features only, no device control
+  //   SMART_DEVICES      — AI + paired smart devices
+  //   FULL_DEVICE_CONTROL — AI + Android phone control (native app required for PWA)
+  //
+  // Preference stored at: users/{uid}/shadowReaperPreferences/settings
+  // Local fallback: localStorage key "srDCMPref_{uid}"
+  // ─────────────────────────────────────────────────────────────────────────
+
+  var _DCM_MODES  = ['AI_ONLY', 'SMART_DEVICES', 'FULL_DEVICE_CONTROL'];
+  var _dcmCurrent = 'AI_ONLY'; // in-memory state; loaded from Firestore on sign-in
+
+  // Return per-user localStorage key (UID-isolated)
+  function _dcmLocalKey() {
+    var fa  = window.SRFirebaseAdapter;
+    var uid = (fa && typeof fa.getUID === 'function') ? fa.getUID() : null;
+    return uid ? ('srDCMPref_' + uid) : 'srDCMPref_guest';
+  }
+
+  // Read DCM preference from localStorage
+  function _dcmReadLocal() {
+    try {
+      var raw = localStorage && localStorage.getItem(_dcmLocalKey());
+      if (raw && _DCM_MODES.indexOf(raw) !== -1) return raw;
+    } catch (_) {}
+    return null;
+  }
+
+  // Write DCM preference to localStorage
+  function _dcmWriteLocal(mode) {
+    try { if (localStorage) localStorage.setItem(_dcmLocalKey(), mode); } catch (_) {}
+  }
+
+  // Load DCM pref from Firestore (with localStorage fallback).
+  // callback(mode, meta) — meta: { hadSavedMode: bool, onboardingComplete: bool }
+  function _loadDCMPref(callback) {
+    callback = callback || function () {};
+
+    // Fast local read first (used while Firestore is fetching)
+    var local = _dcmReadLocal();
+    if (local) { _dcmCurrent = local; _applyDCMSelection(_dcmCurrent); }
+
+    var fa  = window.SRFirebaseAdapter;
+    if (!fa || typeof fa._db === 'undefined' || !fa._db) {
+      // No Firestore — treat localStorage hit as "saved"
+      callback(_dcmCurrent, { hadSavedMode: !!local, onboardingComplete: !!local });
+      return;
+    }
+    var uid = (typeof fa.getUID === 'function') ? fa.getUID() : null;
+    if (!uid) {
+      callback(_dcmCurrent, { hadSavedMode: !!local, onboardingComplete: !!local });
+      return;
+    }
+
+    try {
+      fa._db.doc('users/' + uid + '/shadowReaperPreferences/settings')
+        .get()
+        .then(function (doc) {
+          var hadSavedMode      = false;
+          var onboardingComplete = false;
+          if (doc && doc.exists) {
+            var d = doc.data() || {};
+            if (d.deviceControlMode && _DCM_MODES.indexOf(d.deviceControlMode) !== -1) {
+              _dcmCurrent = d.deviceControlMode;
+              _dcmWriteLocal(_dcmCurrent);
+              _applyDCMSelection(_dcmCurrent);
+              hadSavedMode = true;
+            }
+            if (d.onboardingDeviceModeComplete === true) {
+              onboardingComplete = true;
+            }
+          }
+          callback(_dcmCurrent, { hadSavedMode: hadSavedMode, onboardingComplete: onboardingComplete });
+        })
+        .catch(function () {
+          callback(_dcmCurrent, { hadSavedMode: !!local, onboardingComplete: !!local });
+        });
+    } catch (_) {
+      callback(_dcmCurrent, { hadSavedMode: !!local, onboardingComplete: !!local });
     }
   }
 
-  // ── DEVICE CONTROLS (auth-gated) ─────────────────────────────────────────
-  // Rules:
-  //   ANDROID_NATIVE / IOS_NATIVE → show real phone capability list
-  //   All other runtimes (web, PWA) → show info banner only (no phone controls list)
-  //   Desktop → hide the device section entirely
-  function _initDeviceControls() {
-    if (!_isAuth) return; // never show device controls without auth
-    if (!SRPlat) return;
+  // Save DCM pref to Firestore + localStorage
+  function _saveDCMPref(mode, callback) {
+    if (_DCM_MODES.indexOf(mode) === -1) return;
+    _dcmCurrent = mode;
+    _dcmWriteLocal(mode);
+    _applyDCMSelection(mode);
 
-    var runtime      = SRPlat.getRuntime();
-    var isNative     = SRPlat.isNative();
-    var isDesktopRT  = SRPlat.isDesktop();
-    var isWebOrPWA   = SRPlat.isWebOrPWA ? SRPlat.isWebOrPWA() : !isNative;
-
-    var $sec         = document.getElementById('srDeviceSection');
-    var $wrap        = document.getElementById('srDeviceControlsWrap');
-    var $banner      = document.getElementById('srNativeInfoBanner');
-    var $androidLine = document.getElementById('srNativeInfoAndroidLine');
-    var $deviceCtrl  = document.getElementById('srDeviceControls');
-
-    // Desktop: hide the entire device section (phone controls irrelevant on desktop)
-    if (isDesktopRT) {
-      if ($sec) $sec.style.display = 'none';
+    var fa  = window.SRFirebaseAdapter;
+    if (!fa || typeof fa._db === 'undefined' || !fa._db) {
+      if (callback) callback(null, mode);
       return;
     }
+    var uid = (typeof fa.getUID === 'function') ? fa.getUID() : null;
+    if (!uid) { if (callback) callback(null, mode); return; }
 
-    // Show section
-    if ($sec) $sec.style.display = '';
+    try {
+      fa._db.doc('users/' + uid + '/shadowReaperPreferences/settings')
+        .set({ deviceControlMode: mode }, { merge: true })
+        .then(function ()  { if (callback) callback(null, mode); })
+        .catch(function () { if (callback) callback(null, mode); });
+    } catch (_) {
+      if (callback) callback(null, mode);
+    }
+  }
 
-    if (isWebOrPWA) {
-      // Web or PWA: show the info banner, NOT the phone controls list.
-      // This prevents a misleading list of "NATIVE APP REQUIRED" badges.
-      if ($wrap)   $wrap.style.display   = 'none';
-      if ($banner) $banner.style.display = '';
-
-      // On Android web/PWA, tell user where to get the native app
-      var ua = (navigator.userAgent || '').toLowerCase();
-      if ($androidLine) {
-        $androidLine.style.display = /android/.test(ua) ? '' : 'none';
+  // Apply the selected DCM to the UI (highlight the active option, show/hide note)
+  function _applyDCMSelection(mode) {
+    var options = document.querySelectorAll('.sr-dcm-option');
+    options && options.forEach && options.forEach(function (btn) {
+      var m = btn.getAttribute('data-dcm');
+      if (m === mode) {
+        btn.classList.add('selected');
+        btn.setAttribute('aria-pressed', 'true');
+      } else {
+        btn.classList.remove('selected');
+        btn.setAttribute('aria-pressed', 'false');
       }
-      return;
-    }
-
-    // ANDROID_NATIVE or IOS_NATIVE: show the real capability list
-    if ($wrap)   $wrap.style.display   = '';
-    if ($banner) $banner.style.display = 'none';
-
-    if (!SRCaps || !$deviceCtrl) return;
-
-    $deviceCtrl.innerHTML = '';
-    var info = SRWeb ? SRWeb.getDeviceControlsInfo() : [];
-
-    // Filter: in native runtime, hide capabilities that are NOT_IMPLEMENTED or NOT_SUPPORTED
-    info = info.filter(function (cap) {
-      return cap.state !== 'NOT_IMPLEMENTED' && cap.state !== 'NOT_SUPPORTED';
     });
 
-    if (!info.length) {
-      var msg = document.createElement('div');
-      msg.className   = 'sr-device-item';
-      msg.textContent = 'No device capabilities detected.';
-      $deviceCtrl.appendChild(msg);
-      return;
+    // Show note when FULL_DEVICE_CONTROL is selected and runtime is NOT ANDROID_NATIVE
+    var $pwaNote = document.getElementById('srDCMPWANote');
+    if ($pwaNote) {
+      var isNativeRT = SRPlat ? SRPlat.isNative() : false;
+      $pwaNote.style.display = ((mode === 'FULL_DEVICE_CONTROL') && !isNativeRT) ? '' : 'none';
+    }
+  }
+
+  // Init the DCM section: wire click handlers, load saved pref,
+  // and trigger first-time onboarding for returning users with no saved mode.
+  function _initDCMSection() {
+    if (!_isAuth) return;
+
+    // Wire click handlers (idempotent — guard with flag)
+    if (!_initDCMSection._wired) {
+      _initDCMSection._wired = true;
+      var options = document.querySelectorAll('.sr-dcm-option');
+      options && options.forEach && options.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var mode = btn.getAttribute('data-dcm');
+          if (mode) _saveDCMPref(mode);
+        });
+      });
     }
 
-    info.forEach(function (cap) {
-      var row  = document.createElement('div');
-      row.className = 'sr-device-item';
-
-      var name = document.createElement('span');
-      name.className   = 'sr-device-name';
-      name.textContent = cap.label;
-
-      var badge = document.createElement('span');
-      badge.className  = 'sr-device-state';
-      var s = cap.state;
-      if      (s === 'ALLOWED')             { badge.textContent = 'Allowed';          badge.className += ' allowed'; }
-      else if (s === 'WEB_AVAILABLE')       { badge.textContent = 'Available';        badge.className += ' available'; }
-      else if (s === 'AVAILABLE')           { badge.textContent = 'Available';        badge.className += ' available'; }
-      else if (s === 'PERMISSION_REQUIRED') { badge.textContent = 'Needs Permission'; badge.className += ' permission'; }
-      else if (s === 'DENIED')              { badge.textContent = 'Denied';           badge.className += ' denied'; }
-      else if (s === 'NOT_IMPLEMENTED')     { badge.textContent = 'Coming Soon';      badge.className += ' not-impl'; }
-      else                                  { badge.textContent = 'Unsupported';      badge.className += ' unsupported'; }
-
-      row.appendChild(name);
-      row.appendChild(badge);
-      $deviceCtrl.appendChild(row);
+    // Load saved preference; if none found and onboarding not completed,
+    // show the onboarding modal (handles returning users with old accounts).
+    _loadDCMPref(function (mode, meta) {
+      if (!meta.hadSavedMode && !meta.onboardingComplete) {
+        // Returning user with no saved DCM choice — show onboarding once
+        var SRAuth = window.SRAuthUI || window.SRAuth;
+        if (SRAuth && typeof SRAuth.showDCMOnboarding === 'function') {
+          var fa  = window.SRFirebaseAdapter;
+          var uid = (fa && typeof fa.getUID === 'function') ? fa.getUID() : null;
+          SRAuth.showDCMOnboarding(uid);
+        }
+      }
     });
   }
 
@@ -1992,13 +2202,19 @@ body::before {
     });
   }
 
-  // ── DEVICE COMMAND AUTH GATE ──────────────────────────────────────────────
-  // Intercepts any device-related user message and requires auth first.
+  // ── DEVICE COMMAND DETECTION ──────────────────────────────────────────────
+  // _requiresDeviceAuth: broad device-command heuristic (pre-auth gate)
   function _requiresDeviceAuth(text) {
     if (!text) return false;
-    var t = text.toLowerCase();
-    // Simple heuristic patterns for device-related requests
-    return /\b(turn on|turn off|switch on|switch off|set alarm|remind me|open app|send notification|call|text message|vibrate|location)\b/i.test(t);
+    return /\b(turn on|turn off|switch on|switch off|set alarm|remind me|open app|send notification|call|text message|vibrate|location)\b/i.test(text);
+  }
+
+  // _isNativePhoneCommand: narrower heuristic for commands that specifically
+  // require native phone access (as opposed to external smart-device control).
+  // Used by the DCM enforcement gate.
+  function _isNativePhoneCommand(text) {
+    if (!text) return false;
+    return /\b(open\s+(app|youtube|spotify|camera|settings|maps|contacts|photos|gallery)|take\s+a?\s*(photo|picture|screenshot)|make\s+a?\s*(call|phone\s+call)|send\s+(sms|text|message)|set\s+(alarm|timer|reminder\s+on\s+(my\s+)?(phone|android))|vibrate|flashlight|torch|airplane\s+mode|do\s+not\s+disturb|silent\s+mode|wifi\s+on|wifi\s+off|bluetooth\s+on|bluetooth\s+off|screen\s+(on|off|brightness)|volume\s+(up|down))\b/i.test(text);
   }
 
   // ── AUTH PROMPTS ──────────────────────────────────────────────────────────
@@ -2199,6 +2415,67 @@ body::before {
       $sendBtn.disabled = $input.value.trim() === '';
       _showAuthPrompt('save');
       return;
+    }
+
+    // ── DEVICE CONTROL MODE GATES ─────────────────────────────────────────
+    // These gates apply when the user IS authenticated.
+    // The mode gates pass the message to the AI with a context note so the
+    // AI can explain why a requested device action is not available.
+    // We do NOT silently drop the message — we let the AI respond naturally.
+    //
+    // Gate 3: AI_ONLY — all device commands get a mode note injected
+    if (_isAuth && _dcmCurrent === 'AI_ONLY' && _requiresDeviceAuth(msg)) {
+      // Pass to AI with mode context — AI will explain device control is off
+      // SR.ask already has full context; inject a mode hint to aid response
+      _appendMessage('user', msg);
+      _showTyping();
+      var modeCtx = '[Device Control Mode: AI_ONLY — device actions are not enabled for this account. ' +
+                    'Briefly explain this to the user and offer AI-only alternatives.]';
+      SR.ask(msg + ' ' + modeCtx, function (response) {
+        _hideTyping();
+        _appendMessage('sr', response);
+        _isProcessing = false;
+        _setStatus('Ready', 'ready');
+        $sendBtn.disabled = $input.value.trim() === '';
+        _updateStatusChips();
+        if (SRVoice && SRVoice.isTTSEnabled()) SRVoice.speak(response);
+      });
+      return;
+    }
+
+    // Gate 4: SMART_DEVICES or FULL_DEVICE_CONTROL + non-native runtime
+    //         — native phone-control commands get a note injected
+    if (_isAuth && _isNativePhoneCommand(msg)) {
+      var isNativeRT = SRPlat ? SRPlat.isNative() : false;
+      var phoneControlAllowed = (_dcmCurrent === 'FULL_DEVICE_CONTROL') && isNativeRT;
+      if (!phoneControlAllowed) {
+        _appendMessage('user', msg);
+        _showTyping();
+        var phoneCtx;
+        if (_dcmCurrent === 'FULL_DEVICE_CONTROL' && !isNativeRT) {
+          phoneCtx = '[Device Control Mode: FULL_DEVICE_CONTROL — but native Android phone ' +
+                     'control requires the Shadow Reaper Android app. This browser/PWA session ' +
+                     'cannot control the phone directly. Smart-device (TV, AC, etc.) control ' +
+                     'remains available where integrations exist. ' +
+                     'Briefly explain this and suggest the Android app.]';
+        } else {
+          // SMART_DEVICES: no native phone control regardless of runtime
+          phoneCtx = '[Device Control Mode: SMART_DEVICES — this mode supports paired smart ' +
+                     'devices (computers, TVs, AC, etc.) but does not support native phone ' +
+                     'control. Briefly explain and suggest upgrading to Full Device Control ' +
+                     'with the Android app if they want phone control.]';
+        }
+        SR.ask(msg + ' ' + phoneCtx, function (response) {
+          _hideTyping();
+          _appendMessage('sr', response);
+          _isProcessing = false;
+          _setStatus('Ready', 'ready');
+          $sendBtn.disabled = $input.value.trim() === '';
+          _updateStatusChips();
+          if (SRVoice && SRVoice.isTTSEnabled()) SRVoice.speak(response);
+        });
+        return;
+      }
     }
 
     _appendMessage('user', msg);
