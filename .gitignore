@@ -65,3 +65,26 @@ release-keys/
 *.keystore
 *.jks
 keystore.properties
+
+# ── Additional safety entries (added: global reconciliation pass) ─────────────
+# Debug APK in project root (built locally — not the distribution copy)
+/Shadow-Reaper-Android-Debug.apk
+# General private key / certificate types
+*.pem
+*.p8
+*.p12
+*.pfx
+*.cer
+*.crt
+# Security reports / local scan logs
+security-report*.txt
+security-report*.json
+.security-scan/
+# Local database exports / backups
+*.db
+*.sqlite
+db-export/
+# Local CI / build secrets
+.secrets/
+secrets.json
+local-credentials.json

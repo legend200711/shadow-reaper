@@ -3061,22 +3061,33 @@ body::before {
   // ── SRPWAState: initialize and wire UI ────────────────────────────────────
   // SRPWAState.init() sets up beforeinstallprompt and appinstalled listeners.
   // onChange fires whenever the install state changes.
+  // Updates BOTH the header install button AND the settings App Options section.
   function _applyPWAState(newState) {
     var S = window.SRPWAState ? window.SRPWAState.STATE : null;
-    if (!S || !$installBtn) return;
+    if (!S) return;
 
-    if (newState === S.INSTALLABLE) {
-      // Browser confirmed this specific PWA is installable.
-      $installBtn.classList.add('visible');
-    } else if (newState === S.IOS_MANUAL_INSTALL) {
-      // iOS Safari: manual Add-to-Home-Screen flow.
-      $installBtn.classList.add('visible');
-    } else {
-      // INSTALLED, NOT_INSTALLABLE, or UNKNOWN — hide the install button.
-      // INSTALLED = running in standalone mode; nothing to install.
-      // NOT_INSTALLABLE = browser has not offered install prompt.
-      // UNKNOWN = detection not yet complete; do not prematurely show anything.
-      $installBtn.classList.remove('visible');
+    var installable = (newState === S.INSTALLABLE || newState === S.IOS_MANUAL_INSTALL);
+
+    // ── Header install button ──────────────────────────────────────────────
+    if ($installBtn) {
+      if (installable) {
+        $installBtn.classList.add('visible');
+      } else {
+        $installBtn.classList.remove('visible');
+      }
+    }
+
+    // ── Settings App Options — PWA install sub-section ────────────────────
+    // srAppOptsPWA is set visible by _initAppOptions() on eligible platforms.
+    // Here we only need to show/hide the actual button inside it based on state.
+    // We do NOT re-run the full _initAppOptions() platform logic here — only
+    // toggle the install button visibility within its already-visible container.
+    var $settingsPWABtn = document.getElementById('srSettingsPWAInstallBtn');
+    if ($settingsPWABtn) {
+      // Button is visible only when installable AND its container is already shown
+      var $pwaContainer = document.getElementById('srAppOptsPWA');
+      var containerVisible = $pwaContainer && $pwaContainer.style.display !== 'none';
+      $settingsPWABtn.style.display = (installable && containerVisible) ? '' : 'none';
     }
   }
 
