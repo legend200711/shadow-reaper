@@ -407,6 +407,11 @@
 
     // ── Routing by intent ────────────────────────────────────────────────────
 
+    // WORD_DEFINITION — must come first; translator intercept was already bypassed
+    if (intent === 'WORD_DEFINITION') {
+      return _composeDefinitionResponse(understood);
+    }
+
     // GREETING
     if (intent === 'GREETING') {
       if (/morning/.test(lower)) return pickVaried(POOLS.greetingMorning);
@@ -572,6 +577,121 @@
     return pick(POOLS.unknown);
   }
 
+  // ─── WORD_DEFINITION handler ─────────────────────────────────────────────────
+  // Returns a natural response for definition queries.
+  // Uses SRLexicon (provider architecture: curated + WordNet) when available,
+  // falling back to legacy SRWordDefinitions for backward compatibility.
+  // Called from compose() and composeAsync().
+
+  var _POS_LABEL = { adj: 'adjective', verb: 'verb', noun: 'noun', adv: 'adverb' };
+
+  // Format a single sense entry into a readable string fragment
+  function _formatSense(sense, includeLabel) {
+    var posLabel = _POS_LABEL[sense.pos] || sense.pos || '';
+    var part = includeLabel && posLabel ? posLabel + '. ' : '';
+    var text = part + sense.def;
+    if (sense.synonyms && sense.synonyms.length > 0) {
+      text += ' (also: ' + sense.synonyms.slice(0,3).join(', ') + ')';
+    }
+    return text;
+  }
+
+  function _composeDefinitionResponse(understood) {
+    var raw = understood.raw;
+
+    // Extract target word
+    var Under = global.SRUnderstanding;
+    var target = (Under && Under.extractDefinitionTarget)
+      ? Under.extractDefinitionTarget(raw)
+      : null;
+
+    if (!target) {
+      return "What word would you like me to define?";
+    }
+
+    // Extract context tokens for sense disambiguation
+    var ctxTokens = (Under && Under.extractDefinitionContext)
+      ? Under.extractDefinitionContext(raw)
+      : [];
+
+    // ── SRLexicon path (preferred — multi-sense, WordNet-backed) ──────────────
+    var lexicon = global.SRLexicon;
+    if (lexicon) {
+      var result = lexicon.lookupSync(target, { maxSenses: 3, context: ctxTokens });
+
+      if (result.status === 'KNOWN_WITH_DEFINITION' || result.status === 'KNOWN_MULTIPLE_SENSES') {
+        var senses = result.senses;
+        var lemmaNote = (result.lemma && result.lemma !== target)
+          ? ' (from "' + result.lemma + '")'
+          : '';
+        var displayWord = '"' + target + '"' + lemmaNote;
+
+        if (senses.length === 1) {
+          // Single sense — compact format
+          return displayWord + ' — ' + _formatSense(senses[0], true);
+        }
+
+        // Multiple senses — list the top senses
+        var lines = [displayWord + ' has several meanings:'];
+        senses.forEach(function (s, i) {
+          var posLabel = _POS_LABEL[s.pos] || s.pos || '';
+          var label = posLabel ? '(' + posLabel + ') ' : '';
+          lines.push((i + 1) + '. ' + label + s.def);
+        });
+        return lines.join('\n');
+      }
+
+      if (result.status === 'KNOWN_NO_DEFINITION') {
+        // Known word form, no lexical definition found
+        var mor2 = global.SRMorphology;
+        if (mor2) {
+          var pos2 = mor2.getPos(target);
+          var lem2 = mor2.getLemma(target);
+          var posL2 = _POS_LABEL[pos2] || pos2 || '';
+          var lemN2 = (lem2 && lem2 !== target) ? ' (root form: "' + lem2 + '")' : '';
+          if (posL2) {
+            return '"' + target + '"' + lemN2 + ' is a ' + posL2 + ". I recognise this word but don't have a definition for it in my local vocabulary.";
+          }
+        }
+        return '"' + target + '" is a word I recognise but don\'t have a definition for locally.';
+      }
+
+      if (result.status === 'UNKNOWN_WORD') {
+        return 'I don\'t have "' + target + '" in my local vocabulary. It may be a proper noun, technical term, or very uncommon word.';
+      }
+    }
+
+    // ── Legacy SRWordDefinitions fallback (backward compatibility) ────────────
+    var defLayer = global.SRWordDefinitions;
+    if (defLayer) {
+      var entry = defLayer.define(target);
+      if (entry) {
+        var lemmaNote3 = (entry.lemma && entry.lemma !== target)
+          ? ' (from "' + entry.lemma + '")'
+          : '';
+        var posLabel3 = _POS_LABEL[entry.pos] || entry.pos;
+        var resp = '"' + entry.word + '"' + lemmaNote3 + ' — ' + (posLabel3 ? posLabel3 + '. ' : '') + entry.definition;
+        if (entry.example) resp += ' Example: "' + entry.example + '"';
+        return resp;
+      }
+    }
+
+    // Morphology-only fallback
+    var mor = global.SRMorphology;
+    if (mor) {
+      var lemma = mor.getLemma(target);
+      var pos   = mor.getPos(target);
+      if (lemma && pos && pos !== 'unknown') {
+        var posLabelM = _POS_LABEL[pos] || pos;
+        var lemmaNoteM = (lemma !== target) ? ' (root form: "' + lemma + '")' : '';
+        return '"' + target + '"' + lemmaNoteM + ' is a ' + posLabelM + ". I don't have a full definition for it in my local vocabulary yet.";
+      }
+    }
+
+    // Final honest fallback
+    return 'I don\'t have a definition for "' + target + '" in my local vocabulary.';
+  }
+
   // ─── Intents that must always be handled deterministically ──────────────────
 
   const DETERMINISTIC_INTENTS = new Set([
@@ -581,6 +701,7 @@
     'USER_CORRECTION',
     'FOLLOW_UP',
     'PROJECT_STATEMENT',
+    'WORD_DEFINITION',
   ]);
 
   // Meta-questions about session context (project name, area, design, topic)
@@ -723,10 +844,18 @@
       return;
     }
 
-    // Model exists but not yet READY (loading, verifying, uninitialized)
+    // Model exists but not yet READY (loading, verifying, uninitialized).
+    // Fall back to deterministic compose() rather than showing a raw error message.
+    // The deterministic path handles tone, intent, and general conversation naturally.
     if (modelStatus.state !== 'READY') {
-      var notReadyMsg = 'LOCAL MODEL ERROR: Model not ready (state=' + modelStatus.state + '). Cannot generate response.';
-      callback(notReadyMsg, 'ERROR');
+      var detResponse = compose(understood, context);
+      // Only surface raw error if deterministic also gave nothing useful
+      if (detResponse && detResponse.indexOf('LOCAL MODEL ERROR') === -1) {
+        callback(detResponse, 'DETERMINISTIC');
+      } else {
+        var notReadyMsg = 'LOCAL MODEL ERROR: Model not ready (state=' + modelStatus.state + '). Cannot generate response.';
+        callback(notReadyMsg, 'ERROR');
+      }
       return;
     }
 

@@ -53,6 +53,18 @@
     <!-- Wake lock — LocalNotifications needs this to fire at exact times -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- ─── VOICE ASSISTANT FOREGROUND SERVICE ───────────────────────────────
+         Required to run VoiceAssistantService as a foreground service.
+         The service shows a persistent notification so the user can always
+         see that Shadow Reaper is available and can dismiss/disable it.
+         FOREGROUND_SERVICE_MICROPHONE required on API 34+ (Android 14)
+         for foreground services that access the microphone.
+    ─────────────────────────────────────────────────────────────────────── -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"
+        android:minSdkVersion="34" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -106,6 +118,18 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
+
+        <!-- ─── VOICE ASSISTANT FOREGROUND SERVICE ──────────────────────────
+             VoiceAssistantService keeps the process alive for background
+             voice availability when enabled by the user.
+             android:exported="false" — only this app can start this service.
+             foregroundServiceType="microphone" required on API 29+.
+        ─────────────────────────────────────────────────────────────────── -->
+        <service
+            android:name="com.shadowreaper.standalone.service.VoiceAssistantService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
 
     </application>
 

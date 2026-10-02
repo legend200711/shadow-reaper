@@ -286,6 +286,11 @@
    * Detect a correction / update to existing knowledge:
    *   "Actually, X is Y" / "I meant X" / "Make that X" / "Change it to X"
    *   "Wait, it should be X"
+   *
+   * NEGATION GUARD:
+   *   "Actually, don't change the homepage" → NOT a storable correction.
+   *   "No, I meant the menu" → IS a storable correction (redirects focus).
+   *   Reject corrections that are themselves negated commands.
    */
   function _extractCorrection(text) {
     var results = [];
@@ -293,6 +298,20 @@
     var m = text.match(corrRe);
     if (m) {
       var correction = m[1].trim().toLowerCase().replace(/[.,!?]$/, '');
+
+      // Reject if the correction text starts with a negation — it's a negated command,
+      // not a durable fact. e.g. "don't change the homepage", "not the homepage"
+      var _NEGATION_START = /^(don'?t?|do not|not\b|never|no |stop |don't |no\b)/i;
+      if (_NEGATION_START.test(correction)) return results;
+
+      // Reject bare fragment "don" (partial tokenization of "don't")
+      if (/^don$/.test(correction.trim())) return results;
+
+      // Also reject very generic extracted fragments that aren't meaningful concepts:
+      // sentence-internal conjunctions used as pivots ("let's work on the menu instead")
+      var _MEANINGLESS = /^(the |a |an |it |that |this |let'?s |work on |instead|change|just|focus|working)/i;
+      if (_MEANINGLESS.test(correction) && correction.split(' ').length <= 3) return results;
+
       if (!_isFiller(correction) && !_isSensitive(correction) && correction.length > 2) {
         results.push({
           concept: 'correction_' + Date.now().toString(36),
@@ -978,6 +997,7 @@
     listAll:         listAll,
     extractConcepts: extractConcepts,
     resetForFreshSession: resetForFreshSession,
+    _resetForTest:   resetForFreshSession,  // alias for test environments
     destroy:         destroy,
 
     // Expose internals for testing

@@ -1,13 +1,16 @@
 package com.shadowreaper.standalone.plugin;
 
 import android.Manifest;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.net.ConnectivityManager;
 import android.net.NetworkCapabilities;
 import android.net.Uri;
 import android.os.Build;
+import android.os.IBinder;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.os.VibratorManager;
@@ -20,6 +23,7 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
+import com.shadowreaper.standalone.service.VoiceAssistantService;
 
 import org.json.JSONArray;
 
@@ -43,9 +47,15 @@ import org.json.JSONArray;
  *   getNetworkStatus — check connectivity without permission
  *   requestPermission — request a named dangerous permission (mic/camera/location)
  *   checkPermission   — query current permission state without requesting
+ *   startVoiceService  — start VoiceAssistantService foreground service
+ *   stopVoiceService   — stop VoiceAssistantService foreground service
+ *   updateVoiceStatus  — update persistent notification text (called from JS voice state)
+ *   getVoiceServiceState — query whether foreground service is running
  *
  * NOT IMPLEMENTED (intentionally absent):
- *   executeShell, runCommand, readArbitraryFile, bypassPermission
+ *   executeShell, runCommand, readArbitraryFile, bypassPermission,
+ *   SMS control, phone call control, contacts access, notification scraping,
+ *   accessibility-service automation, screen scraping
  */
 @CapacitorPlugin(
     name = "ShadowReaperBridge",
@@ -72,6 +82,116 @@ import org.json.JSONArray;
     }
 )
 public class ShadowReaperBridgePlugin extends Plugin {
+
+    // ── Voice Assistant Service state ─────────────────────────────────────────
+    private VoiceAssistantService _voiceService     = null;
+    private boolean               _voiceServiceBound = false;
+
+    private final ServiceConnection _voiceServiceConn = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName name, IBinder service) {
+            VoiceAssistantService.LocalBinder binder =
+                (VoiceAssistantService.LocalBinder) service;
+            _voiceService      = binder.getService();
+            _voiceServiceBound = true;
+        }
+        @Override
+        public void onServiceDisconnected(ComponentName name) {
+            _voiceService      = null;
+            _voiceServiceBound = false;
+        }
+    };
+
+    // ── startVoiceService ─────────────────────────────────────────────────────
+    /**
+     * startVoiceService()
+     *
+     * Starts VoiceAssistantService as a foreground service.
+     * Requires FOREGROUND_SERVICE permission (declared in manifest).
+     * The service shows a persistent notification so the user is always aware.
+     *
+     * Called from JS: window.SRVoiceAssistant (when background availability enabled).
+     */
+    @PluginMethod
+    public void startVoiceService(PluginCall call) {
+        try {
+            Intent intent = new Intent(getContext(), VoiceAssistantService.class);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                getContext().startForegroundService(intent);
+            } else {
+                getContext().startService(intent);
+            }
+            // Also bind so we can send status updates
+            getContext().bindService(intent, _voiceServiceConn, Context.BIND_AUTO_CREATE);
+
+            JSObject result = new JSObject();
+            result.put("ok", true);
+            result.put("started", true);
+            call.resolve(result);
+        } catch (Exception e) {
+            call.reject("Failed to start voice service: " + e.getMessage(), "SERVICE_START_FAILED");
+        }
+    }
+
+    // ── stopVoiceService ──────────────────────────────────────────────────────
+    /**
+     * stopVoiceService()
+     *
+     * Stops the VoiceAssistantService foreground service.
+     * Called when the user disables Background Availability.
+     */
+    @PluginMethod
+    public void stopVoiceService(PluginCall call) {
+        try {
+            if (_voiceServiceBound && _voiceService != null) {
+                getContext().unbindService(_voiceServiceConn);
+                _voiceServiceBound = false;
+                _voiceService = null;
+            }
+            Intent intent = new Intent(getContext(), VoiceAssistantService.class);
+            getContext().stopService(intent);
+
+            JSObject result = new JSObject();
+            result.put("ok", true);
+            result.put("stopped", true);
+            call.resolve(result);
+        } catch (Exception e) {
+            call.reject("Failed to stop voice service: " + e.getMessage(), "SERVICE_STOP_FAILED");
+        }
+    }
+
+    // ── updateVoiceStatus ─────────────────────────────────────────────────────
+    /**
+     * updateVoiceStatus({ status: string })
+     *
+     * Updates the persistent notification text to reflect the current voice state.
+     * Called from JS SRVoiceAssistant.onStateChange().
+     * Examples: "Shadow • Standby", "Shadow • Listening", "Shadow • Thinking"
+     */
+    @PluginMethod
+    public void updateVoiceStatus(PluginCall call) {
+        String status = call.getString("status", "Shadow • Standby");
+        if (_voiceServiceBound && _voiceService != null) {
+            _voiceService.updateStatus(status);
+        }
+        JSObject result = new JSObject();
+        result.put("ok", true);
+        call.resolve(result);
+    }
+
+    // ── getVoiceServiceState ──────────────────────────────────────────────────
+    /**
+     * getVoiceServiceState()
+     *
+     * Returns whether the foreground service is currently running.
+     */
+    @PluginMethod
+    public void getVoiceServiceState(PluginCall call) {
+        JSObject result = new JSObject();
+        result.put("ok", true);
+        result.put("running", _voiceServiceBound && _voiceService != null && _voiceService.isRunning());
+        call.resolve(result);
+    }
 
     // ── openApp ───────────────────────────────────────────────────────────────
     /**

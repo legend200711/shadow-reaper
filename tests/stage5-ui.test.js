@@ -54,7 +54,11 @@ test('Title is "Shadow Reaper" (not Shadow Nexus Social)', function () {
 });
 
 test('index.html references Shadow Reaper Standalone product', function () {
-  assertContains(src, 'SR-V2-STANDALONE-UI-1', 'Build ID must be standalone');
+  // Accept either build ID (UI-1 original or UI-2 with product split update)
+  assert(
+    src.indexOf('SR-V2-STANDALONE-UI') !== -1,
+    'Build ID must reference SR-V2-STANDALONE-UI'
+  );
 });
 
 // ── VISUAL IDENTITY ────────────────────────────────────────────────────────
@@ -103,9 +107,16 @@ test('UI uses mobile-first approach (max-width media queries for desktop only)',
   assertContains(src, '@media (min-width', 'Must have min-width media queries (mobile-first)');
 });
 
-test('Device controls section exists for mobile', function () {
-  assertContains(src, 'srDeviceSection', 'Device controls section must exist');
-  assertContains(src, 'sr-device-controls', 'Device controls container must exist');
+
+test('Device Control Mode section has been removed from UI', function () {
+  assertNotContains(src, 'srDeviceSection', 'Device Control Mode section must NOT exist (removed)');
+  assertNotContains(src, 'AI_ONLY', 'AI_ONLY mode must NOT exist in UI (removed)');
+  assertNotContains(src, 'SMART_DEVICES', 'SMART_DEVICES mode must NOT exist in UI (removed)');
+  assertNotContains(src, 'FULL_DEVICE_CONTROL', 'FULL_DEVICE_CONTROL mode must NOT exist in UI (removed)');
+  assertNotContains(src, 'Download for Android', 'APK download button must NOT exist (removed)');
+  assertNotContains(src, 'srAndroidDownloadSection', 'Android download section must NOT exist (removed)');
+  // Internal capability infrastructure preserved
+  assertContains(src, 'sr-device-controls', 'Internal capability container still preserved');
 });
 
 // ── XSS SAFETY ────────────────────────────────────────────────────────────
@@ -134,7 +145,11 @@ test('index.html loads all required JS modules (per ARCHITECTURE.md load order)'
   assertContains(src, 'response-engine.js',      'Must load response engine');
   assertContains(src, 'voice-engine.js',         'Must load voice engine');
   assertContains(src, 'translation-engine.js',   'Must load translation engine');
-  assertContains(src, 'founder-controls.js',     'Must load founder controls');
+  // Shadow Edition-only scripts must NOT be present in regular edition
+  assertNotContains(src, 'founder-controls.js',  'founder-controls.js is Shadow Edition only');
+  assertNotContains(src, 'sr-founder-shadow.js', 'sr-founder-shadow.js is Shadow Edition only');
+  assertNotContains(src, 'sr-wake-name.js',      'sr-wake-name.js is Shadow Edition only');
+  assertNotContains(src, 'sr-voice-assistant.js','sr-voice-assistant.js is Shadow Edition only');
 });
 
 test('index.html loads platform detector (Stage 2)', function () {
@@ -151,8 +166,9 @@ test('index.html loads persistence modules (Stage 3)', function () {
 });
 
 test('index.html loads security modules (Stage 4)', function () {
-  assertContains(src, 'sr-founder-security.js', 'Must load founder security');
   assertContains(src, 'web-research-guard.js',  'Must load research guard');
+  // sr-founder-security.js is Shadow Edition-only — must NOT be in regular edition
+  assertNotContains(src, 'sr-founder-security.js', 'sr-founder-security.js is Shadow Edition only');
 });
 
 test('Conversation SR.ask() is called (brain is used for all messages)', function () {

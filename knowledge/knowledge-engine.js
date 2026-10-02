@@ -48,28 +48,28 @@
     /* ── SHADOW NEXUS SOCIAL — PLATFORM ──────────────────────── */
     {
       category: CATEGORY.SNS,
-      keywords: ['shadow nexus social', 'sns', 'what is shadow nexus', 'platform overview', 'about shadow nexus'],
+      keywords: ['shadow nexus social', 'sns', 'what is shadow nexus', 'platform overview', 'about shadow nexus', 'shadow nexus'],
       content: 'Shadow Nexus Social is a creative social platform built by Chris (Legend of Shadows). It features Radio, DJ streaming, Live video, TV channels, Feed, Profiles, Friends, Inbox, Notifications, Search, and PWA support.',
     },
     {
       category: CATEGORY.SNS,
-      keywords: ['radio', 'listen', 'music stream', 'radio station', 'radio player'],
+      keywords: ['radio', 'listen', 'music stream', 'radio station', 'radio player', 'shadow nexus radio'],
       content: 'Radio on Shadow Nexus Social lets you listen to live music streams. You can tune in, see track info, send requests, and see who else is listening.',
     },
     {
       category: CATEGORY.SNS,
-      keywords: ['radio studio', 'dj', 'dj mode', 'broadcast', 'stream music', 'go live radio'],
-      content: 'The Radio Studio allows DJs and Founders to broadcast live audio streams. DJ mode provides mixing controls. You can start a broadcast, manage tracks, and control the stream from the Studio.',
+      keywords: ['radio studio', 'dj', 'dj mode', 'broadcast', 'stream music', 'go live radio', 'difference between radio'],
+      content: 'The Radio Studio allows DJs and Founders to broadcast live audio streams. DJ mode provides mixing controls. You can start a broadcast, manage tracks, and control the stream from the Studio. Radio Studio is for broadcasting; Radio is for listening.',
     },
     {
       category: CATEGORY.SNS,
-      keywords: ['live', 'live video', 'go live', 'live stream', 'live broadcast', 'video call', 'cohost'],
-      content: 'Live on Shadow Nexus Social lets creators broadcast live video. You can go live from your account, invite a cohost to join your stream, and viewers can watch and interact.',
+      keywords: ['shadow nexus live', 'live video', 'go live', 'live stream', 'live broadcast', 'video call', 'cohost', 'live feature', 'live system', 'what is live', 'live'],
+      content: 'Live on Shadow Nexus Social lets creators broadcast live video. You can go live from your account, invite a cohost to join your stream, and viewers can watch and interact in real time.',
     },
     {
       category: CATEGORY.SNS,
-      keywords: ['tv', 'tv studio', 'tv channel', 'shadow tv', 'channel', '24 hour', 'television'],
-      content: 'Shadow Nexus Social TV allows you to watch and host 24-hour TV channels. Creators can run their own channels. Viewers can tune into different channels in the TV section.',
+      keywords: ['tv studio', 'tv channel', 'shadow tv', 'television studio', '24 hour', 'television', 'shadow nexus tv', 'what is tv studio', 'tv used for', 'run a channel'],
+      content: 'Shadow Nexus Social TV allows you to watch and host 24-hour TV channels. Creators can run their own channels. Viewers can tune into different channels in the TV section. TV Studio is where creators manage and broadcast their TV channel.',
     },
     {
       category: CATEGORY.SNS,
@@ -128,14 +128,19 @@
     },
     {
       category: CATEGORY.SNS,
-      keywords: ['pwa', 'install app', 'add to home screen', 'offline', 'progressive web app'],
-      content: 'Shadow Nexus Social is a Progressive Web App (PWA). You can install it on your device from your browser — add it to your home screen for an app-like experience on Android and iPhone.',
+      keywords: ['pwa', 'install app', 'add to home screen', 'offline', 'progressive web app',
+                 'install shadow nexus', 'install as an app', 'install as app', 'add to homescreen',
+                 'install the website', 'install it as an app', 'install on my phone',
+                 'install on device', 'how do i install', 'download the app'],
+      content: 'Shadow Nexus Social is a Progressive Web App (PWA). You can install it on your device from your browser — add it to your home screen for an app-like experience on Android and iPhone. On Android: tap the browser menu and select "Add to Home Screen". On iPhone: tap Share then "Add to Home Screen".',
     },
 
     /* ── CREATOR — PUBLIC INFORMATION ────────────────────────── */
     {
       category: CATEGORY.CREATOR,
-      keywords: ['chris', 'legend of shadows', 'creator', 'who made this', 'who built this', 'who is chris'],
+      keywords: ['chris', 'legend of shadows', 'creator', 'who made this', 'who built this', 'who is chris',
+                 'who created', 'who made shadow nexus', 'who built shadow nexus', 'who created shadow nexus',
+                 'who is the creator', 'who founded', 'founder'],
       content: 'Shadow Nexus Social was built by Chris, also known as Legend of Shadows. Chris is a creator focused on music, creative projects, and building independent platforms.',
     },
     {

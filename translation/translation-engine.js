@@ -325,10 +325,11 @@
       }
     }
 
-    // "what does X mean in English / what does X mean?"
-    var m3 = t.match(/what does\s+["']?(.{1,80}?)["']?\s+mean(?:\s+in\s+([a-záéíóúàèìòùäöüñçêîôâüß\w\s-]+?))?(?:\s*[.?!]|$)/i);
+    // "what does X mean in Spanish?" — only fire when a specific target language is named.
+    // "what does X mean?" without a language is a WORD_DEFINITION request, NOT translation.
+    var m3 = t.match(/what does\s+["']?(.{1,80}?)["']?\s+mean\s+in\s+([a-záéíóúàèìòùäöüñçêîôâüß\w\s-]+?)(?:\s*[.?!]|$)/i);
     if (m3) {
-      var tgt3 = m3[2] ? _findLanguage(m3[2].trim()) : _findLanguage('en');
+      var tgt3 = _findLanguage(m3[2].trim());
       if (tgt3) {
         return { text: m3[1].trim(), source: null, target: tgt3.code, targetName: tgt3.name, intent: 'TRANSLATE' };
       }

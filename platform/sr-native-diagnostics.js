@@ -60,16 +60,6 @@
     var adapterActive = android ? android.isActiveRuntime() : false;
     var runtimeInfo   = android ? android.getRuntimeInfo()  : null;
 
-    // ── Device Control Mode (in-memory only — no Firebase read here)
-    var dcmCurrent = '(check Settings panel)';
-    try {
-      // Read from localStorage — safe, no secrets
-      var uid  = (fa && typeof fa.getUID === 'function') ? fa.getUID() : null;
-      var lsKey = uid ? ('srDCMPref_' + uid) : 'srDCMPref_guest';
-      var lsVal = localStorage && localStorage.getItem(lsKey);
-      if (lsVal) dcmCurrent = lsVal + ' (from localStorage)';
-    } catch (_) {}
-
     // ── Permission states (no request, just probe)
     function _permState(name) {
       var srBridge = cap && cap.Plugins && cap.Plugins.ShadowReaperBridge;
@@ -104,9 +94,6 @@
       srAndroidAdapterLoaded:  !!android,
       adapterActive:           adapterActive,
       runtimeInfo:             runtimeInfo,
-
-      // ── Device Control Mode (from localStorage only — no DB call)
-      deviceControlMode:       dcmCurrent,
 
       // ── Router
       srDeviceRouterLoaded:    !!router,
@@ -185,7 +172,6 @@
       panel.appendChild(row('  runtimeInfo.hasBridge',      data.runtimeInfo.hasBridge,     data.runtimeInfo.hasBridge));
       panel.appendChild(row('  runtimeInfo.capacitorPlatform', data.runtimeInfo.capacitorPlatform || '?', data.runtimeInfo.capacitorPlatform === 'android'));
     }
-    panel.appendChild(row('Device Control Mode',        data.deviceControlMode,          data.deviceControlMode.includes('FULL_DEVICE_CONTROL') ? true : 'warn'));
     panel.appendChild(row('SRDeviceActionRouter loaded', data.srDeviceRouterLoaded,      data.srDeviceRouterLoaded));
 
     var sep3 = document.createElement('div');

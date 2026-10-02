@@ -114,6 +114,9 @@ ASSOCIATED_WITH
 | `language/data/lemma-index.json` | ~2MB | Lemma → [word forms] |
 | `language/data/freq-index.json`  | ~2MB | Word → frequency rank |
 | `language/data/build-report.json` | <1KB | Build statistics |
+| `language/data/wordnet-index.json` | ~26MB | WordNet 3.1 lemma → {noun/verb/adj/adv senses} |
+| `language/data/wordnet-stats.json` | <1KB | WordNet build statistics |
+| `language/data/WORDNET-LICENSE.txt` | <1KB | Princeton WordNet license (required) |
 
 ---
 
@@ -169,5 +172,69 @@ It is fully offline-capable for core language understanding.
 
 ---
 
-*Document version: 1.0*
-*Generated: 2024 — Shadow Reaper Language Foundation Build SR-LANG-FOUNDATION-1*
+---
+
+## DATASET 5: WordNet 3.1 Lexical Database
+
+| Field             | Value |
+|-------------------|-------|
+| **Dataset**       | Princeton WordNet 3.1 |
+| **Version**       | 3.1 |
+| **Package**       | wordnet-db@3.1.14 (npm) |
+| **Source**        | Princeton University Cognitive Science Laboratory |
+| **License**       | WordNet 3.1 License (Princeton University 2011) |
+| **Attribution**   | Preserved at `language/data/WORDNET-LICENSE.txt` |
+| **Purpose**       | Local lexical definitions, multiple word senses, synonyms, POS-aware lookup, contextual sense selection |
+| **Lemmas**        | 147,477 |
+| **Senses**        | 204,506 |
+| **Definitions**   | 204,506 |
+| **Synsets (raw)** | 117,791 |
+| **Index size**    | 26.2 MB (wordnet-index.json) |
+| **Build script**  | `language/data/build-wordnet-lexicon.js` |
+| **Output**        | `language/data/wordnet-index.json`, `language/data/wordnet-stats.json` |
+
+### What is included
+
+All four POS categories (noun, verb, adjective, adverb) from WordNet 3.1:
+- Definitions (glosses) for each synset
+- Synonyms (synset members)
+- Sense identifiers for disambiguation
+
+### What is NOT included
+
+- Semantic pointer types (hypernymy, hyponymy, etc.) — not imported by default
+- Example sentences (stripped during build)
+- Morphological exception lists (Shadow Reaper uses its own morphology engine)
+
+### License
+
+WordNet 3.1 Copyright 2011 by Princeton University. All rights reserved.
+Permission granted for use, copy, modification and distribution for any purpose
+without fee or royalty, provided the copyright notice appears on all copies.
+
+The WordNet name may not be used in advertising pertaining to distribution
+of the software and/or database.
+
+Full license text: `language/data/WORDNET-LICENSE.txt`
+
+### Coverage
+
+| Metric | Count |
+|--------|-------|
+| SR Vocab Forms | 112,467 |
+| SR Unique Lemmas | 27,806 |
+| WordNet Lemmas | 147,477 |
+| SR Lemmas Matched to WN | 4,754 (17.1% raw) |
+| SR Lemmas Unmatched | 23,052 |
+| Raw Coverage % | 17.1% |
+| Top-1000 SR Lemmas Coverage | 92.9% |
+
+Note: The raw 17.1% reflects that the SR lemma index was built with
+a focus on morphological derivations (containerization, parametrization,
+etc.) rather than core vocabulary. For practical everyday vocabulary (top 1000),
+coverage is 92.9%.
+
+---
+
+*Document version: 2.0*
+*Updated: 2026 — Shadow Reaper Lexical Expansion Build SR-LEXICON-2*

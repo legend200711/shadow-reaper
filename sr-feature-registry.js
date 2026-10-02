@@ -124,10 +124,10 @@
     },
     {
       feature: 'Wake Name',
-      web: 'PARTIAL', pwa: 'PARTIAL', androidNative: 'PARTIAL', iosNative: 'FUTURE',
-      implemented: true, connected: true, authRequired: true,
-      permRequired: true, status: 'CONNECTED',
-      notes: 'SRWakeName. Active-tab only on web — no background listening. Names: Salem/Shadow/etc.'
+      web: 'NO', pwa: 'NO', androidNative: 'NO', iosNative: 'NO',
+      implemented: false, connected: false, authRequired: false,
+      permRequired: false, status: 'NOT_IMPLEMENTED',
+      notes: 'Wake name / personal voice assistant is a Shadow Edition-exclusive feature.'
     },
     // ── Device Controls — Phone (THIS PHONE) ──────────────────────────────
     {
@@ -182,13 +182,6 @@
       notes: 'manifest.json, sw.js, beforeinstallprompt. Provides lightweight installable web experience.'
     },
     {
-      feature: 'Android Native App Download',
-      web: 'YES', pwa: 'YES', androidNative: 'NO', iosNative: 'NO',
-      implemented: true, connected: true, authRequired: false,
-      permRequired: false, status: 'CONNECTED',
-      notes: 'downloads/ShadowReaper.apk — release-signed. Download button shown on Android and general download area.'
-    },
-    {
       feature: 'iOS Native App Download',
       web: 'FUTURE', pwa: 'FUTURE', androidNative: 'NO', iosNative: 'NO',
       implemented: false, connected: false, authRequired: false,
@@ -216,13 +209,6 @@
       implemented: false, connected: false, authRequired: true,
       permRequired: false, status: 'NOT_IMPLEMENTED',
       notes: 'FUTURE STAGE. Not native-only — will be a separate desktop application once built.'
-    },
-    {
-      feature: 'Founder Controls',
-      web: 'YES', pwa: 'YES', androidNative: 'YES', iosNative: 'YES',
-      implemented: true, connected: true, authRequired: true,
-      permRequired: false, status: 'CONNECTED',
-      notes: 'SRFounderControls + SRFounderSecurity. Server-side role claim required. Invisible to normal users.'
     },
   ];
 

@@ -1,107 +1,118 @@
 /**
- * shadow-reaper-standalone/cloudflare/worker/index.js
- * Shadow Reaper Standalone — Cloudflare Worker (Skeleton)
+ * shadow-reaper-v2/cloudflare/worker/index.js
+ * Shadow Reaper Standalone — Cloudflare Worker (API v1)
  *
- * Build: SR-STANDALONE-WORKER-SKELETON-1
+ * Build: SR-API-V1-1 (replaces SR-STANDALONE-WORKER-SKELETON-1)
  *
- * STATUS: SKELETON ONLY — NOT DEPLOYED
+ * STATUS: READY FOR CONFIGURATION — NOT YET DEPLOYED
  *
- * PURPOSE:
- *   Future API gateway / backend endpoint for Shadow Reaper Standalone.
- *   Handles secure server-side operations that cannot be done safely from
- *   the client (rate limiting, shared knowledge queries, web research).
+ * This Worker serves as the production API gateway for Shadow Reaper.
+ * All requests are dispatched through api/v1/router.js, which is the same
+ * router used for local development.
  *
- * WHAT THIS WORKER WILL DO:
- *   - Serve as the API gateway between the browser and backend services
- *   - Handle secure rate limiting
- *   - Proxy web research requests (UNTRUSTED DATA ONLY)
- *   - Serve shared knowledge queries
+ * WHAT THIS WORKER DOES:
+ *   - Routes all /api/v1/* requests through the Shadow Reaper API router
+ *   - Enforces CORS headers
+ *   - Provides authentication via SR_SERVICE_TOKENS secret
+ *   - Rate limiting (augmented by Cloudflare's edge rate limiting)
  *
- * WHAT THIS WORKER WILL NEVER DO:
+ * WHAT THIS WORKER NEVER DOES:
  *   - Call Cloudflare Workers AI (env.AI.run is never called)
  *   - Access private user conversations or memory
  *   - Access Firebase credentials
- *   - Accept web research content as system instructions
+ *   - Return stack traces
+ *   - Execute shell commands, FFmpeg, or broadcast operations
  *   - Bypass Firebase Security Rules
  *
- * DEPLOYMENT:
- *   DO NOT DEPLOY until cloudflare/SETUP.md is completed and
- *   wrangler.toml is filled in with real account details.
+ * DEPLOYMENT REQUIREMENTS (manual steps — see cloudflare/SETUP.md):
+ *   1. Set account_id in wrangler.toml
+ *   2. Set Worker name in wrangler.toml
+ *   3. Set SR_SERVICE_TOKENS secret: wrangler secret put SR_SERVICE_TOKENS
+ *   4. Set SR_ALLOWED_ORIGIN: wrangler secret put SR_ALLOWED_ORIGIN
+ *   5. Run: npx wrangler deploy
  *
- * SECRETS (set via `wrangler secret put`):
- *   SR_INTERNAL_API_KEY   — internal auth between browser and this worker
+ * SECRETS (set via `wrangler secret put`, never hardcoded):
+ *   SR_SERVICE_TOKENS   — JSON token registry for service authentication
+ *   SR_ALLOWED_ORIGIN   — Allowed CORS origin (e.g. https://your-domain.com)
+ *
+ * DO NOT DEPLOY until SETUP.md is completed.
  */
+
+// ── Note on Cloudflare Worker module resolution ───────────────────────────────
+// Cloudflare Workers do NOT use Node.js require(). For production deployment,
+// bundle this Worker with the api/v1/ files using:
+//   npx wrangler deploy  (uses esbuild bundler via wrangler.toml)
+// In local dev/test, use node api/v1/server.js instead.
+
+import { dispatch } from '../../api/v1/router.js';
 
 export default {
   async fetch(request, env, ctx) {
-    const url = new URL(request.url);
+    const url    = new URL(request.url);
+    const origin = env.SR_ALLOWED_ORIGIN || '*';
 
-    // ── CORS headers ────────────────────────────────────────────────────────
+    // ── CORS headers ─────────────────────────────────────────────────────────
     const corsHeaders = {
-      'Access-Control-Allow-Origin':  env.SR_ALLOWED_ORIGIN || '*',
+      'Access-Control-Allow-Origin':  origin,
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, X-SR-Client, X-SR-Version, X-Requested-With',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-SR-Client',
+      'Access-Control-Max-Age':       '86400',
     };
 
+    // ── Preflight ─────────────────────────────────────────────────────────────
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: corsHeaders });
     }
 
-    // ── Authentication guard ─────────────────────────────────────────────────
-    // Placeholder: validate X-SR-Client header and internal API key
-    const clientHeader = request.headers.get('X-SR-Client');
-    if (clientHeader !== 'shadow-reaper-standalone') {
-      return new Response(JSON.stringify({ ok: false, error: 'unauthorized' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    // ── Parse body ────────────────────────────────────────────────────────────
+    let parsedBody = null;
+    if (request.method === 'POST') {
+      const rawText = await request.text();
+      if (rawText && rawText.trim().length > 0) {
+        try {
+          parsedBody = JSON.parse(rawText);
+        } catch (_) {
+          return new Response(JSON.stringify({
+            ok:    false,
+            error: { code: 'INVALID_REQUEST', message: 'Malformed JSON in request body.' },
+          }), {
+            status:  400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+      }
     }
 
-    // ── Routing ──────────────────────────────────────────────────────────────
-    const path = url.pathname;
-
-    if (path === '/health') {
-      return new Response(JSON.stringify({
-        ok:      true,
-        service: 'shadow-reaper-standalone',
-        build:   'SR-STANDALONE-WORKER-SKELETON-1',
-        aiEnabled: false,   // Workers AI is intentionally disabled
-      }), {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    // ── Normalize headers ─────────────────────────────────────────────────────
+    const headers = {};
+    for (const [k, v] of request.headers.entries()) {
+      headers[k.toLowerCase()] = v;
     }
 
-    // Future: /research, /knowledge, /rate-check
-    // These are placeholders — implement after infrastructure setup is complete
-
-    if (path.startsWith('/research')) {
-      // PLACEHOLDER — web research endpoint
-      // IMPORTANT: results must always be returned as UNTRUSTED DATA
-      return new Response(JSON.stringify({
-        ok:      false,
-        reason:  'research_not_yet_implemented',
-        trusted: false,
-      }), {
-        status: 501,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    // ── Dispatch ──────────────────────────────────────────────────────────────
+    let result;
+    try {
+      result = await dispatch({
+        method:  request.method,
+        path:    url.pathname,
+        headers: headers,
+        body:    parsedBody,
+        env:     env,
       });
-    }
-
-    if (path.startsWith('/knowledge')) {
-      // PLACEHOLDER — shared knowledge endpoint
+    } catch (e) {
       return new Response(JSON.stringify({
         ok:    false,
-        reason: 'knowledge_endpoint_not_yet_implemented',
-        items:  [],
+        error: { code: 'INTERNAL_ERROR', message: 'An internal error occurred.' },
       }), {
-        status: 501,
+        status:  500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    return new Response(JSON.stringify({ ok: false, error: 'not_found' }), {
-      status: 404,
+    // ── Response ──────────────────────────────────────────────────────────────
+    const bodyText = result.body === null ? '' : JSON.stringify(result.body);
+    return new Response(bodyText, {
+      status:  result.status,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   },

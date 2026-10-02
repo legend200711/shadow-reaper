@@ -1,0 +1,607 @@
+openapi: "3.1.0"
+info:
+  title: Shadow Reaper API
+  version: "1.0.0"
+  description: |
+    Shadow Reaper Intelligence API v1.
+
+    Shadow Reaper provides intelligence capabilities (language understanding,
+    knowledge retrieval, engine command interpretation) to authorized applications.
+
+    ## Architecture Principle
+    - Shadow Reaper provides INTELLIGENCE.
+    - The 24-Hour Engine (separate system) performs EXECUTION.
+    - This API never executes broadcasts, schedules, streams, or FFmpeg operations.
+
+    ## Authentication
+    Protected endpoints require a Bearer token in the Authorization header.
+    Tokens are issued per service identity with specific scopes.
+    Public endpoints (health, capabilities) require no authentication.
+
+    ## Scopes
+    - `shadow.chat`              — POST /api/v1/chat
+    - `shadow.understand`        — POST /api/v1/understand
+    - `shadow.knowledge.read`    — POST /api/v1/knowledge/query
+    - `engine.command.interpret` — POST /api/v1/engine/command
+    - `engine.context.write`     — POST /api/v1/engine/context
+
+    ## Request IDs
+    Every response includes a `requestId` field (format: `sr_<base36>_<hex>`).
+    Use this for tracing without logging private conversation content.
+
+    ## Important Limitations
+    - Shadow Reaper NEVER returns shell commands, FFmpeg strings, SQL, or arbitrary code.
+    - Private user memory is NEVER accessible through the public API.
+    - The 24-Hour Engine is the sole executor of any broadcast operations.
+
+servers:
+  - url: http://localhost:4200
+    description: Local development server
+  - url: https://YOUR_WORKER.workers.dev
+    description: Cloudflare Worker (configure wrangler.toml before deploying)
+
+security: []  # Override per-endpoint
+
+paths:
+  /api/v1/health:
+    get:
+      summary: Health check
+      operationId: getHealth
+      tags: [System]
+      security: []
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "503":
+          description: Service is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /api/v1/capabilities:
+    get:
+      summary: List available capabilities
+      operationId: getCapabilities
+      tags: [System]
+      security: []
+      responses:
+        "200":
+          description: Capabilities list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CapabilitiesResponse"
+
+  /api/v1/chat:
+    post:
+      summary: Conversational chat
+      operationId: postChat
+      description: |
+        Route a message through the Shadow Reaper conversation pipeline.
+        Uses the same intelligence as the local Shadow Reaper UI.
+        Does NOT create a second AI brain.
+      tags: [Intelligence]
+      security:
+        - BearerAuth: [shadow.chat]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatRequest"
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatResponse"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/understand:
+    post:
+      summary: Language understanding — no execution
+      operationId: postUnderstand
+      description: |
+        Analyze a message for intent, entities, tone, and concepts.
+        No conversation state is modified. No actions are taken.
+      tags: [Intelligence]
+      security:
+        - BearerAuth: [shadow.understand]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UnderstandRequest"
+      responses:
+        "200":
+          description: Analysis result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnderstandResponse"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/LowConfidence"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /api/v1/knowledge/query:
+    post:
+      summary: Query public knowledge base
+      operationId: postKnowledgeQuery
+      description: |
+        Query the Shadow Reaper public knowledge base.
+        Returns knowledge from PUBLIC/PRELOADED and CREATOR categories only.
+        Private user memory is NEVER accessible through this endpoint.
+      tags: [Knowledge]
+      security:
+        - BearerAuth: [shadow.knowledge.read]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KnowledgeQueryRequest"
+      responses:
+        "200":
+          description: Knowledge results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeQueryResponse"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/KnowledgeNotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/engine/command:
+    post:
+      summary: Interpret engine command (NO execution)
+      operationId: postEngineCommand
+      description: |
+        Interpret a natural language message as a structured engine command.
+
+        CRITICAL: This endpoint performs INTERPRETATION ONLY.
+        Shadow Reaper NEVER executes broadcast operations, FFmpeg, RTMP,
+        schedule changes, or stream operations.
+        The 24-Hour Engine is the sole executor.
+
+        Returns strict structured JSON with allowlisted intents only.
+        Never returns shell commands, FFmpeg strings, SQL, or executable code.
+      tags: [Engine]
+      security:
+        - BearerAuth: [engine.command.interpret]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EngineCommandRequest"
+      responses:
+        "200":
+          description: Interpreted command
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EngineCommandResponse"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/UnknownIntent"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /api/v1/engine/context:
+    post:
+      summary: Send engine context to Shadow Reaper
+      operationId: postEngineContext
+      description: |
+        Provide bounded engine state to Shadow Reaper for contextual awareness.
+        Shadow Reaper is NOT the authoritative database for engine state.
+        The 24-Hour Engine remains authoritative for all execution state.
+        Context is informational only and bounded to safe metadata.
+      tags: [Engine]
+      security:
+        - BearerAuth: [engine.context.write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EngineContextRequest"
+      responses:
+        "200":
+          description: Context accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EngineContextResponse"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: |
+        Service bearer token. Each token is scoped to specific capabilities.
+        Tokens are issued per service identity.
+        Never hardcode tokens — use environment secrets.
+
+  schemas:
+    ChatRequest:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 2048
+          example: "What is Shadow Nexus Live?"
+      additionalProperties: false
+
+    ChatResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: true
+        response:
+          type: string
+          example: "Shadow Nexus Live lets creators broadcast live video..."
+        intent:
+          type: string
+          example: "QUESTION"
+        tone:
+          type: string
+          example: "neutral"
+        requestId:
+          type: string
+          example: "sr_lzqx1k_4f8a2c9d"
+
+    UnderstandRequest:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 2048
+          example: "Play my Halloween playlist after the current program."
+      additionalProperties: false
+
+    UnderstandResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        intent:
+          type: string
+          example: "QUESTION"
+        entities:
+          type: object
+          example: { "projectName": "Halloween" }
+        tone:
+          type: string
+          example: "neutral"
+        concepts:
+          type: array
+          items:
+            type: string
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+          example: 0.92
+        requiresClarification:
+          type: boolean
+        requestId:
+          type: string
+
+    KnowledgeQueryRequest:
+      type: object
+      required: [query]
+      properties:
+        query:
+          type: string
+          minLength: 1
+          maxLength: 2048
+          example: "What is Shadow Nexus Live?"
+      additionalProperties: false
+
+    KnowledgeQueryResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              category:
+                type: string
+                enum: [SNS, CREATOR, GENERAL]
+              content:
+                type: string
+        source:
+          type: string
+          enum: [LOCAL_PRELOADED]
+        count:
+          type: integer
+        requestId:
+          type: string
+
+    EngineCommandRequest:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 2048
+          example: "Play my Halloween playlist after the current program."
+      additionalProperties: false
+
+    EngineCommandResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        intent:
+          type: string
+          description: "Allowlisted engine intent (e.g. QUEUE_PLAYLIST). Never a shell command."
+          enum:
+            - PLAY_MEDIA
+            - PAUSE_MEDIA
+            - RESUME_MEDIA
+            - STOP_MEDIA
+            - NEXT_ITEM
+            - PREVIOUS_ITEM
+            - RESTART_ITEM
+            - QUEUE_MEDIA
+            - REMOVE_QUEUE_ITEM
+            - MOVE_QUEUE_ITEM
+            - QUEUE_PLAYLIST
+            - START_PLAYLIST
+            - GET_NOW_PLAYING
+            - GET_QUEUE
+            - GET_SCHEDULE
+            - GET_STATUS
+            - SCHEDULE_PROGRAM
+            - UPDATE_PROGRAM
+            - REMOVE_PROGRAM
+        parameters:
+          type: object
+          description: "Structured parameters. Never contains shell commands or executable strings."
+          example: { "playlist": "Halloween", "timing": "AFTER_CURRENT_PROGRAM" }
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        requiresClarification:
+          type: boolean
+        schemaVersion:
+          type: string
+          example: "1.0"
+        requestId:
+          type: string
+
+    EngineContextRequest:
+      type: object
+      required: [engineId]
+      properties:
+        engineId:
+          type: string
+          maxLength: 128
+          example: "main-channel"
+        nowPlaying:
+          type: object
+          nullable: true
+          properties:
+            title:
+              type: string
+        queueLength:
+          type: integer
+          minimum: 0
+        status:
+          type: string
+          example: "RUNNING"
+      maxProperties: 10
+
+    EngineContextResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        accepted:
+          type: boolean
+        engineId:
+          type: string
+        status:
+          type: string
+        requestId:
+          type: string
+
+    HealthResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        service:
+          type: string
+          example: "shadow-reaper"
+        apiVersion:
+          type: string
+          example: "v1"
+        status:
+          type: string
+          enum: [ready, degraded, unavailable]
+        components:
+          type: object
+          properties:
+            languageFoundation:
+              type: string
+              enum: [ready, unavailable]
+            knowledgeEngine:
+              type: string
+              enum: [ready, unavailable]
+            conversationEngine:
+              type: string
+              enum: [ready, unavailable]
+            understanding:
+              type: string
+              enum: [ready, unavailable]
+        requestId:
+          type: string
+
+    CapabilitiesResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        apiVersion:
+          type: string
+        commandSchema:
+          type: string
+        capabilities:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              description:
+                type: string
+              availability:
+                type: string
+                enum: [LOCAL_ONLY, ONLINE_AVAILABLE, HYBRID, NOT_IMPLEMENTED]
+              endpoint:
+                type: string
+        requestId:
+          type: string
+
+    APIError:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              enum:
+                - INVALID_REQUEST
+                - UNAUTHORIZED
+                - FORBIDDEN
+                - RATE_LIMITED
+                - PAYLOAD_TOO_LARGE
+                - UNKNOWN_INTENT
+                - LOW_CONFIDENCE
+                - KNOWLEDGE_NOT_FOUND
+                - SERVICE_UNAVAILABLE
+                - INTERNAL_ERROR
+                - NOT_FOUND
+            message:
+              type: string
+        requestId:
+          type: string
+
+  responses:
+    InvalidRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/APIError"
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/APIError"
+    Forbidden:
+      description: Insufficient scope
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/APIError"
+    RateLimited:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/APIError"
+    PayloadTooLarge:
+      description: Payload too large
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/APIError"
+    UnknownIntent:
+      description: Intent could not be determined or confidence too low
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/APIError"
+    KnowledgeNotFound:
+      description: No knowledge found for query
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/APIError"
+    ServiceUnavailable:
+      description: Service temporarily unavailable
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/APIError"
+    LowConfidence:
+      description: Confidence too low to return a reliable result
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/APIError"
+              - type: object
+                properties:
+                  confidence:
+                    type: number
+                  intent:
+                    type: string

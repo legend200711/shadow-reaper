@@ -1,17 +1,21 @@
 {
-  "generatedAt": "2026-10-01T23:16:51.416Z",
-  "totalEntries": 113280,
-  "uniqueLemmas": 27666,
+  "generatedAt": "2026-10-02T05:26:03.329Z",
+  "totalEntries": 112467,
+  "uniqueLemmas": 27806,
   "byPos": {
-    "noun": 12913,
-    "adj": 6943,
-    "verb": 90404,
-    "adv": 2833,
-    "other": 187
+    "noun": 13024,
+    "adj": 6992,
+    "verb": 89403,
+    "adv": 2842,
+    "other": 206
   },
   "target": 111600,
   "targetMet": true,
   "method": "Programmatic morphological expansion of open English vocabulary",
-  "note": "Word forms only — no definitions. Open English language, no proprietary content.",
-  "license": "See DATA_SOURCES.md"
+  "note": "Word forms only — no definitions. Open English language, no proprietary content. Invalid generated forms removed.",
+  "license": "See DATA_SOURCES.md",
+  "repairRun": true,
+  "repairDate": "2026-10-02T05:26:03.329Z",
+  "invalidRemoved": 1075,
+  "beforeRepair": 113542
 }

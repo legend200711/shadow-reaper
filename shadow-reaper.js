@@ -2,13 +2,15 @@
  * shadow-reaper-v2/shadow-reaper.js
  * Shadow Reaper V2 — Main Entry Point
  *
- * Build: SR-V2-STAGE5
+ * Build: SR-V2-STAGE6
  *
  * Exposes: window.ShadowReaper
  *
  * Public API:
  *   ShadowReaper.init()                  — Initialize (async-safe)
  *   ShadowReaper.ask(message, cb)        — Process user message; cb(responseString)
+ *   ShadowReaper.processRequest(opts,cb) — Structured request wrapper
+ *   ShadowReaper.debugAsk(message, cb)   — ask() with full trace diagnostics returned
  *   ShadowReaper.newConversation()       — New thread, clear session state
  *   ShadowReaper.getStatus()             — Return current system status object
  *   ShadowReaper.loadLocalModel([id])    — Trigger local model load; returns Promise
@@ -93,6 +95,24 @@
 
   // Last response source for diagnostics
   var _lastResponseSource = 'NONE';
+
+  // ── Per-request diagnostics (reset each turn) ────────────────────────────────
+  var _lastDiag = {
+    LANGUAGE_FOUNDATION:     'UNKNOWN',
+    TOKEN_COUNT:             0,
+    LEMMA_MATCHES:           0,
+    CONCEPTS:                0,
+    KNOWLEDGE_QUERY:         'NO',
+    KNOWLEDGE_CATEGORY:      null,
+    KNOWLEDGE_MATCHES:       0,
+    TOP_KNOWLEDGE_SCORE:     0,
+    KNOWLEDGE_USED:          'NO',
+    ADAPTIVE_CONTEXT_USED:   'NO',
+    PERSONAL_MEMORY_USED:    'NO',
+    RESPONSE_SOURCE:         'UNKNOWN',
+    NEGATION_DETECTED:       false,
+    INTENT:                  'UNKNOWN',
+  };
 
   // ─── Dependency check ────────────────────────────────────────────────────────
 
@@ -264,6 +284,24 @@
   // ─── Normal pipeline with composeAsync ───────────────────────────────────────
 
   function _runNormalPipeline(message, p, callback) {
+    // ── Reset per-request diagnostics ────────────────────────────────────────
+    _lastDiag = {
+      LANGUAGE_FOUNDATION:   'UNKNOWN',
+      TOKEN_COUNT:           0,
+      LEMMA_MATCHES:         0,
+      CONCEPTS:              0,
+      KNOWLEDGE_QUERY:       'NO',
+      KNOWLEDGE_CATEGORY:    null,
+      KNOWLEDGE_MATCHES:     0,
+      TOP_KNOWLEDGE_SCORE:   0,
+      KNOWLEDGE_USED:        'NO',
+      ADAPTIVE_CONTEXT_USED: 'NO',
+      PERSONAL_MEMORY_USED:  'NO',
+      RESPONSE_SOURCE:       'UNKNOWN',
+      NEGATION_DETECTED:     false,
+      INTENT:                'UNKNOWN',
+    };
+
     // ── LANGUAGE FOUNDATION ANALYSIS ──────────────────────────────────────────
     // Run SRLanguage.analyze() if available to enrich understanding.
     // Falls back to SRUnderstanding if language foundation not loaded.
@@ -274,7 +312,18 @@
     if (langFdn) {
       try {
         langAnalysis = langFdn.analyze(message, contextSnapshot);
-      } catch (_) {}
+        _lastDiag.LANGUAGE_FOUNDATION = langAnalysis ? 'READY' : 'FAILED';
+        if (langAnalysis) {
+          _lastDiag.TOKEN_COUNT   = langAnalysis.wordCount || 0;
+          _lastDiag.LEMMA_MATCHES = langAnalysis.concepts  ? langAnalysis.concepts.length : 0;
+          _lastDiag.CONCEPTS      = langAnalysis.concepts  ? langAnalysis.concepts.length : 0;
+          _lastDiag.NEGATION_DETECTED = !!(langAnalysis.negation && langAnalysis.negation.negated);
+        }
+      } catch (_) {
+        _lastDiag.LANGUAGE_FOUNDATION = 'FAILED';
+      }
+    } else {
+      _lastDiag.LANGUAGE_FOUNDATION = 'NOT_LOADED';
     }
 
     // SRUnderstanding is always called (it drives the response engine).
@@ -315,13 +364,38 @@
     var recentTurns      = global.SRConversation.getRecentTurns(8);
 
     // Knowledge retrieval (Checkpoint E) — only inject if relevant
+    // Uses queryMultiple to capture up to 2 relevant entries (e.g. Radio AND Radio Studio).
+    // For single-topic queries, only the top result is used to avoid over-stuffing.
     var knowledgeSnippet = null;
     var k = _knowledge();
     if (k && _capEnabled('knowledgeEnabled')) {
-      var kEntry = k.query(message);
-      if (kEntry) {
-        knowledgeSnippet = kEntry.content;
+      _lastDiag.KNOWLEDGE_QUERY = 'YES';
+      var kEntries = k.queryMultiple(message, 2);
+      _lastDiag.KNOWLEDGE_MATCHES = kEntries ? kEntries.length : 0;
+      if (kEntries && kEntries.length >= 1) {
+        _lastDiag.KNOWLEDGE_CATEGORY = kEntries[0].category || null;
+        // Rough score estimate: length of longest matching keyword
+        var _topScore = 0;
+        (kEntries[0].keywords || []).forEach(function (kw) {
+          if (message.toLowerCase().indexOf(kw.toLowerCase()) !== -1) {
+            _topScore = Math.max(_topScore, kw.length);
+          }
+        });
+        _lastDiag.TOP_KNOWLEDGE_SCORE = _topScore;
       }
+      if (kEntries && kEntries.length === 1) {
+        knowledgeSnippet = kEntries[0].content;
+      } else if (kEntries && kEntries.length >= 2) {
+        // Two distinct relevant entries — combine them (e.g. Radio vs Radio Studio)
+        // Only combine when they are different entries (avoid duplicate content)
+        if (kEntries[0].content !== kEntries[1].content) {
+          knowledgeSnippet = kEntries[0].content + '\n\n' + kEntries[1].content;
+        } else {
+          knowledgeSnippet = kEntries[0].content;
+        }
+      }
+    } else {
+      _lastDiag.KNOWLEDGE_QUERY = 'NO';
     }
 
     // ── PERSONAL MEMORY RETRIEVAL ─────────────────────────────────────────────
@@ -369,23 +443,51 @@
       unknownWords:     langAnalysis ? langAnalysis.unknownWords : [],
     };
 
+    _lastDiag.INTENT = understood.intent || 'UNKNOWN';
+    _lastDiag.ADAPTIVE_CONTEXT_USED = (adaptiveSnippets && adaptiveSnippets.length > 0) ? 'YES' : 'NO';
+
     global.SRResponse.composeAsync(understood, context, composeOpts, function (response, source) {
       _lastResponseSource = source || 'DETERMINISTIC';
 
-      // If static knowledge is relevant and response is a generic fallback, substitute
-      if (knowledgeSnippet && source === 'DETERMINISTIC' &&
-          (understood.intent === 'QUESTION' || understood.intent === 'GENERAL_CONVERSATION')) {
-        var genericFallbacks = [
-          "Tell me more", "I'm not sure I caught that", "Say more", "I want to follow"
+      // ── KNOWLEDGE SUBSTITUTION ────────────────────────────────────────────────
+      // If static knowledge is relevant and the response is a generic/unhelpful
+      // fallback from ANY source path, replace with the knowledge snippet.
+      //
+      // This applies to:
+      //   DETERMINISTIC — response engine gave a "tell me more" style generic reply
+      //   LEARNED       — learned brain had nothing; knowledge snippet should answer
+      //   ERROR         — local model failed; knowledge can still provide an answer
+      //   LOCAL_MODEL   — model is not ready; knowledge fills the gap
+      //
+      // Does NOT apply when the response is already a substantive answer.
+      if (knowledgeSnippet &&
+          (understood.intent === 'QUESTION' || understood.intent === 'GENERAL_CONVERSATION' ||
+           understood.intent === 'UNKNOWN')) {
+        var _shouldSubstitute = false;
+
+        // Check for generic/fallback phrases from response pools
+        var _genericPhrases = [
+          "Tell me more", "I'm not sure I caught that", "Say more", "I want to follow",
+          "I don't have reliable information", "I don't have enough context",
+          "That's not something I have", "I don't know enough about",
+          "I haven't learned anything about", "LOCAL MODEL ERROR",
+          // Learned path generic patterns that should yield to static knowledge
+          "Based on what you've told me:", "Here's what I have from our conversations",
+          "Based on what you've shared with me:",
         ];
-        var isGeneric = genericFallbacks.some(function (f) {
-          return response.indexOf(f) === 0;
+        _shouldSubstitute = _genericPhrases.some(function (f) {
+          return response.indexOf(f) !== -1;
         });
-        if (isGeneric) {
+
+        if (_shouldSubstitute) {
           response = knowledgeSnippet;
           _lastResponseSource = 'KNOWLEDGE';
         }
       }
+
+      // ── Finalize diagnostics ─────────────────────────────────────────────────
+      _lastDiag.KNOWLEDGE_USED  = (_lastResponseSource === 'KNOWLEDGE') ? 'YES' : 'NO';
+      _lastDiag.RESPONSE_SOURCE = _lastResponseSource;
 
       global.SRConversation.addTurn('assistant', response, null, null);
 
@@ -445,7 +547,7 @@
   var ShadowReaper = {
 
     _initialized: false,
-    _version: 'SR-V2-STAGE5',
+    _version: 'SR-V2-STAGE6',
 
     /**
      * Initialize Shadow Reaper V2.
@@ -505,6 +607,59 @@
      * @param {string}   message  — User input text
      * @param {function} callback — fn(responseString)
      */
+    /**
+     * Structured request wrapper — the canonical internal pipeline entry point.
+     *
+     * opts = {
+     *   message:        string  (required)
+     *   conversationId: string  (optional — reserved for future multi-conv routing)
+     *   userId:         string  (optional — reserved for future per-user routing)
+     *   projectId:      string  (optional — reserved for future project scoping)
+     *   source:         string  (optional — caller label, e.g. "ui", "api", "test")
+     *   options:        object  (optional — capability overrides for this request only)
+     * }
+     *
+     * callback(responseString) — always async.
+     */
+    processRequest: function (opts, callback) {
+      if (!opts || typeof opts !== 'object') {
+        if (typeof callback === 'function') callback('Invalid request: opts must be an object.');
+        return;
+      }
+      var msg = opts.message;
+      if (!msg || typeof msg !== 'string' || msg.trim() === '') {
+        if (typeof callback === 'function') callback("Say something — I'm listening.");
+        return;
+      }
+      // Delegate to ask() — same pipeline, structured entry
+      this.ask(msg.trim(), callback);
+    },
+
+    /**
+     * Development / debug version of ask().
+     * Runs the full pipeline then calls back with:
+     *   { response: string, diagnostics: object, context: object }
+     *
+     * NEVER exposes private credentials, UIDs, or passwords.
+     *
+     * @param {string}   message
+     * @param {function} callback — fn({ response, diagnostics, context })
+     */
+    debugAsk: function (message, callback) {
+      var self = this;
+      self.ask(message, function (response) {
+        var diag = self.getLastDiagnostics();
+        var ctx  = global.SRContext ? global.SRContext.getSnapshot() : {};
+        if (typeof callback === 'function') {
+          callback({
+            response:    response,
+            diagnostics: diag,
+            context:     ctx,
+          });
+        }
+      });
+    },
+
     ask: function (message, callback) {
       if (!_initialized) {
         console.warn('[ShadowReaper V2] Not initialized. Call ShadowReaper.init() first.');
@@ -622,16 +777,55 @@
         ? global.SRFounderControls.getAll()
         : null;
 
+      // Website knowledge entry count (actual, not hardcoded false)
+      var kEntryCount = 0;
+      var kCategories = {};
+      if (global.SRKnowledge) {
+        try {
+          var snsCat  = global.SRKnowledge.getByCategory('SNS');
+          var creatorCat = global.SRKnowledge.getByCategory('CREATOR');
+          var generalCat = global.SRKnowledge.getByCategory('GENERAL');
+          kEntryCount = (snsCat ? snsCat.length : 0) +
+                        (creatorCat ? creatorCat.length : 0) +
+                        (generalCat ? generalCat.length : 0);
+          kCategories = {
+            SNS:     snsCat     ? snsCat.length     : 0,
+            CREATOR: creatorCat ? creatorCat.length : 0,
+            GENERAL: generalCat ? generalCat.length : 0,
+          };
+        } catch (_) {}
+      }
+
       return {
-        version:    this._version,
+        // Core identity
+        version:     this._version,
+        build:       this._version,
         initialized: _initialized,
         destroyed:   _destroyed,
-        turnCount:   _initialized ? global.SRConversation.getTurnCount() : 0,
-        sessionContext: context,
-        workersAICalls: 0,       // Always 0 — no Workers AI
-        legacyAIRestored: false,
-        websiteKnowledge: false,
+
+        // System readiness flags
+        API_READY:                _initialized && !_destroyed,
+        LANGUAGE_FOUNDATION_READY: !!global.SRLanguage,
+        KNOWLEDGE_READY:          !!global.SRKnowledge,
+        KNOWLEDGE_LEARNER_READY:  !!global.SRKnowledgeLearner,
+        PERSISTENCE_READY:        !!global.SRPersistence,
+        LOCAL_MODEL_READY:        !!(global.SRLocalModel && modelStatus.state === 'READY'),
+        VOICE_READY:              !!(global.SRVoice && voiceStatus.state !== 'UNAVAILABLE'),
+        TRANSLATION_READY:        !!global.SRTranslation,
+
+        // Session
+        turnCount:          _initialized ? global.SRConversation.getTurnCount() : 0,
+        sessionContext:     context,
         lastResponseSource: _lastResponseSource,
+
+        // Legacy / always-stable values
+        workersAICalls:   0,       // Always 0 — no Workers AI
+        legacyAIRestored: false,
+
+        // Website knowledge status (real values)
+        websiteKnowledge:      kEntryCount > 0,
+        websiteKnowledgeCount: kEntryCount,
+        websiteKnowledgeCategories: kCategories,
 
         // Persistence status
         historyConnected:  persistStatus ? persistStatus.historyConnected  : false,
@@ -645,7 +839,7 @@
         adaptiveItemCount: persistStatus ? persistStatus.adaptiveItemCount : 0,
         brainConceptCount: persistStatus ? persistStatus.brainConceptCount : 0,
 
-        // Stage 4-LEARN+ connected modules
+        // Connected modules
         knowledgeConnected:         !!global.SRKnowledge,
         knowledgeLearnerConnected:  !!global.SRKnowledgeLearner,
         translationConnected:  !!global.SRTranslation,
@@ -659,7 +853,7 @@
         // Voice status
         voice: voiceStatus,
 
-        // Stage 5: Language Foundation status + response diagnostics
+        // Stage 5/6: Language Foundation status
         languageFoundation: (function () {
           var lf = global.SRLanguage;
           if (!lf) return { loaded: false };
@@ -669,6 +863,7 @@
               loaded:          true,
               build:           ls.build,
               vocabularyCount: ls.vocabulary ? ls.vocabulary.totalEntries : 0,
+              uniqueLemmas:    ls.vocabulary ? (ls.vocabulary.uniqueLemmas || 0) : 0,
               vocabLoaded:     ls.vocabulary ? ls.vocabulary.indexLoaded : false,
               subsystems:      ls.subsystems,
             };
@@ -676,6 +871,10 @@
             return { loaded: true, error: 'status_unavailable' };
           }
         })(),
+
+        // Stage 6: Last request diagnostics (copy, not live reference)
+        lastDiagnostics: Object.assign({}, _lastDiag),
+
         responseEngine: {
           lastSource:      _lastResponseSource,
           modelState:      modelStatus.state,
@@ -685,6 +884,15 @@
           conversationContextTurns: _initialized ? global.SRConversation.getTurnCount() : 0,
         },
       };
+    },
+
+    /**
+     * Return the diagnostics object from the most recent ask() call.
+     * Safe — never exposes private data (UID, passwords, credentials).
+     * @returns {object}
+     */
+    getLastDiagnostics: function () {
+      return Object.assign({}, _lastDiag);
     },
 
     /**

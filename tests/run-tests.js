@@ -42,9 +42,16 @@ var SUITES = [
   { name: 'adaptive-brain',        file: 'adaptive-brain.test.js' },
   { name: 'knowledge-learning',    file: 'knowledge-learning.test.js' },
   { name: 'language',              file: 'language.test.js' },
+  { name: 'voice-assistant',       file: 'voice-assistant.test.js' },
   { name: 'wake-name',             file: 'wake-name-founder-enrollment.test.js' },
   { name: 'master',                file: 'master.test.js' },
   { name: 'conversation-quality',  file: 'conversation-quality.test.js' },
+  { name: 'knowledge-retrieval',   file: 'sr-knowledge-retrieval.test.js' },
+  { name: 'home-api',              file: 'sr-home-api.test.js' },
+  { name: 'word-definition',       file: 'sr-word-definition.test.js' },
+  { name: 'lexical-expansion',     file: 'sr-lexical-expansion.test.js' },
+  { name: 'api-v1',                file: 'api-v1.test.js' },
+  { name: 'product-split',         file: 'product-split.test.js' },
 ];
 
 var TESTS_DIR = __dirname;

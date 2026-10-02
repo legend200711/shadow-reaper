@@ -47,6 +47,86 @@
     return GREETING_PHRASE_PATTERNS.some(function (p) { return p.test(text); });
   }
 
+  // ─── Word definition extraction ──────────────────────────────────────────────
+  // Strips articles and the "word" meta-word from definition queries.
+  // "What does the word exhausted mean?" → "exhausted"
+  // "Define running."                    → "running"
+  // "What is the meaning of calm?"       → "calm"
+
+  function extractDefinitionTarget(text) {
+    var t = text.trim();
+
+    // ── Compound sentence support ─────────────────────────────────────────────
+    // "I sat by the river bank. What does bank mean here?"
+    // "The bag is light. What does light mean here?"
+    // Split on sentence boundaries and check if the last sentence is a definition query.
+    // Also check if any sentence boundary separates a context sentence from a definition query.
+    var sentenceParts = t.split(/[.!?]\s+/);
+    if (sentenceParts.length > 1) {
+      // Try extracting from the LAST sentence fragment
+      var lastPart = sentenceParts[sentenceParts.length - 1].trim();
+      var innerTarget = extractDefinitionTarget(lastPart);
+      if (innerTarget) return innerTarget;
+    }
+
+    // ── Single-sentence patterns ──────────────────────────────────────────────
+
+    // "what does [the [word]] X mean [here]" — strip leading article + "word"
+    var m1 = t.match(/^what does\s+(?:the\s+word\s+|the\s+)?["']?([a-z][a-z'-]{0,39})["']?\s+mean\b/i);
+    if (m1) return m1[1].toLowerCase();
+
+    // "what does X mean" (no article) — bare form
+    var m1b = t.match(/^what does\s+["']?([a-z][a-z'-]{0,39})["']?\s+mean\b/i);
+    if (m1b) return m1b[1].toLowerCase();
+
+    // "define X" / "define the word X"
+    var m2 = t.match(/^define(?:\s+the\s+word)?\s+["']?([a-z][a-z'-]{0,39})["']?\.?$/i);
+    if (m2) return m2[1].toLowerCase();
+
+    // "what is the meaning of X"
+    var m3 = t.match(/^what(?:'s|\s+is)\s+the\s+meaning\s+of\s+["']?([a-z][a-z'-]{0,39})["']?\.?\??$/i);
+    if (m3) return m3[1].toLowerCase();
+
+    // "what does X mean in [language]" — translate path handles it, but if it fell through
+    // extract the word anyway (without the language part)
+    var m4 = t.match(/^what does\s+(?:the\s+word\s+)?["']?([a-z][a-z'-]{0,39})["']?\s+mean\s+in\s+/i);
+    if (m4) return m4[1].toLowerCase();
+
+    return null;
+  }
+
+  // ─── extractDefinitionContext — context tokens for sense disambiguation ───────
+  // Returns a token array from the full raw query/sentence to help rank senses.
+  // Strips the definition-query portion and keeps surrounding context words.
+  //
+  // "I deposited money at the bank. What does bank mean here?"
+  //  → ["deposited", "money", "bank", "here"]
+  //
+  // "The bag is light. What does light mean here?"
+  //  → ["bag", "light", "here"]
+
+  function extractDefinitionContext(text) {
+    var t = text.trim().toLowerCase();
+
+    // Tokenize: split on non-alpha (keep letters only), filter short/stopwords
+    var stopwords = new Set([
+      'a','an','the','is','are','was','were','it','its','i','in','on','at','to',
+      'of','and','or','but','not','so','if','as','by','for','up','my','me','we',
+      'us','he','she','they','them','him','her','his','our','you','your','did',
+      'do','does','that','this','these','those','be','been','being','what','does',
+      'mean','here','word','have','from','with','into','just','now','also','about',
+    ]);
+
+    return t.split(/[^a-z']+/)
+      .filter(function (tok) {
+        return tok.length >= 3 && !stopwords.has(tok);
+      });
+  }
+
+  function _isWordDefinition(text) {
+    return extractDefinitionTarget(text) !== null;
+  }
+
   // ─── Intent patterns ────────────────────────────────────────────────────────
 
   const INTENT_PATTERNS = [
@@ -54,6 +134,13 @@
       intent: 'GREETING',
       // Custom function — not a regex array — prevents substring false-positives.
       _test: _isGreeting,
+      patterns: [],
+    },
+    // WORD_DEFINITION must come BEFORE QUESTION so "What does X mean?" routes here,
+    // not into the generic QUESTION bucket.
+    {
+      intent: 'WORD_DEFINITION',
+      _test: _isWordDefinition,
       patterns: [],
     },
     {
@@ -209,12 +296,12 @@
       entities.area = areaMatch[1].toLowerCase();
     }
 
-    // Design descriptors
+    // Design descriptors — capture multi-word colour phrases like "dark blue", "light grey"
     const designMatch = text.match(
-      /\b(dark(er)?|light(er)?|minimal|bold|clean|colorful|animated|flat|glassmorphism|neon|cinematic|moody|vibrant)\b/i
+      /\b(dark\s+(?:blue|red|green|grey|gray|purple|teal|navy|gold|brown|orange|mode)|light\s+(?:blue|red|green|grey|gray|purple|mode)|dark(er)?|light(er)?|minimal|bold|clean|colorful|animated|flat|glassmorphism|neon|cinematic|moody|vibrant)\b/i
     );
     if (designMatch) {
-      entities.design = designMatch[1].toLowerCase();
+      entities.design = designMatch[1].toLowerCase().trim();
     }
 
     // Topic extraction — loose
@@ -271,5 +358,5 @@
 
   // ─── Export ──────────────────────────────────────────────────────────────────
 
-  global.SRUnderstanding = { understand };
+  global.SRUnderstanding = { understand, extractDefinitionTarget, extractDefinitionContext };
 })(typeof window !== 'undefined' ? window : global);

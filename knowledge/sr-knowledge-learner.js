@@ -135,15 +135,30 @@
    *   "X means Y"
    *   "X refers to Y"
    */
+  // Words that cannot be the subject of a definition — question words, pronouns, auxiliaries
+  var _NON_SUBJECT = new Set([
+    'what','which','who','where','when','why','how',
+    'is','are','was','were','will','would','could','should','can','do','does','did',
+    'the','a','an','it','this','that','they','we','i','you','he','she',
+    'tell','show','explain','describe','give','list',
+  ]);
+
   function _extractDefinitions(text) {
     var results = [];
+
+    // GUARD: Do not extract definitions from questions.
+    // A question asks for information — it does not assert a definition.
+    // Questions typically start with "What", "How", "Who", "Which", or end with "?".
+    var isQuestion = /^(what|how|who|which|where|when|why|tell|show|explain|can|could|would|is|are|do|does)\b/i.test(text.trim()) ||
+                     /\?$/.test(text.trim());
+    if (isQuestion) return results;
 
     // Pattern: "A/The/An X is [a/the/an] Y"  — subject with article
     var m1 = text.match(/^[Aa]n?\s+([A-Za-z][A-Za-z0-9 _\-]{1,40})\s+is\s+(?:a\s+|an\s+|the\s+)?(.{5,120}?)(?:[.,!?]|$)/);
     if (m1) {
       var subj1 = m1[1].trim();
       var pred1 = m1[2].trim().replace(/[.,!?]$/, '');
-      if (!_isFiller(subj1) && !_isSensitive(pred1) && pred1.length >= 5) {
+      if (!_isFiller(subj1) && !_isSensitive(pred1) && pred1.length >= 5 && !_NON_SUBJECT.has(subj1.toLowerCase())) {
         results.push({
           concept:      _conceptKey(subj1),
           label:        subj1,
@@ -160,7 +175,9 @@
     if (m2 && !m1) {
       var subj2 = m2[1].trim();
       var pred2 = m2[2].trim().replace(/[.,!?]$/, '');
-      if (!_isFiller(subj2) && !_isSensitive(pred2) && pred2.length >= 5 && subj2.length >= 2) {
+      // Reject single common words (question/filler words) as subjects
+      if (!_isFiller(subj2) && !_isSensitive(pred2) && pred2.length >= 5 && subj2.length >= 2 &&
+          !_NON_SUBJECT.has(subj2.toLowerCase())) {
         results.push({
           concept:      _conceptKey(subj2),
           label:        subj2,
@@ -351,6 +368,9 @@
    *   "Actually X is Y", "Wait, X should be Y", "I meant X is Y"
    *   "No, it's X", "Change that to X"
    */
+  // Negation prefixes — a correction starting with these is a negated command, not a fact
+  var _CORRECTION_NEGATION = /^(don'?t|do not|not |never |stop |no )/i;
+
   function _extractCorrectionClaim(text) {
     var results = [];
 
@@ -358,6 +378,10 @@
     var m = text.match(corrRe);
     if (m) {
       var correction = m[1].trim().replace(/[.,!?]$/, '');
+
+      // NEGATION GUARD: "Actually, don't change X" → negated command, not a storable correction
+      if (_CORRECTION_NEGATION.test(correction)) return results;
+
       if (!_isFiller(correction) && !_isSensitive(correction) && correction.length >= 3) {
         results.push({
           concept:      _conceptKey('correction_' + correction.split(' ').slice(0, 4).join('_')),
@@ -492,13 +516,16 @@
       // Token overlap with value
       score += _tokenOverlapScore(queryTokens, item.value);
 
-      // Token overlap with concept key
-      score += _tokenOverlapScore(queryTokens, (item.concept || '').replace(/_/g, ' '));
+      // Token overlap with concept key (only non-trivial concept keys >= 4 chars)
+      var conceptText = (item.concept || '').replace(/_/g, ' ');
+      if (conceptText.length >= 4) {
+        score += _tokenOverlapScore(queryTokens, conceptText);
+      }
 
       // Relationship targets
       (item.relationships || []).forEach(function (r) {
-        score += _tokenOverlapScore(queryTokens, r.to);
-        score += _tokenOverlapScore(queryTokens, r.from);
+        if (r.to && r.to.length >= 3)   score += _tokenOverlapScore(queryTokens, r.to);
+        if (r.from && r.from.length >= 3) score += _tokenOverlapScore(queryTokens, r.from);
       });
 
       // Boost corrections to the top
@@ -512,8 +539,10 @@
     });
 
     rescored.sort(function (a, b) { return b.score - a.score; });
+    // Minimum threshold of 3: requires at least one real token match beyond base confidence.
+    // This prevents items learned from unrelated turns from bleeding into every response.
     return rescored
-      .filter(function (s) { return s.score > 0; })
+      .filter(function (s) { return s.score >= 3; })
       .slice(0, maxResults)
       .map(function (s) { return s.item; });
   }
@@ -689,11 +718,11 @@
     var items = semanticRetrieve(queryText, contextProjectName, 6);
 
     if (!items.length) {
-      // No knowledge found
-      if (intent === 'QUESTION') {
-        // If it's a question and we have nothing, return "I don't know" naturally
-        return { answered: true, response: _pickDontKnow(), items: [] };
-      }
+      // No learned knowledge found.
+      // CRITICAL: Do NOT emit "I don't know" here.
+      // The caller (response engine + shadow-reaper) checks SRKnowledge (static)
+      // separately. If we emit "don't know" now we intercept before static
+      // knowledge can answer. Return answered:false so the pipeline continues.
       return { answered: false, response: null, items: [] };
     }
 

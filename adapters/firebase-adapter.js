@@ -251,6 +251,7 @@
 
     // Internal Firestore reference (used by SRWakeName for direct doc access)
     _db: null,  // populated during init() — intentionally exposed for adapter helpers
+    getDB:             function () { return _db; },
   };
 
 })(typeof window !== 'undefined' ? window : global);
