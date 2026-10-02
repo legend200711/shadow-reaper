@@ -1,0 +1,17 @@
+{
+  "generatedAt": "2026-10-01T23:16:51.416Z",
+  "totalEntries": 113280,
+  "uniqueLemmas": 27666,
+  "byPos": {
+    "noun": 12913,
+    "adj": 6943,
+    "verb": 90404,
+    "adv": 2833,
+    "other": 187
+  },
+  "target": 111600,
+  "targetMet": true,
+  "method": "Programmatic morphological expansion of open English vocabulary",
+  "note": "Word forms only — no definitions. Open English language, no proprietary content.",
+  "license": "See DATA_SOURCES.md"
+}

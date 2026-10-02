@@ -7,6 +7,17 @@
 <meta name="description" content="Shadow Reaper — AI That Learns With You" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Shadow Reaper" />
+<meta name="mobile-web-app-capable" content="yes" />
+<!-- PWA manifest -->
+<link rel="manifest" href="/manifest.json" />
+<!-- Apple Touch Icon -->
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+<link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png" />
+<link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512.png" />
+<!-- Standard icon -->
+<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+<link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512.png" />
 <title>Shadow Reaper</title>
 <style>
 /* ── RESET ──────────────────────────────────────────────────────────────── */
@@ -561,6 +572,148 @@ body::before {
 .sr-send-btn:hover:not(:disabled) { background: var(--accent); }
 .sr-send-btn:disabled { background: var(--bg-surface); color: var(--text-muted); cursor: not-allowed; }
 
+/* ── OVERLAY PANELS (Projects, etc.) ────────────────────────────────────── */
+.sr-panel {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%;
+  height: 100dvh;
+  height: 100vh;
+  background: var(--bg-deep);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  transform: translateY(100%);
+  transition: transform 0.24s cubic-bezier(0.3,0,0.1,1);
+  overflow: hidden;
+}
+.sr-panel.open { transform: translateY(0); }
+
+.sr-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+  background: var(--bg-panel);
+}
+.sr-panel-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.sr-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+.sr-panel-body::-webkit-scrollbar { width: 3px; }
+.sr-panel-body::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
+
+/* Project cards */
+.sr-project-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.sr-project-card:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-bright);
+}
+.sr-project-card-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.sr-project-card-meta {
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+.sr-project-empty {
+  text-align: center;
+  padding: 40px 16px;
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.sr-project-empty-glyph {
+  font-size: 36px;
+  margin-bottom: 12px;
+  opacity: 0.4;
+}
+.sr-new-project-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  align-items: stretch;
+}
+.sr-new-project-input {
+  flex: 1;
+  background: var(--bg-input);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 12px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color var(--transition);
+}
+.sr-new-project-input:focus { border-color: var(--electric-edge); }
+.sr-new-project-input::placeholder { color: var(--text-dim); }
+.sr-new-project-btn {
+  padding: 9px 16px;
+  background: var(--electric-dim);
+  border: 1px solid var(--electric);
+  border-radius: 10px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  transition: background var(--transition);
+  font-family: inherit;
+  white-space: nowrap;
+}
+.sr-new-project-btn:hover { background: var(--electric); }
+
+/* Wake Name picker */
+.sr-wake-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.sr-wake-chip {
+  padding: 5px 12px;
+  border-radius: 14px;
+  border: 1.5px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all var(--transition);
+  font-family: inherit;
+}
+.sr-wake-chip:hover {
+  border-color: var(--electric);
+  color: var(--electric);
+}
+.sr-wake-chip.selected {
+  background: var(--electric-glow);
+  border-color: var(--electric);
+  color: var(--electric);
+  font-weight: 700;
+}
+
 /* ── RIGHT SETTINGS SIDEBAR ─────────────────────────────────────────────── */
 .sr-scrim {
   display: none;
@@ -857,6 +1010,84 @@ body::before {
   .sr-mobile-nav { display: flex; }
 }
 
+/* ── PWA INSTALL BUTTON ──────────────────────────────────────────────────── */
+.sr-install-btn {
+  display: none;           /* hidden until installability confirmed by JS */
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  background: none;
+  border: 1px solid rgba(30,144,255,0.45);
+  border-radius: 8px;
+  color: var(--electric);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s;
+  font-family: inherit;
+}
+.sr-install-btn:hover {
+  background: var(--electric-glow);
+  border-color: var(--electric);
+}
+.sr-install-btn.visible { display: flex; }
+
+/* ── iOS INSTALL GUIDE BANNER ────────────────────────────────────────────── */
+.sr-ios-guide {
+  display: none;
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  background: #0d1626;
+  border-top: 1px solid rgba(30,144,255,0.3);
+  padding: 14px 18px 18px;
+  z-index: 80;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+.sr-ios-guide.visible { display: block; }
+.sr-ios-guide-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+  letter-spacing: 0.03em;
+}
+.sr-ios-guide-close {
+  position: absolute;
+  top: 10px; right: 14px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 18px;
+  line-height: 1;
+  padding: 2px 6px;
+}
+.sr-ios-guide-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 5px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.sr-ios-guide-num {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  background: rgba(30,144,255,0.15);
+  border-radius: 50%;
+  text-align: center;
+  line-height: 18px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--electric);
+}
+
 </style>
 </head>
 <body>
@@ -884,6 +1115,9 @@ body::before {
 
       <!-- Settings gear (always visible) -->
       <button class="sr-icon-btn" id="srSettingsBtn" title="Settings" aria-label="Settings">&#9881;</button>
+
+      <!-- PWA Install button — shown only when browser install is available and app is not yet installed -->
+      <button class="sr-install-btn" id="srInstallBtn" aria-label="Install Shadow Reaper">&#11015; Install</button>
 
       <!-- LOGIN / SIGN UP — shown when signed out -->
       <button class="sr-auth-btn" id="srAuthBtn" aria-label="Log in or sign up">LOG IN / SIGN UP</button>
@@ -1075,6 +1309,27 @@ body::before {
               <span class="sr-toggle-track"></span>
             </label>
           </div>
+
+          <!-- Wake Name — shown when signed in -->
+          <div id="srWakeNameSection" style="display:none">
+            <div style="padding:10px 0 6px;border-top:1px solid var(--border);margin-top:6px;">
+              <div class="sr-toggle-label" style="margin-bottom:4px;">Wake Name</div>
+              <div class="sr-toggle-desc" style="margin-bottom:10px;">Say the name to activate voice</div>
+              <div class="sr-wake-picker" id="srWakePicker">
+                <!-- Populated by JS -->
+              </div>
+            </div>
+            <div class="sr-toggle-row" style="margin-top:8px;">
+              <div>
+                <div class="sr-toggle-label">Wake Listening</div>
+                <div class="sr-toggle-desc">Listen for wake name while active</div>
+              </div>
+              <label class="sr-toggle" aria-label="Wake listening">
+                <input type="checkbox" id="srToggleWakeListening" />
+                <span class="sr-toggle-track"></span>
+              </label>
+            </div>
+          </div>
         </div>
 
         <!-- Devices section — gated by auth -->
@@ -1108,7 +1363,7 @@ body::before {
         <!-- Build info -->
         <div class="sr-build-info" id="srBuildInfo">
           Shadow Reaper Standalone<br>
-          SR-V2-PUBLIC-UI-1<br>
+          SR-V2-PUBLIC-UI-2<br>
           <span id="srBuildPlatform"></span>
         </div>
 
@@ -1163,6 +1418,35 @@ body::before {
 
 </div><!-- /sr-app -->
 
+<!-- ── PROJECTS PANEL ──────────────────────────────────────────────────────── -->
+<!-- Full-screen overlay panel for Projects. Connected to existing context      -->
+<!-- engine (projectName), adaptive brain (PROJECT category), and Firestore     -->
+<!-- users/{uid}/shadowReaperLearnedContext (brainRecord entries with type=PROJECT). -->
+<div class="sr-panel" id="srProjectsPanel" role="dialog" aria-label="Your Projects">
+  <div class="sr-panel-header">
+    <span class="sr-panel-title">&#128193; Projects</span>
+    <button class="sr-icon-btn" id="srProjectsPanelClose" aria-label="Close projects">&#215;</button>
+  </div>
+  <div class="sr-panel-body" id="srProjectsPanelBody">
+    <!-- New project row -->
+    <div class="sr-new-project-row">
+      <input
+        type="text"
+        id="srNewProjectInput"
+        class="sr-new-project-input"
+        placeholder="Project name…"
+        maxlength="60"
+        aria-label="New project name"
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <button class="sr-new-project-btn" id="srNewProjectBtn">+ New Project</button>
+    </div>
+    <!-- Project list populated by JS -->
+    <div id="srProjectsList"></div>
+  </div>
+</div>
+
 <!-- ── SCRIPTS ────────────────────────────────────────────────────────────── -->
 <!-- Firebase v8 compat SDK (must load before firebase-config.js and firebase-adapter.js) -->
 <!-- Using compat SDK because firebase-adapter.js uses window.firebase.auth() / firestore() globals -->
@@ -1205,11 +1489,15 @@ body::before {
 <script src="./knowledge/knowledge-engine.js"></script>
 <script src="./knowledge/sr-knowledge-learner.js"></script>
 <script src="./translation/translation-engine.js"></script>
+<script src="./voice/sr-wake-name.js"></script>
 <script src="./voice/voice-engine.js"></script>
 
 <script src="./adapters/founder-controls.js"></script>
 <script src="./security/sr-founder-security.js"></script>
 <script src="./shadow-reaper.js"></script>
+
+<!-- Feature Registry (diagnostics + UI guard) -->
+<script src="./sr-feature-registry.js"></script>
 
 <!-- Auth UI (must load after Firebase adapter) -->
 <script src="./sr-auth-ui.js"></script>
@@ -1217,7 +1505,7 @@ body::before {
 <script>
 /* ─────────────────────────────────────────────────────────────────────────
    SHADOW REAPER — PUBLIC-FIRST UI
-   Build: SR-V2-PUBLIC-UI-1
+   Build: SR-V2-PUBLIC-UI-2
 
    SECURITY MODEL:
    - AI conversation requires NO authentication (session-only)
@@ -1236,13 +1524,15 @@ body::before {
   'use strict';
 
   // ── Module refs ──────────────────────────────────────────────────────────
-  var SR      = window.ShadowReaper;
-  var SRVoice = window.SRVoice;
-  var SRPlat  = window.SRPlatformDetector;
-  var SRCaps  = window.SRCapabilityManager;
-  var SRWeb   = window.SRWebAdapter;
-  var SRAuth  = window.SRAuthUI;
-  var SRHist  = window.SNXShadowConvHistory;
+  var SR        = window.ShadowReaper;
+  var SRVoice   = window.SRVoice;
+  var SRWakeName= window.SRWakeName;
+  var SRPlat    = window.SRPlatformDetector;
+  var SRCaps    = window.SRCapabilityManager;
+  var SRWeb     = window.SRWebAdapter;
+  var SRAuth    = window.SRAuthUI;
+  var SRHist    = window.SNXShadowConvHistory;
+  var SRFb      = window.SRFirebaseAdapter;
 
   // ── DOM refs ─────────────────────────────────────────────────────────────
   var $conv         = document.getElementById('srConversation');
@@ -1288,6 +1578,19 @@ body::before {
     // Platform info
     if (SRPlat && $buildPlat) $buildPlat.textContent = SRPlat.getRuntime();
 
+    // ── FIREBASE INIT (must happen before SRAuth.init) ─────────────────────
+    // SRFirebaseAdapter.init() calls firebase.initializeApp() which is
+    // required before firebase.auth() can be used in SRAuth.init().
+    // Without this, onAuthStateChanged is never registered and the UI
+    // is permanently locked in signed-out mode after login.
+    var SRFb = window.SRFirebaseAdapter;
+    if (SRFb && typeof SRFb.init === 'function') {
+      var fbResult = SRFb.init();
+      if (!fbResult.ok) {
+        console.warn('[SR-UI] Firebase adapter init:', fbResult.reason);
+      }
+    }
+
     // Initialize Shadow Reaper AI (no auth required)
     var ok = SR.init();
     if (!ok) {
@@ -1299,8 +1602,17 @@ body::before {
     _updateStatusChips();
     _syncToggles();
 
-    // Initialize Auth UI and listen for auth state changes
+    // ── AUTH INIT ──────────────────────────────────────────────────────────
+    // Show a brief "Connecting…" state so that on page reload, the user does
+    // not see the signed-out nav flash before Firebase resolves the session.
+    // _onAuthChange() will replace this once Firebase resolves (async).
     if (SRAuth) {
+      // Temporarily hide both auth button and profile button during the
+      // async Firebase session check so the header does not flicker.
+      $authBtn.style.display    = 'none';
+      $profileBtn.style.display = 'none';
+      _setStatus('Connecting…', 'loading');
+
       SRAuth.init();
       SRAuth.onAuthChange(_onAuthChange);
     } else {
@@ -1349,6 +1661,9 @@ body::before {
       // Load recent conversations for sidebar
       _loadRecentConversations();
 
+      // Initialize Wake Name for this user (deferred so SRWakeName.load can use uid)
+      setTimeout(function () { _initWakeName(); }, 0);
+
     } else {
       // ── SIGNED OUT ──
       $authBtn.style.display    = '';
@@ -1372,6 +1687,13 @@ body::before {
       var wrap = document.getElementById('srDeviceControlsWrap');
       if (gate) gate.style.display = '';
       if (wrap) wrap.style.display = 'none';
+
+      // Hide Wake Name section when signed out
+      var wns = document.getElementById('srWakeNameSection');
+      if (wns) wns.style.display = 'none';
+
+      // Close projects panel if open
+      _closeProjectsPanel();
 
       // Clear recent lists
       if ($recentList)   $recentList.innerHTML   = '';
@@ -1735,11 +2057,21 @@ body::before {
     }
     _setVoiceUI(true);
     SRVoice.startListening(
-      function (transcript) {
+      function (rawTranscript) {
         _setVoiceUI(false);
-        if (transcript && transcript.trim()) {
-          $input.value = transcript;
-          _send(transcript);
+        if (!rawTranscript || !rawTranscript.trim()) return;
+        // Route through Wake Name normalizer if available
+        if (SRWakeName) {
+          SRWakeName.processTranscript(rawTranscript, function (result) {
+            var cmd = result.command || rawTranscript;
+            if (cmd.trim()) {
+              $input.value = cmd;
+              _send(cmd);
+            }
+          });
+        } else {
+          $input.value = rawTranscript;
+          _send(rawTranscript);
         }
       },
       function (err) {
@@ -1764,6 +2096,9 @@ body::before {
     $settings.classList.remove('open');
     $mobileNav.classList.remove('open');
     $scrim.classList.remove('visible');
+    // Also close Projects panel if open
+    var pp = document.getElementById('srProjectsPanel');
+    if (pp) pp.classList.remove('open');
   }
 
   // ── INPUT EVENTS ──────────────────────────────────────────────────────────
@@ -1806,11 +2141,11 @@ body::before {
     _closeSidebars();
   });
 
-  // Projects — auth required
+  // Projects — open real Projects panel (connected to context engine + adaptive brain)
   function _goProjects() {
     if (!_isAuth) { _showAuthPrompt('save'); return; }
-    _appendMessage('sr', 'Projects are available in the full account experience. This feature will be expanded in a future update.');
     _closeSidebars();
+    _openProjectsPanel();
   }
   document.getElementById('srNavProjects').addEventListener('click', _goProjects);
   document.getElementById('srMobileNavProjects').addEventListener('click', _goProjects);
@@ -1947,8 +2282,344 @@ body::before {
     }
   });
 
+  // ── PROJECTS PANEL ────────────────────────────────────────────────────────
+  // Connected to: SRFirebaseAdapter (userLearnedContextCol) for PROJECT entries,
+  // SRContext.getSnapshot().projectName (current session project),
+  // SRAdaptiveBrain (SNXShadowAdaptive PROJECT category items).
+  // Projects are private per UID — all reads/writes go through firebase rules.
+  var $projectsPanel     = document.getElementById('srProjectsPanel');
+  var $projectsList      = document.getElementById('srProjectsList');
+  var $newProjectInput   = document.getElementById('srNewProjectInput');
+  var $newProjectBtn     = document.getElementById('srNewProjectBtn');
+
+  function _openProjectsPanel() {
+    if (!$projectsPanel) return;
+    $projectsPanel.classList.add('open');
+    _loadProjects();
+  }
+
+  function _closeProjectsPanel() {
+    if ($projectsPanel) $projectsPanel.classList.remove('open');
+  }
+
+  if (document.getElementById('srProjectsPanelClose')) {
+    document.getElementById('srProjectsPanelClose').addEventListener('click', _closeProjectsPanel);
+  }
+
+  // Load projects from Firestore (users/{uid}/shadowReaperLearnedContext — type=PROJECT)
+  // Supplemented by SNXShadowAdaptive in-memory cache (category=PROJECT)
+  function _loadProjects() {
+    if (!$projectsList) return;
+    $projectsList.innerHTML = '';
+
+    // Collect from in-memory adaptive cache first (fast, no DB call)
+    var memProjects = [];
+    if (window.SNXShadowAdaptive) {
+      var items = window.SNXShadowAdaptive.listAll();
+      items.forEach(function (item) {
+        if (item.category === 'PROJECT' && item.value) {
+          memProjects.push({ name: item.value, source: 'adaptive', confidence: item.confidence });
+        }
+      });
+    }
+
+    // Collect from SRAdaptiveBrain (brain records with type=PROJECT)
+    if (window.SRAdaptiveBrain) {
+      var brainItems = window.SRAdaptiveBrain.listAll ? window.SRAdaptiveBrain.listAll() : [];
+      brainItems.forEach(function (item) {
+        if ((item.type === 'PROJECT' || item.category === 'PROJECT') && item.value) {
+          var exists = memProjects.some(function (p) {
+            return p.name.toLowerCase() === item.value.toLowerCase();
+          });
+          if (!exists) {
+            memProjects.push({ name: item.value, source: 'brain', confidence: item.confidence });
+          }
+        }
+      });
+    }
+
+    // Also load from Firestore for persisted project records
+    var fa = window.SRFirebaseAdapter;
+    var col = fa ? fa.userLearnedContextCol() : null;
+    if (col) {
+      col.where('category', '==', 'PROJECT').orderBy('updatedAt', 'desc').limit(30).get()
+        .then(function (snap) {
+          var dbProjects = [];
+          if (snap && snap.docs) {
+            snap.docs.forEach(function (doc) {
+              var data = doc.data() || {};
+              if (data.value) {
+                var exists = memProjects.some(function (p) {
+                  return p.name.toLowerCase() === data.value.toLowerCase();
+                });
+                if (!exists) {
+                  dbProjects.push({ name: data.value, source: 'db', confidence: data.confidence, docId: doc.id, updatedAt: data.updatedAt });
+                }
+              }
+            });
+          }
+          _renderProjects(memProjects.concat(dbProjects));
+        })
+        .catch(function () {
+          _renderProjects(memProjects);
+        });
+    } else {
+      _renderProjects(memProjects);
+    }
+  }
+
+  function _renderProjects(projects) {
+    if (!$projectsList) return;
+    $projectsList.innerHTML = '';
+
+    if (!projects.length) {
+      var emptyDiv = document.createElement('div');
+      emptyDiv.className = 'sr-project-empty';
+      var glyph = document.createElement('div');
+      glyph.className = 'sr-project-empty-glyph';
+      glyph.textContent = '\uD83D\uDCC1';
+      var msg = document.createElement('div');
+      msg.textContent = 'No projects yet.\nTell Shadow Reaper about a project — say "my project is called NightGlass" and it will be remembered here.';
+      emptyDiv.appendChild(glyph);
+      emptyDiv.appendChild(msg);
+      $projectsList.appendChild(emptyDiv);
+      return;
+    }
+
+    projects.forEach(function (proj) {
+      var card = document.createElement('div');
+      card.className = 'sr-project-card';
+
+      var nameEl = document.createElement('div');
+      nameEl.className = 'sr-project-card-name';
+      nameEl.textContent = proj.name;
+
+      var metaEl = document.createElement('div');
+      metaEl.className = 'sr-project-card-meta';
+      var confLabel = proj.confidence ? ' · ' + proj.confidence : '';
+      metaEl.textContent = (proj.updatedAt ? proj.updatedAt.slice(0, 10) + confLabel : confLabel || 'Project from conversations');
+
+      card.appendChild(nameEl);
+      card.appendChild(metaEl);
+
+      // Clicking a project card opens it in Shadow Reaper
+      card.addEventListener('click', function () {
+        _closeProjectsPanel();
+        var msg = 'Open ' + proj.name;
+        _send(msg);
+      });
+
+      $projectsList.appendChild(card);
+    });
+  }
+
+  // New project button — creates project via Shadow Reaper brain
+  if ($newProjectBtn && $newProjectInput) {
+    $newProjectBtn.addEventListener('click', function () {
+      var name = ($newProjectInput.value || '').trim();
+      if (!name) return;
+      $newProjectInput.value = '';
+      _closeProjectsPanel();
+      // Send as a natural language command — goes through the full SR pipeline
+      _send('My project is called ' + name);
+    });
+    $newProjectInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        $newProjectBtn.click();
+      }
+    });
+  }
+
+  // ── WAKE NAME SECTION ─────────────────────────────────────────────────────
+  // Connected to: SRWakeName (voice/sr-wake-name.js)
+  // Shown only when signed in. Preference saved per UID to Firestore.
+  var $wakeNameSection  = document.getElementById('srWakeNameSection');
+  var $wakePicker       = document.getElementById('srWakePicker');
+  var $tWakeListening   = document.getElementById('srToggleWakeListening');
+
+  function _initWakeName() {
+    if (!SRWakeName || !$wakePicker) return;
+
+    // Load preferences for the current user
+    SRWakeName.load(function (err, prefs) {
+      _renderWakePicker(prefs ? prefs.wakeName : SRWakeName.getWakeName());
+      if ($tWakeListening) {
+        $tWakeListening.checked = prefs ? prefs.wakeListening : SRWakeName.isWakeListening();
+      }
+    });
+
+    // Show the Wake Name section
+    if ($wakeNameSection) $wakeNameSection.style.display = '';
+  }
+
+  function _renderWakePicker(selectedName) {
+    if (!SRWakeName || !$wakePicker) return;
+    $wakePicker.innerHTML = '';
+    SRWakeName.getWakeNames().forEach(function (name) {
+      var btn = document.createElement('button');
+      btn.className = 'sr-wake-chip' + (name === selectedName ? ' selected' : '');
+      btn.textContent = name;
+      btn.setAttribute('type', 'button');
+      btn.addEventListener('click', function () {
+        SRWakeName.setWakeName(name, function () {
+          _renderWakePicker(name);
+        });
+      });
+      $wakePicker.appendChild(btn);
+    });
+  }
+
+  if ($tWakeListening) {
+    $tWakeListening.addEventListener('change', function () {
+      if (SRWakeName) {
+        SRWakeName.setWakeListening(this.checked, function () {});
+      }
+    });
+  }
+
   // ── START ─────────────────────────────────────────────────────────────────
   boot();
+
+})();
+</script>
+
+<!-- ── iOS Add-to-Home-Screen guide panel ─────────────────────────────────── -->
+<!-- Shown only on iOS Safari when app is not already installed as a PWA       -->
+<div class="sr-ios-guide" id="srIosGuide" role="dialog" aria-label="Install Shadow Reaper on iPhone or iPad">
+  <button class="sr-ios-guide-close" id="srIosGuideClose" aria-label="Dismiss">&#215;</button>
+  <div class="sr-ios-guide-title">Install Shadow Reaper</div>
+  <div class="sr-ios-guide-step">
+    <div class="sr-ios-guide-num">1</div>
+    <div>Tap the <strong>Share</strong> button &#9633;&#8593; in Safari's toolbar</div>
+  </div>
+  <div class="sr-ios-guide-step">
+    <div class="sr-ios-guide-num">2</div>
+    <div>Scroll down and tap <strong>"Add to Home Screen"</strong></div>
+  </div>
+  <div class="sr-ios-guide-step">
+    <div class="sr-ios-guide-num">3</div>
+    <div>Tap <strong>Add</strong> — Shadow Reaper opens as an app</div>
+  </div>
+</div>
+
+<!-- ── PWA: Service Worker + Install Prompt ──────────────────────────────── -->
+<script>
+/* ─────────────────────────────────────────────────────────────────────────────
+   Shadow Reaper PWA — Service Worker Registration + Install Prompt
+   Build: SR-PWA-1
+
+   INSTALL STRATEGY:
+   - Captures the beforeinstallprompt event (Chrome/Edge/Android).
+   - Shows a subtle "Install" button ONLY when the browser signals readiness.
+   - Never shows the button if the app is already running in standalone mode.
+   - iOS Safari: shows step-by-step Add-to-Home-Screen instructions when the
+     user taps Install (no browser prompt available on iOS).
+   - The button is hidden if the app is already installed (standalone display).
+
+   SERVICE WORKER STRATEGY:
+   - Safe no-skipWaiting registration — no forced reloads.
+   - Updates apply when all tabs are closed (standard browser behavior).
+   - Prevents stale-HTML trap via network-first on index.html.
+─────────────────────────────────────────────────────────────────────────────── */
+(function () {
+  'use strict';
+
+  // ── Detection helpers ──────────────────────────────────────────────────────
+  var _isStandalone = (
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.navigator.standalone === true  // iOS Safari
+  );
+
+  var _isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+               (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  var _isIOSSafari = _isIOS && /safari/i.test(navigator.userAgent) &&
+                    !/crios|fxios|opios/i.test(navigator.userAgent);
+
+  // ── DOM refs ───────────────────────────────────────────────────────────────
+  var $installBtn  = document.getElementById('srInstallBtn');
+  var $iosGuide    = document.getElementById('srIosGuide');
+  var $iosClose    = document.getElementById('srIosGuideClose');
+
+  // ── PWA install event capture ─────────────────────────────────────────────
+  var _deferredPrompt = null;
+
+  // If already running in standalone/installed mode, never show install UI
+  if (_isStandalone) {
+    // Installed — nothing to do
+  } else if (_isIOSSafari) {
+    // iOS Safari: real browser prompt is not available.
+    // Show Install button that triggers the manual guide instead.
+    if ($installBtn) {
+      $installBtn.classList.add('visible');
+      $installBtn.addEventListener('click', function () {
+        if ($iosGuide) $iosGuide.classList.add('visible');
+      });
+    }
+    if ($iosClose) {
+      $iosClose.addEventListener('click', function () {
+        if ($iosGuide) $iosGuide.classList.remove('visible');
+      });
+    }
+  } else {
+    // Chrome / Edge / Samsung Internet / other Chromium: real install prompt
+    window.addEventListener('beforeinstallprompt', function (e) {
+      // Prevent the mini-infobar from appearing automatically
+      e.preventDefault();
+      _deferredPrompt = e;
+
+      // Reveal the install button now that we know installation is possible
+      if ($installBtn) $installBtn.classList.add('visible');
+    });
+
+    // Handle the install button click — trigger the REAL browser prompt
+    if ($installBtn) {
+      $installBtn.addEventListener('click', function () {
+        if (!_deferredPrompt) return;
+        _deferredPrompt.prompt();
+        _deferredPrompt.userChoice.then(function (choice) {
+          // Regardless of outcome, hide the button — the event is consumed
+          $installBtn.classList.remove('visible');
+          _deferredPrompt = null;
+        });
+      });
+    }
+
+    // App was installed — hide the button if it was visible
+    window.addEventListener('appinstalled', function () {
+      if ($installBtn) $installBtn.classList.remove('visible');
+      _deferredPrompt = null;
+      console.log('[SR-PWA] Shadow Reaper installed successfully.');
+    });
+  }
+
+  // ── Service Worker Registration ────────────────────────────────────────────
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('/sw.js', { scope: '/' })
+        .then(function (reg) {
+          console.log('[SR-SW] Registered, scope:', reg.scope);
+
+          // Listen for SW updates — do NOT force-reload.
+          // Log when a new version is waiting so a developer can observe.
+          reg.addEventListener('updatefound', function () {
+            var newWorker = reg.installing;
+            if (!newWorker) return;
+            newWorker.addEventListener('statechange', function () {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                // A new SW is waiting. It will activate when tabs are closed.
+                // We do NOT force skipWaiting or location.reload() here to avoid
+                // loops and interrupted conversations.
+                console.log('[SR-SW] Update available — will activate after tabs close.');
+              }
+            });
+          });
+        })
+        .catch(function (err) {
+          console.warn('[SR-SW] Registration failed:', err);
+        });
+    });
+  }
 
 })();
 </script>

@@ -124,6 +124,9 @@
     if (!global.SRFounderControls) {
       console.warn('[ShadowReaper V2] SRFounderControls not loaded — founder controls unavailable.');
     }
+    if (!global.SRLanguage) {
+      console.warn('[ShadowReaper V2] SRLanguage not loaded — running without language foundation (degraded mode).');
+    }
     return missing;
   }
 
@@ -135,6 +138,7 @@
   function _learner()    { return global.SRKnowledgeLearner || null; }
   function _translation(){ return global.SRTranslation    || null; }
   function _founder()    { return global.SRFounderControls|| null; }
+  function _langFdn()    { return global.SRLanguage       || null; }
 
   // ─── Founder capability gate ─────────────────────────────────────────────────
   // Returns true if the capability is globally enabled (or founder controls not loaded).
@@ -260,8 +264,47 @@
   // ─── Normal pipeline with composeAsync ───────────────────────────────────────
 
   function _runNormalPipeline(message, p, callback) {
-    var understood = global.SRUnderstanding.understand(message);
-    var context    = global.SRContext.update(understood, message);
+    // ── LANGUAGE FOUNDATION ANALYSIS ──────────────────────────────────────────
+    // Run SRLanguage.analyze() if available to enrich understanding.
+    // Falls back to SRUnderstanding if language foundation not loaded.
+    var langAnalysis  = null;
+    var langFdn       = _langFdn();
+    var contextSnapshot = global.SRContext ? global.SRContext.getSnapshot() : {};
+
+    if (langFdn) {
+      try {
+        langAnalysis = langFdn.analyze(message, contextSnapshot);
+      } catch (_) {}
+    }
+
+    // SRUnderstanding is always called (it drives the response engine).
+    // SRLanguage enriches it — does NOT replace it.
+    var understood = global.SRUnderstanding.understand(
+      // If language foundation expanded abbreviations, use the expanded text
+      (langAnalysis && langAnalysis.expanded !== message) ? langAnalysis.expanded : message
+    );
+
+    // Enrich understood with language analysis where available
+    if (langAnalysis) {
+      // Prefer semantic intent if confidence is higher
+      if (langAnalysis.intent && langAnalysis.intent !== 'UNKNOWN' &&
+          langAnalysis.intentConf > 0.8 && understood.intent === 'UNKNOWN') {
+        understood.intent = langAnalysis.intent;
+      }
+      // Merge entities
+      if (langAnalysis.entities) {
+        understood.entities = Object.assign({}, langAnalysis.entities, understood.entities);
+      }
+      // Attach language analysis for downstream use
+      understood._langAnalysis = langAnalysis;
+    }
+
+    var context = global.SRContext.update(understood, message);
+
+    // Update language foundation context tracker (fire-and-forget)
+    if (langFdn) {
+      try { langFdn.initializeContextTurn('user', message, langAnalysis); } catch (_) {}
+    }
 
     global.SRConversation.addTurn('user', message, understood.intent, understood.tone);
 
@@ -455,6 +498,11 @@
       global.SRConversation.reset();
       if (global.SRPersistence) {
         global.SRPersistence.newConversation();
+      }
+      // Reset language foundation context on new conversation
+      var langFdn = _langFdn();
+      if (langFdn) {
+        try { langFdn.resetContext(); } catch (_) {}
       }
       _lastResponseSource = 'NONE';
       console.log('[ShadowReaper V2] New conversation started.');
