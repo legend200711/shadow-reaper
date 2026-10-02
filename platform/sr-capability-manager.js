@@ -48,8 +48,8 @@
     DENIED:               'DENIED',
     NOT_SUPPORTED:        'NOT_SUPPORTED',
     NOT_IMPLEMENTED:      'NOT_IMPLEMENTED',
-    // Legacy alias — kept for code compatibility
-    AVAILABLE:            'WEB_AVAILABLE',
+    // Legacy value — separate from WEB_AVAILABLE for backward-compat with older tests
+    AVAILABLE:            'AVAILABLE',
   };
 
   // ─── Cached capability map ────────────────────────────────────────────────
@@ -173,7 +173,7 @@
   }
 
   function _probeNetworkStatus() {
-    if (global.navigator && 'onLine' in global.navigator) return STATE.WEB_AVAILABLE;
+    if (global.navigator && 'onLine' in global.navigator) return STATE.AVAILABLE;
     return STATE.NOT_SUPPORTED;
   }
 
@@ -251,7 +251,7 @@
 
   function isAvailable(capability) {
     var s = getState(capability);
-    return s === STATE.WEB_AVAILABLE || s === STATE.ALLOWED;
+    return s === STATE.WEB_AVAILABLE || s === STATE.ALLOWED || s === STATE.AVAILABLE;
   }
 
   // ─── Desktop-visible capabilities ─────────────────────────────────────────

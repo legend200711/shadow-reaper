@@ -2,7 +2,7 @@
  * shadow-reaper-v2/shadow-reaper.js
  * Shadow Reaper V2 — Main Entry Point
  *
- * Build: SR-V2-STAGE4
+ * Build: SR-V2-STAGE5
  *
  * Exposes: window.ShadowReaper
  *
@@ -301,7 +301,9 @@
 
     var context = global.SRContext.update(understood, message);
 
-    // Update language foundation context tracker (fire-and-forget)
+    // Feed this user turn into the language foundation context resolver.
+    // This is REQUIRED for multi-turn pronoun/reference resolution — the
+    // SRContextResolver builds its entity memory from these turn records.
     if (langFdn) {
       try { langFdn.initializeContextTurn('user', message, langAnalysis); } catch (_) {}
     }
@@ -310,7 +312,7 @@
 
     // Gather context for model injection
     var adaptiveSnippets = p ? p.getAdaptiveSnippets(message, context) : [];
-    var recentTurns      = global.SRConversation.getRecentTurns(6);
+    var recentTurns      = global.SRConversation.getRecentTurns(8);
 
     // Knowledge retrieval (Checkpoint E) — only inject if relevant
     var knowledgeSnippet = null;
@@ -322,11 +324,49 @@
       }
     }
 
+    // ── PERSONAL MEMORY RETRIEVAL ─────────────────────────────────────────────
+    // Retrieve relevant personal memory snippets when the user is authenticated.
+    // Only for general conversation and questions — never for meta/system commands.
+    // Bounded to 3 items maximum; never blocks.
+    var memorySnippets = [];
+    var mem = global.SNXShadowMemory;
+    if (mem && _capEnabled('memoryEnabled') !== false &&
+        (understood.intent === 'QUESTION' || understood.intent === 'GENERAL_CONVERSATION' ||
+         understood.intent === 'FOLLOW_UP' || understood.intent === 'PROJECT_STATEMENT')) {
+      try {
+        mem.recall(message, function (r) {
+          if (r && r.success && r.memories && r.memories.length) {
+            memorySnippets = r.memories.slice(0, 3).map(function (m) {
+              return { content: m.content || m.text || m };
+            });
+          }
+        });
+      } catch (_) {}
+    }
+
+    // ── REFERENCE RESOLUTION ──────────────────────────────────────────────────
+    // Pull the resolved reference (if any) from langAnalysis so it can be fed
+    // into the model context. This lets the model know what "it" refers to.
+    var resolvedRef = null;
+    if (langAnalysis && langAnalysis.referenceResolution && langAnalysis.referenceResolution.resolved) {
+      resolvedRef = langAnalysis.referenceResolution.subject || null;
+    } else if (context.recentSubjects && context.recentSubjects.length > 0 &&
+               /\b(it|that|this|they|them|those|these)\b/i.test(message)) {
+      // Fallback: use SRContext's recentSubjects if langAnalysis resolver couldn't help
+      resolvedRef = context.recentSubjects[0];
+    }
+
     var composeOpts = {
       recentTurns:      recentTurns,
       adaptiveSnippets: adaptiveSnippets,
-      memorySnippets:   [],
+      memorySnippets:   memorySnippets,
       knowledgeSnippet: knowledgeSnippet,
+      // Language foundation enrichment passed through to the model context builder
+      langAnalysis:     langAnalysis,
+      resolvedRef:      resolvedRef,
+      negation:         langAnalysis ? langAnalysis.negation : null,
+      concepts:         langAnalysis ? langAnalysis.concepts : [],
+      unknownWords:     langAnalysis ? langAnalysis.unknownWords : [],
     };
 
     global.SRResponse.composeAsync(understood, context, composeOpts, function (response, source) {
@@ -348,6 +388,13 @@
       }
 
       global.SRConversation.addTurn('assistant', response, null, null);
+
+      // Feed the assistant response back into the language foundation context resolver
+      // so future pronoun resolution has access to both sides of the conversation.
+      if (langFdn) {
+        try { langFdn.initializeContextTurn('assistant', response, null); } catch (_) {}
+      }
+
       if (p) {
         p.saveTurn('user', message);
         p.saveTurn('assistant', response);
@@ -398,7 +445,7 @@
   var ShadowReaper = {
 
     _initialized: false,
-    _version: 'SR-V2-STAGE4',
+    _version: 'SR-V2-STAGE5',
 
     /**
      * Initialize Shadow Reaper V2.
@@ -598,7 +645,7 @@
         adaptiveItemCount: persistStatus ? persistStatus.adaptiveItemCount : 0,
         brainConceptCount: persistStatus ? persistStatus.brainConceptCount : 0,
 
-        // New in Stage 4-LEARN
+        // Stage 4-LEARN+ connected modules
         knowledgeConnected:         !!global.SRKnowledge,
         knowledgeLearnerConnected:  !!global.SRKnowledgeLearner,
         translationConnected:  !!global.SRTranslation,
@@ -611,6 +658,32 @@
 
         // Voice status
         voice: voiceStatus,
+
+        // Stage 5: Language Foundation status + response diagnostics
+        languageFoundation: (function () {
+          var lf = global.SRLanguage;
+          if (!lf) return { loaded: false };
+          try {
+            var ls = lf.getLanguageStatus();
+            return {
+              loaded:          true,
+              build:           ls.build,
+              vocabularyCount: ls.vocabulary ? ls.vocabulary.totalEntries : 0,
+              vocabLoaded:     ls.vocabulary ? ls.vocabulary.indexLoaded : false,
+              subsystems:      ls.subsystems,
+            };
+          } catch (_) {
+            return { loaded: true, error: 'status_unavailable' };
+          }
+        })(),
+        responseEngine: {
+          lastSource:      _lastResponseSource,
+          modelState:      modelStatus.state,
+          modelId:         modelStatus.modelId,
+          deterministic:   _lastResponseSource === 'DETERMINISTIC',
+          generative:      _lastResponseSource === 'LOCAL_MODEL',
+          conversationContextTurns: _initialized ? global.SRConversation.getTurnCount() : 0,
+        },
       };
     },
 

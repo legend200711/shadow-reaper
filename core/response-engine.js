@@ -2,7 +2,7 @@
  * shadow-reaper-v2/core/response-engine.js
  * Shadow Reaper V2 — Response Engine
  *
- * Build: SR-V2-STAGE4-LEARN
+ * Build: SR-V2-STAGE5
  *
  * Responsibilities:
  *  - Compose contextually-aware responses from intent, tone, context, recent turns
@@ -704,28 +704,52 @@
 
     // ── Everything else → local model ─────────────────────────────────────────
     var localModel = global.SRLocalModel;
-    if (!localModel || localModel.getStatus().state !== 'READY') {
-      // Model not ready — fall back to deterministic compose() so the user always
-      // gets a natural, conversational response.
-      var detResponse = compose(understood, context);
-      callback(detResponse, 'DETERMINISTIC');
+
+    // Model not loaded at all
+    if (!localModel) {
+      var diag = 'LOCAL MODEL ERROR: SRLocalModel not loaded. Cannot generate response.';
+      callback(diag, 'ERROR');
       return;
     }
 
-    // Build opts for the model call
+    var modelStatus = localModel.getStatus();
+
+    // Model in FAILED state — surface diagnostic, do NOT silently fallback
+    if (modelStatus.state === 'FAILED') {
+      var diagInfo = (localModel.getDiagnostics && localModel.getDiagnostics()) || {};
+      var errCode  = diagInfo.errorCode || modelStatus.lastError || 'UNKNOWN';
+      var failMsg  = 'LOCAL MODEL ERROR: Model in FAILED state [' + errCode + ']. Cannot generate response.';
+      callback(failMsg, 'ERROR');
+      return;
+    }
+
+    // Model exists but not yet READY (loading, verifying, uninitialized)
+    if (modelStatus.state !== 'READY') {
+      var notReadyMsg = 'LOCAL MODEL ERROR: Model not ready (state=' + modelStatus.state + '). Cannot generate response.';
+      callback(notReadyMsg, 'ERROR');
+      return;
+    }
+
+    // Build opts for the model call — forward all enriched context from langAnalysis
     var genOpts = {
       projectName:      context.projectName,
       currentTopic:     context.currentTopic,
       memorySnippets:   opts.memorySnippets   || [],
       adaptiveSnippets: adaptiveSnippets,
       recentTurns:      opts.recentTurns      || [],
+      // Language analysis enrichments — forwarded from _runNormalPipeline
+      resolvedRef:      opts.resolvedRef      || null,
+      negation:         opts.negation         || null,
+      concepts:         opts.concepts         || [],
+      unknownWords:     opts.unknownWords      || [],
     };
 
     localModel.generate(raw, genOpts, function (err, text) {
       if (err || !text || text.trim().length === 0) {
-        // Model inference failed — fall back to deterministic.
-        var detFallback = compose(understood, context);
-        callback(detFallback, 'DETERMINISTIC');
+        // Model inference failed — surface as ERROR with diagnostic message
+        var inferErr = err ? (err.message || String(err)) : 'EMPTY_RESPONSE';
+        var inferMsg = 'LOCAL MODEL ERROR: Inference failed [' + inferErr + ']. Cannot generate response.';
+        callback(inferMsg, 'ERROR');
         return;
       }
       callback(text.trim(), 'LOCAL_MODEL');

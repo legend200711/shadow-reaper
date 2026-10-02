@@ -919,7 +919,7 @@ test('[11-A] index.html has PWA-ready meta tags', function () {
 
 test('[11-B] Shadow Reaper has a version/build identifier', function () {
   var src = fs.readFileSync(path.join(ROOT, 'shadow-reaper.js'), 'utf8');
-  assert(src.indexOf('SR-V2-STAGE4') !== -1 || src.indexOf('_version') !== -1,
+  assert(src.indexOf('SR-V2-STAGE5') !== -1 || src.indexOf('SR-V2-STAGE4') !== -1 || src.indexOf('_version') !== -1,
     'Must have version identifier');
   // STATIC PASS
 });

@@ -88,3 +88,4 @@ db-export/
 .secrets/
 secrets.json
 local-credentials.json
+firebase/sr-env-local.js

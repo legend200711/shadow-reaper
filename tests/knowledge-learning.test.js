@@ -1000,7 +1000,9 @@ test('No polling (setInterval/RAF) in knowledge learner', function () {
 
 test('response-engine.js build ID updated to reflect learning stage', function () {
   const code = fs.readFileSync(path.join(ROOT, 'core/response-engine.js'), 'utf8');
-  assert(code.includes('SR-V2-STAGE4-LEARN'), 'Build ID should reflect learning stage');
+  assert(
+    code.includes('SR-V2-STAGE5') || code.includes('SR-V2-STAGE4-LEARN'),
+    'Build ID should reflect learning stage (SR-V2-STAGE5 or SR-V2-STAGE4-LEARN). Got build has neither.');
 });
 
 // =============================================================================

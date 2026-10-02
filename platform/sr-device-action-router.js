@@ -343,15 +343,19 @@
     var srBridge = _cap('ShadowReaperBridge');
     if (_isNative() && srBridge) {
       srBridge.getNetworkStatus()
-        .then(function (r) { callback({ ok: true, connected: r.connected, connectionType: r.connectionType }); })
+        .then(function (r) {
+          callback({ ok: true, online: r.connected, connected: r.connected, connectionType: r.connectionType });
+        })
         .catch(function () {
           // Fallback
-          callback({ ok: true, connected: global.navigator ? global.navigator.onLine : true });
+          var isOnline = global.navigator ? global.navigator.onLine : true;
+          callback({ ok: true, online: isOnline, connected: isOnline });
         });
       return;
     }
     if (!global.navigator) { callback({ ok: false, reason: 'navigator_unavailable' }); return; }
-    callback({ ok: true, connected: global.navigator.onLine, connectionType: 'unknown' });
+    var isOnline = global.navigator.onLine;
+    callback({ ok: true, online: isOnline, connected: isOnline, connectionType: 'unknown' });
   }
 
   function _execOpenFilePicker(params, callback) {

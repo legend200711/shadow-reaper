@@ -1261,7 +1261,7 @@ body::before {
 
       <div style="padding:12px;font-size:9px;color:var(--text-muted);text-align:center;border-top:1px solid var(--border);line-height:1.9;">
         Shadow Reaper Standalone<br>
-        SR-V2-PUBLIC-UI-1
+        SR-V2-STANDALONE-UI-1
       </div>
     </nav>
 
@@ -1519,12 +1519,16 @@ body::before {
           <button class="sr-action-btn danger" id="srClearMemoryBtn" style="display:none">&#8998; Clear All Memories</button>
           <!-- Sign out (signed-in only) -->
           <button class="sr-action-btn" id="srSignOutBtn" style="display:none">&#8594; Sign Out</button>
+          <!-- Native diagnostics — safe, no secrets; for physical device verification -->
+          <button class="sr-action-btn" id="srNativeDiagBtn" style="margin-top:6px;font-size:10px;opacity:0.6;" type="button">
+            &#9881; Native Bridge Diagnostics
+          </button>
         </div>
 
         <!-- Build info -->
         <div class="sr-build-info" id="srBuildInfo">
           Shadow Reaper Standalone<br>
-          SR-V2-PUBLIC-UI-2<br>
+          SR-V2-STANDALONE-UI-3<br>
           <span id="srBuildPlatform"></span>
         </div>
 
@@ -1615,6 +1619,12 @@ body::before {
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
 
+<!-- Environment credential loader — must run BEFORE firebase-config.js -->
+<!-- In production: window.__SR_RUNTIME_ENV is set by deploy pipeline before this -->
+<!-- In local dev:  firebase/sr-env-local.js (gitignored) sets window.SR_ENV_LOCAL -->
+<!-- sr-env-local.js is gitignored and MUST load before sr-env-loader.js -->
+<script src="./firebase/sr-env-local.js"></script>
+<script src="./firebase/sr-env-loader.js"></script>
 <script src="./firebase/firebase-config.js"></script>
 <script src="./config/environment.js"></script>
 <script src="./security/security-policy.js"></script>
@@ -1629,6 +1639,8 @@ body::before {
 <script src="./platform/adapters/sr-web-adapter.js"></script>
 <script src="./platform/adapters/sr-android-adapter.js"></script>
 <script src="./platform/adapters/sr-ios-adapter.js"></script>
+<!-- Native diagnostics — safe, no secrets; used for physical device testing -->
+<script src="./platform/sr-native-diagnostics.js"></script>
 
 <script src="./snx-shadow-conv-history.js"></script>
 <script src="./snx-shadow-memory.js"></script>
@@ -1669,7 +1681,7 @@ body::before {
 <script>
 /* ─────────────────────────────────────────────────────────────────────────
    SHADOW REAPER — PUBLIC-FIRST UI
-   Build: SR-V2-PUBLIC-UI-2
+   Build: SR-V2-STANDALONE-UI-2
 
    SECURITY MODEL:
    - AI conversation requires NO authentication (session-only)
@@ -2694,6 +2706,20 @@ body::before {
   document.getElementById('srSignOutBtn').addEventListener('click', _doSignOut);
   document.getElementById('srMobileNavSignOut').addEventListener('click', _doSignOut);
 
+  // ── NATIVE DIAGNOSTICS BUTTON ─────────────────────────────────────────────
+  (function () {
+    var btn = document.getElementById('srNativeDiagBtn');
+    if (btn) {
+      btn.addEventListener('click', function () {
+        if (window.SRNativeDiagnostics) {
+          window.SRNativeDiagnostics.show();
+        } else {
+          alert('SRNativeDiagnostics module not loaded.');
+        }
+      });
+    }
+  })();
+
   // ── TOGGLE HANDLERS ────────────────────────────────────────────────────────
   if ($tHistory)  $tHistory.addEventListener('change',  function () { SR.setHistoryEnabled(this.checked);  _updateStatusChips(); });
   if ($tMemory)   $tMemory.addEventListener('change',   function () { SR.setMemoryEnabled(this.checked);   _updateStatusChips(); });
@@ -3104,7 +3130,7 @@ body::before {
   // ── Service Worker Registration ────────────────────────────────────────────
   // Registered at the correct GitHub Pages subdirectory path and scope.
   // A wrong scope (e.g. scope '/') would cause this SW to control the entire
-  // domain, potentially conflicting with other PWAs (e.g. Shadow Nexus Social).
+  // domain, potentially conflicting with other installed PWAs on the same origin.
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () {
       navigator.serviceWorker.register('/shadow-reaper/sw.js', { scope: '/shadow-reaper/' })

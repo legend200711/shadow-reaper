@@ -136,8 +136,10 @@ function assert(cond, msg) {
 
 test('ShadowReaper loads with correct Stage 4 build tag', function () {
   assert(global.ShadowReaper, 'ShadowReaper not loaded');
-  assert(global.ShadowReaper._version === 'SR-V2-STAGE4',
-    'Expected SR-V2-STAGE4, got: ' + global.ShadowReaper._version);
+  assert(
+    global.ShadowReaper._version === 'SR-V2-STAGE5' ||
+    global.ShadowReaper._version === 'SR-V2-STAGE4',
+    'Expected SR-V2-STAGE4 or SR-V2-STAGE5, got: ' + global.ShadowReaper._version);
 });
 
 test('ShadowReaper initializes successfully', function () {

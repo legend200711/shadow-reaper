@@ -2,7 +2,7 @@
  * shadow-reaper-standalone/platform/sr-platform-detector.js
  * Shadow Reaper Standalone — Platform Detector
  *
- * Build: SR-STANDALONE-PLATFORM-2
+ * Build: SR-STANDALONE-PLATFORM-3
  *
  * Exposes: window.SRPlatformDetector
  *
@@ -19,10 +19,13 @@
  *   IOS_NATIVE     — Inside a real native iOS container (Capacitor)
  *
  * CRITICAL RULES:
- *   - ANDROID_NATIVE requires window.Capacitor.isNative === true.
+ *   - ANDROID_NATIVE requires Capacitor.isNativePlatform() === true.
+ *     This is the authoritative Capacitor 3+ / 8.x API.
+ *     Capacitor.isNative (boolean property) is a legacy alias that may not
+ *     be set during early bridge initialization — do NOT rely on it.
  *     Android Chrome is NOT ANDROID_NATIVE.
  *     An installed Android PWA is NOT ANDROID_NATIVE.
- *   - IOS_NATIVE requires window.Capacitor.isNative === true.
+ *   - IOS_NATIVE requires Capacitor.isNativePlatform() === true.
  *     iPhone Safari is NOT IOS_NATIVE.
  *     An installed iPhone PWA is NOT IOS_NATIVE.
  *   - PWA detection uses matchMedia('(display-mode: standalone)') or
@@ -40,7 +43,7 @@
 
 (function (global) {
 
-  var BUILD_ID = 'SR-STANDALONE-PLATFORM-2';
+  var BUILD_ID = 'SR-STANDALONE-PLATFORM-3';
 
   // ─── Runtime categories ───────────────────────────────────────────────────
   var RUNTIME = {
@@ -52,6 +55,27 @@
     IOS_NATIVE:     'IOS_NATIVE',
   };
 
+  // ─── Authoritative Capacitor native detection ─────────────────────────────
+  // Uses isNativePlatform() — the canonical Capacitor 3+ / 8.x API.
+  // Capacitor.isNative (boolean property) is a legacy alias that may be
+  // undefined during early WebView initialization in Capacitor 8.x. Never
+  // rely on the property alone; always call the function first.
+  function _isCapacitorNative() {
+    return !!(
+      global.Capacitor &&
+      typeof global.Capacitor.isNativePlatform === 'function' &&
+      global.Capacitor.isNativePlatform()
+    );
+  }
+
+  // Returns lowercase platform string from Capacitor ("android", "ios", "web").
+  function _capacitorPlatform() {
+    if (global.Capacitor && typeof global.Capacitor.getPlatform === 'function') {
+      return (global.Capacitor.getPlatform() || '').toLowerCase();
+    }
+    return '';
+  }
+
   // ─── Detection ────────────────────────────────────────────────────────────
   function _detect() {
     var w   = global;
@@ -59,20 +83,15 @@
     var ua  = (nav.userAgent || '').toLowerCase();
 
     // ── Step 1: Native Capacitor app detection (capability-first, MUST BE FIRST) ──
-    // Only trust window.Capacitor.isNative — never infer from UA alone.
-    // Android Chrome / iOS Safari / installed PWA must NOT match here.
-    var isCapacitorNative = !!(w.Capacitor && w.Capacitor.isNative);
-
-    if (isCapacitorNative) {
-      var platform = '';
-      if (w.Capacitor && w.Capacitor.getPlatform) {
-        platform = (w.Capacitor.getPlatform() || '').toLowerCase();
-      }
+    // Only Capacitor.isNativePlatform() is authoritative. UA alone is never
+    // sufficient to classify as ANDROID_NATIVE or IOS_NATIVE.
+    if (_isCapacitorNative()) {
+      var platform = _capacitorPlatform();
       if (platform === 'android') return RUNTIME.ANDROID_NATIVE;
       if (platform === 'ios')     return RUNTIME.IOS_NATIVE;
-      // Unknown native — use UA as secondary tiebreaker only when Capacitor.isNative confirmed
-      if (/android/.test(ua))              return RUNTIME.ANDROID_NATIVE;
-      if (/iphone|ipad|ipod/.test(ua))     return RUNTIME.IOS_NATIVE;
+      // Unknown native — use UA as secondary tiebreaker only after isNativePlatform() confirmed
+      if (/android/.test(ua))          return RUNTIME.ANDROID_NATIVE;
+      if (/iphone|ipad|ipod/.test(ua)) return RUNTIME.IOS_NATIVE;
       return RUNTIME.WEB_MOBILE; // Unknown native platform
     }
 
@@ -147,6 +166,12 @@
   global.SRPlatformDetector = {
     build:          BUILD_ID,
     RUNTIME:        RUNTIME,
+
+    // ── Primary detection helpers ──────────────────────────────────────────
+    // isCapacitorNative() and capacitorPlatform() are the authoritative low-level
+    // helpers. All higher-level methods (isNative, isAndroid, etc.) derive from them.
+    isCapacitorNative:  _isCapacitorNative,
+    capacitorPlatform:  _capacitorPlatform,
 
     getRuntime:     getRuntime,
     isDesktop:      isDesktop,

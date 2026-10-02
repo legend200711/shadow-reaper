@@ -3,10 +3,18 @@
  *
  * Shadow Reaper Standalone — Firebase Configuration
  *
- * ⚠️  DO NOT COMMIT REAL CREDENTIALS TO GITHUB
+ * ⚠️  CREDENTIALS ARE LOADED AT RUNTIME FROM environment or .env.local
  *
- * This is the STANDALONE Shadow Reaper Firebase project.
- * It is NOT connected to Shadow Nexus Social (horr-a08f4).
+ * This source file must NEVER contain production API keys.
+ * Production keys are injected via the deployment pipeline (Cloudflare secrets,
+ * CI environment variables, or a .env.local file excluded from version control).
+ *
+ * To run locally:
+ *   1. Copy .env.example to .env.local
+ *   2. Fill in SR_FIREBASE_API_KEY and the other variables
+ *   3. The build step or runtime loader replaces the placeholders below
+ *
+ * This is the STANDALONE Shadow Reaper Firebase project (ffr3r3223).
  */
 
 'use strict';
@@ -14,16 +22,19 @@
 /* ─────────────────────────────────────────────────────────────────────────────
    SHADOW REAPER STANDALONE — FIREBASE CONFIG
    Project: ffr3r3223
-   NOT Shadow Nexus Social (horr-a08f4)
+   Production credentials are injected at runtime — not stored here.
 ───────────────────────────────────────────────────────────────────────────────*/
 
+// Runtime credential injection: the deploy pipeline (or sr-env-loader.js)
+// replaces these placeholders with the real values before the app initialises.
+// Do NOT hardcode real API keys here.
 var SR_FIREBASE_CONFIG = {
-  apiKey:            'AIzaSyAhySATLk5cBeUO8r5cwwqCpitmWFcZYIs',
-  authDomain:        'ffr3r3223.firebaseapp.com',
-  projectId:         'ffr3r3223',
-  storageBucket:     'ffr3r3223.firebasestorage.app',
-  messagingSenderId: '410865691561',
-  appId:             '1:410865691561:web:26f031090aae583c3372b8',
+  apiKey:            (typeof SR_ENV !== 'undefined' && SR_ENV.FIREBASE_API_KEY)  || '__SR_FIREBASE_API_KEY__',
+  authDomain:        (typeof SR_ENV !== 'undefined' && SR_ENV.FIREBASE_AUTH_DOMAIN)  || 'ffr3r3223.firebaseapp.com',
+  projectId:         (typeof SR_ENV !== 'undefined' && SR_ENV.FIREBASE_PROJECT_ID)   || 'ffr3r3223',
+  storageBucket:     (typeof SR_ENV !== 'undefined' && SR_ENV.FIREBASE_STORAGE_BUCKET) || 'ffr3r3223.firebasestorage.app',
+  messagingSenderId: (typeof SR_ENV !== 'undefined' && SR_ENV.FIREBASE_MESSAGING_SENDER_ID) || '410865691561',
+  appId:             (typeof SR_ENV !== 'undefined' && SR_ENV.FIREBASE_APP_ID)      || '1:410865691561:web:26f031090aae583c3372b8',
   measurementId:     '',   // not provided — Analytics not enabled
 };
 

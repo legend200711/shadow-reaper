@@ -2,7 +2,7 @@
  * shadow-reaper-standalone/platform/adapters/sr-android-adapter.js
  * Shadow Reaper Standalone — Android Native Adapter
  *
- * Build: SR-STANDALONE-ANDROID-ADAPTER-2
+ * Build: SR-STANDALONE-ANDROID-ADAPTER-3
  *
  * Exposes: window.SRAndroidAdapter
  *
@@ -33,7 +33,7 @@
 
 (function (global) {
 
-  var BUILD_ID = 'SR-STANDALONE-ANDROID-ADAPTER-2';
+  var BUILD_ID = 'SR-STANDALONE-ANDROID-ADAPTER-3';
 
   function _platform() { return global.SRPlatformDetector   || null; }
   function _router()   { return global.SRDeviceActionRouter || null; }
@@ -192,10 +192,21 @@
   }
 
   // ─── Check native runtime and Capacitor availability ─────────────────────
+  // hasCapacitor uses isNativePlatform() — the authoritative Capacitor 8.x API.
+  // Do NOT use Capacitor.isNative (property) — it may be unset during early
+  // WebView initialization and is a legacy alias.
   function getRuntimeInfo() {
+    var plat = _platform();
     return {
       isAndroid:         _isActiveRuntime(),
-      hasCapacitor:      !!(global.Capacitor && global.Capacitor.isNative),
+      hasCapacitor:      !!(plat && typeof plat.isCapacitorNative === 'function'
+                            ? plat.isCapacitorNative()
+                            : (global.Capacitor &&
+                               typeof global.Capacitor.isNativePlatform === 'function' &&
+                               global.Capacitor.isNativePlatform())),
+      capacitorPlatform: (global.Capacitor && typeof global.Capacitor.getPlatform === 'function')
+                            ? global.Capacitor.getPlatform()
+                            : 'unknown',
       hasBridge:         !!_cap('ShadowReaperBridge'),
       hasLocalNotif:     !!_cap('LocalNotifications'),
       hasHaptics:        !!_cap('Haptics'),

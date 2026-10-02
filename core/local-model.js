@@ -572,37 +572,102 @@
   }
 
   // ─── Context builder ──────────────────────────────────────────────────────────
+  //
+  // Builds the message array for the local model. Incorporates:
+  //   - Project / topic context (from session)
+  //   - Personal memory snippets (retrieved, bounded to 3)
+  //   - Adaptive learning snippets (bounded to 3)
+  //   - Resolved pronoun reference ("it" → last known subject)
+  //   - Negation signal (e.g. "don't change the homepage")
+  //   - Key concepts from language analysis (bounded to 8)
+  //   - Named unknown entities (e.g. "NightGlass")
+  //   - Recent conversation turns (bounded to 8)
+  //
+  // CRITICAL: 113k vocabulary is NEVER injected. Only the distilled analysis
+  // of the current message is included — bounded at every step.
 
   function _buildMessages(userMessage, opts) {
     opts = opts || {};
 
     var systemParts = [SYSTEM_PROMPT];
 
+    // ── Project / topic context ──────────────────────────────────────────────
     if (opts.projectName) {
-      systemParts.push('Current project context: the user is working on "' + opts.projectName + '".');
+      systemParts.push('Current project: the user is working on "' + opts.projectName + '".');
     }
     if (opts.currentTopic) {
       systemParts.push('Current topic: "' + opts.currentTopic + '".');
     }
 
+    // ── Resolved reference ("it" / "that" / "the homepage") ──────────────────
+    // This is the most important context for multi-turn continuity.
+    // If the user said "Make it darker", resolvedRef = "homepage" (or whatever
+    // was most recently mentioned). Include it explicitly so the model knows.
+    if (opts.resolvedRef) {
+      systemParts.push('Reference context: when the user says "it", "that", or "this", ' +
+                       'they are most likely referring to: "' + opts.resolvedRef + '".');
+    }
+
+    // ── Negation signal ───────────────────────────────────────────────────────
+    // If the language analysis detected negation, signal it explicitly.
+    // "Don't change the homepage" must not be treated as "change the homepage".
+    if (opts.negation && opts.negation.negated) {
+      systemParts.push('Note: the user\'s message contains negation. ' +
+                       'Pay attention to what they do NOT want.');
+    }
+
+    // ── Key concepts (bounded to 8) ───────────────────────────────────────────
+    // Distilled from the language analysis — the 8 most semantically important
+    // content words. Helps the model understand topic continuity.
+    if (opts.concepts && opts.concepts.length) {
+      var topConcepts = opts.concepts.slice(0, 8);
+      systemParts.push('Key concepts in current message: ' + topConcepts.join(', ') + '.');
+    }
+
+    // ── Unknown named entities ────────────────────────────────────────────────
+    // Words not in vocabulary that look like proper nouns / project names.
+    // E.g. "NightGlass", "ShadowGlass", custom usernames.
+    if (opts.unknownWords && opts.unknownWords.length) {
+      var namedEntities = opts.unknownWords
+        .filter(function (w) {
+          return w.analysis && (w.analysis.type === 'named_entity' || /^[A-Z]/.test(w.word));
+        })
+        .slice(0, 4)
+        .map(function (w) { return '"' + w.word + '"'; });
+      if (namedEntities.length) {
+        systemParts.push('Unknown proper names / entities in message: ' +
+                         namedEntities.join(', ') +
+                         '. Treat as project names, usernames, or custom terms.');
+      }
+    }
+
+    // ── Personal memory (bounded to 3) ────────────────────────────────────────
     if (opts.memorySnippets && opts.memorySnippets.length) {
-      var mem = opts.memorySnippets.slice(0, 3).map(function (m) { return m.content || m; });
+      var mem = opts.memorySnippets.slice(0, 3).map(function (m) {
+        return m.content || m.text || String(m);
+      });
       systemParts.push('Remembered about the user: ' + mem.join('; ') + '.');
     }
 
+    // ── Adaptive learning context (bounded to 3) ──────────────────────────────
     if (opts.adaptiveSnippets && opts.adaptiveSnippets.length) {
-      var ad = opts.adaptiveSnippets.slice(0, 3).map(function (a) { return a.value || a.content || a; });
-      systemParts.push('Learned context: ' + ad.join('; ') + '.');
+      var ad = opts.adaptiveSnippets.slice(0, 3).map(function (a) {
+        return a.value || a.content || String(a);
+      });
+      systemParts.push('Learned context from prior conversations: ' + ad.join('; ') + '.');
     }
 
     var messages = [
       { role: 'system', content: systemParts.join('\n') },
     ];
 
+    // ── Recent conversation turns (bounded to 8 turns = 4 exchanges) ──────────
     if (opts.recentTurns && opts.recentTurns.length) {
-      var recent = opts.recentTurns.slice(-6);
+      var recent = opts.recentTurns.slice(-8);
       recent.forEach(function (turn) {
-        messages.push({ role: turn.role, content: turn.text });
+        if (turn.role && turn.text) {
+          messages.push({ role: turn.role, content: turn.text });
+        }
       });
     }
 

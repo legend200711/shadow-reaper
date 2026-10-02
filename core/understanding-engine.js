@@ -185,9 +185,13 @@
   function extractEntities(text) {
     const entities = {};
 
-    // Project name: "my project is X" / "it's called X" / "project called X"
+    // Project name — matches a broad set of patterns:
+    //   "my project is X" / "my project is called X"
+    //   "project called X" / "a project called X" / "working on a project called X"
+    //   "it's called X" / "app/site/website called X"
+    //   "I am working on X" / "working on X" (if X is capitalized)
     const projectMatch = text.match(
-      /(?:my project(?:\s+is(?:\s+called)?)?|(?:app|site|website|game|tool)(?:\s+is(?:\s+called)?)?|(?:it'?s|its)\s+called|project\s+is(?:\s+called)?)\s+(?!am\b|is\b|are\b|what\b|called\?|working\b)([A-Za-z0-9][A-Za-z0-9 _\-'"]{0,39})/i
+      /(?:my project(?:\s+is(?:\s+called)?)?|(?:a\s+)?project(?:\s+is)?(?:\s+called)?|(?:app|site|website|game|tool)(?:\s+is(?:\s+called)?)?|(?:it'?s|its)\s+called|working\s+on\s+(?:a\s+)?project\s+called)\s+(?!am\b|is\b|are\b|what\b|called\?|working\b)([A-Za-z0-9][A-Za-z0-9 _\-'"]{0,39})/i
     );
     if (projectMatch) {
       let name = projectMatch[1].trim().replace(/['"]/g, '');

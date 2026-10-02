@@ -1,0 +1,20 @@
+/**
+ * shadow-reaper-standalone/firebase/sr-env-local.js
+ *
+ * LOCAL DEVELOPMENT CREDENTIALS — DO NOT COMMIT
+ *
+ * This file is gitignored. Copy from sr-env-local.js.example and fill in values.
+ * Load this BEFORE firebase/firebase-config.js in index.html (local dev only).
+ *
+ * In production, credentials are injected via window.__SR_RUNTIME_ENV.
+ */
+
+// EXAMPLE — replace with real values from Firebase Console:
+window.SR_ENV_LOCAL = {
+  FIREBASE_API_KEY:              'REPLACE_WITH_REAL_KEY',
+  FIREBASE_AUTH_DOMAIN:          'ffr3r3223.firebaseapp.com',
+  FIREBASE_PROJECT_ID:           'ffr3r3223',
+  FIREBASE_STORAGE_BUCKET:       'ffr3r3223.firebasestorage.app',
+  FIREBASE_MESSAGING_SENDER_ID:  '410865691561',
+  FIREBASE_APP_ID:               '1:410865691561:web:26f031090aae583c3372b8',
+};
