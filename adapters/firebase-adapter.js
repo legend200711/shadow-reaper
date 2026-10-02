@@ -1,6 +1,6 @@
 /**
  * shadow-reaper-standalone/adapters/firebase-adapter.js
- * Shadow Reaper Standalone — Firebase Adapter
+ * Shadow Reaper — Shadow Edition — Firebase Adapter
  *
  * Build: SR-STANDALONE-FIREBASE-ADAPTER-1
  *
@@ -13,6 +13,16 @@
  *   This is the ONLY file that may reference Firebase SDK globals.
  *   Core modules (adaptive-brain, persistence-bridge, etc.) must use
  *   this adapter instead of reaching for Firebase directly.
+ *
+ * ANONYMOUS IDENTITY MODEL (Shadow Edition):
+ *   Shadow Edition uses Firebase Anonymous Authentication.  SRAuthUI
+ *   automatically calls firebase.auth().signInAnonymously() on first launch.
+ *   The resulting UID is stored by Firebase in IndexedDB and restored on
+ *   every subsequent page load.  Users never see a login screen.
+ *   The UID provides real Firestore data isolation — Firestore rules
+ *   enforce isOwner(uid) using the anonymous UID exactly as they would
+ *   with an email-authenticated UID.  No Firestore rule changes are
+ *   needed to support this model.
  *
  * ISOLATION GUARANTEE:
  *   - This adapter connects ONLY to the Firebase project defined in

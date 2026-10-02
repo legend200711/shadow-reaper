@@ -53,6 +53,10 @@ var SUITES = [
   { name: 'api-v1',                file: 'api-v1.test.js' },
   { name: 'product-split',         file: 'product-split.test.js' },
   { name: 'offline-intelligence',  file: 'offline-intelligence.test.js' },
+  { name: 'sr-no-login',           file: 'sr-no-login.test.js' },
+  { name: 'language-comprehension', file: 'language-comprehension.test.js' },
+  { name: 'cloud-api',             file: 'cloud-api.test.js' },
+  { name: 'cloud-live-verify',     file: 'cloud-live-verify.js' },
 ];
 
 var TESTS_DIR = __dirname;

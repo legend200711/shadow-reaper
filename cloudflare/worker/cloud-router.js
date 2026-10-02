@@ -1,0 +1,257 @@
+/**
+ * cloudflare/worker/cloud-router.js
+ * Shadow Reaper Cloud API — Request Router
+ *
+ * Build: SR-CLOUD-API-1
+ *
+ * Routes all /api/v1/* requests to the appropriate cloud handler.
+ * Framework-agnostic: works inside the Cloudflare Worker runtime only
+ * (uses ES modules / Worker globals).
+ *
+ * ARCHITECTURE:
+ *   1. Parse path + method
+ *   2. Match route (static or parameterized)
+ *   3. Authenticate (Firebase ID token for protected routes)
+ *   4. Rate limit
+ *   5. Dispatch to handler
+ *   6. Return { status, body }
+ *
+ * PUBLIC ROUTES (no auth):
+ *   GET /api/v1/health
+ *
+ * ALL OTHER ROUTES:
+ *   Require a valid Firebase ID token in Authorization: Bearer <token>
+ *   The uid from the verified token is the authoritative identity.
+ */
+
+'use strict';
+
+import { createAdminClient }        from './lib/firebase-admin.js';
+import { verifyFirebaseIdToken, extractBearer } from './lib/cloud-auth.js';
+import { buildError, statusFor }    from './lib/cloud-errors.js';
+import { check as rateCheck }       from './lib/cloud-rate-limiter.js';
+import { logRequest, logFirebaseFailure, logAuthFailure, logRateLimit } from './lib/cloud-logger.js';
+
+import { handleHealth }             from './routes/cloud-health.js';
+import { listMemory, createMemory, getMemory, patchMemory, deleteMemory } from './routes/cloud-memory.js';
+import { listConversations, createConversation, getConversation, patchConversation, deleteConversation } from './routes/cloud-conversations.js';
+import { listProjects, createProject, getProject, patchProject, deleteProject } from './routes/cloud-projects.js';
+import { getSettings, putSettings } from './routes/cloud-settings.js';
+import { getAdaptiveProfile, putAdaptiveProfile } from './routes/cloud-adaptive-profile.js';
+import { handleSync }               from './routes/cloud-sync.js';
+
+// ─── Request ID ───────────────────────────────────────────────────────────────
+
+function _genRequestId() {
+  const ts  = Date.now().toString(36);
+  const rnd = crypto.randomUUID().replace(/-/g, '').slice(0, 8);
+  return 'src_' + ts + '_' + rnd;
+}
+
+// ─── Route matching ────────────────────────────────────────────────────────────
+
+/**
+ * Match a path against a pattern, extracting named params.
+ * Pattern: '/api/v1/memory/:id'
+ * Returns: { matched: true, params: { id: '...' } } or { matched: false }
+ */
+function _matchPath(pattern, path) {
+  const patParts = pattern.split('/');
+  const pathParts = path.split('/');
+  if (patParts.length !== pathParts.length) return { matched: false };
+  const params = {};
+  for (let i = 0; i < patParts.length; i++) {
+    if (patParts[i].startsWith(':')) {
+      params[patParts[i].slice(1)] = pathParts[i];
+    } else if (patParts[i] !== pathParts[i]) {
+      return { matched: false };
+    }
+  }
+  return { matched: true, params };
+}
+
+// ─── Route table ──────────────────────────────────────────────────────────────
+
+const ROUTES = [
+  // Health (public)
+  { method: 'GET',    pattern: '/api/v1/health',                  public: true,  handler: (b, ctx) => handleHealth(ctx) },
+
+  // Memory
+  { method: 'GET',    pattern: '/api/v1/memory',                  handler: (b, ctx) => listMemory(ctx) },
+  { method: 'POST',   pattern: '/api/v1/memory',                  handler: (b, ctx) => createMemory(ctx, b) },
+  { method: 'GET',    pattern: '/api/v1/memory/:id',              handler: (b, ctx, p) => getMemory(ctx, p.id) },
+  { method: 'PATCH',  pattern: '/api/v1/memory/:id',              handler: (b, ctx, p) => patchMemory(ctx, p.id, b) },
+  { method: 'DELETE', pattern: '/api/v1/memory/:id',              handler: (b, ctx, p) => deleteMemory(ctx, p.id) },
+
+  // Conversations
+  { method: 'GET',    pattern: '/api/v1/conversations',           handler: (b, ctx) => listConversations(ctx) },
+  { method: 'POST',   pattern: '/api/v1/conversations',           handler: (b, ctx) => createConversation(ctx, b) },
+  { method: 'GET',    pattern: '/api/v1/conversations/:id',       handler: (b, ctx, p) => getConversation(ctx, p.id) },
+  { method: 'PATCH',  pattern: '/api/v1/conversations/:id',       handler: (b, ctx, p) => patchConversation(ctx, p.id, b) },
+  { method: 'DELETE', pattern: '/api/v1/conversations/:id',       handler: (b, ctx, p) => deleteConversation(ctx, p.id) },
+
+  // Projects
+  { method: 'GET',    pattern: '/api/v1/projects',                handler: (b, ctx) => listProjects(ctx) },
+  { method: 'POST',   pattern: '/api/v1/projects',                handler: (b, ctx) => createProject(ctx, b) },
+  { method: 'GET',    pattern: '/api/v1/projects/:id',            handler: (b, ctx, p) => getProject(ctx, p.id) },
+  { method: 'PATCH',  pattern: '/api/v1/projects/:id',            handler: (b, ctx, p) => patchProject(ctx, p.id, b) },
+  { method: 'DELETE', pattern: '/api/v1/projects/:id',            handler: (b, ctx, p) => deleteProject(ctx, p.id) },
+
+  // Settings
+  { method: 'GET',    pattern: '/api/v1/settings',                handler: (b, ctx) => getSettings(ctx) },
+  { method: 'PUT',    pattern: '/api/v1/settings',                handler: (b, ctx) => putSettings(ctx, b) },
+
+  // Adaptive Profile
+  { method: 'GET',    pattern: '/api/v1/adaptive-profile',        handler: (b, ctx) => getAdaptiveProfile(ctx) },
+  { method: 'PUT',    pattern: '/api/v1/adaptive-profile',        handler: (b, ctx) => putAdaptiveProfile(ctx, b) },
+
+  // Sync
+  { method: 'POST',   pattern: '/api/v1/sync',                    handler: (b, ctx) => handleSync(ctx, b) },
+];
+
+// ─── Main dispatch ─────────────────────────────────────────────────────────────
+
+/**
+ * Dispatch a cloud API request.
+ *
+ * @param {Request}  request  - Cloudflare Worker Request
+ * @param {object}   env      - Worker env bindings
+ * @param {object}   ctx      - Worker execution context
+ * @returns {Promise<{ status: number, body: object, requestId: string }>}
+ */
+async function dispatch(request, env, workerCtx) {
+  const requestId = _genRequestId();
+  const startMs   = Date.now();
+  const url       = new URL(request.url);
+  const method    = request.method.toUpperCase();
+  const path      = url.pathname;
+
+  // ── CORS preflight (handled upstream, but guard here too) ──────────────────
+  if (method === 'OPTIONS') {
+    return { status: 204, body: null, requestId };
+  }
+
+  // ── Route matching ─────────────────────────────────────────────────────────
+  let matchedRoute  = null;
+  let matchedParams = {};
+
+  for (const route of ROUTES) {
+    if (route.method !== method) continue;
+    const m = _matchPath(route.pattern, path);
+    if (m.matched) {
+      matchedRoute  = route;
+      matchedParams = m.params;
+      break;
+    }
+  }
+
+  if (!matchedRoute) {
+    const body = buildError('ENDPOINT_NOT_FOUND', requestId);
+    logRequest({ requestId, method, path, status: 404, latencyMs: Date.now() - startMs });
+    return { status: 404, body, requestId };
+  }
+
+  // ── Authentication ─────────────────────────────────────────────────────────
+  let uid         = null;
+  let adminClient = null;
+
+  if (!matchedRoute.public) {
+    const authHeader = request.headers.get('authorization');
+    const token      = extractBearer(authHeader);
+
+    if (!token) {
+      logAuthFailure(requestId, 'missing_token');
+      logRequest({ requestId, method, path, status: 401, latencyMs: Date.now() - startMs, event: 'auth_failure' });
+      return { status: 401, body: buildError('UNAUTHORIZED', requestId), requestId };
+    }
+
+    const projectId = env.FIREBASE_PROJECT_ID;
+    if (!projectId) {
+      logRequest({ requestId, method, path, status: 503, latencyMs: Date.now() - startMs, event: 'config_error' });
+      return { status: 503, body: buildError('SERVICE_UNAVAILABLE', requestId, 'API not configured.'), requestId };
+    }
+
+    let authResult;
+    try {
+      authResult = await verifyFirebaseIdToken(token, projectId);
+    } catch (e) {
+      logAuthFailure(requestId, 'verify_error');
+      logRequest({ requestId, method, path, status: 503, latencyMs: Date.now() - startMs, event: 'auth_error' });
+      return { status: 503, body: buildError('SERVICE_UNAVAILABLE', requestId), requestId };
+    }
+
+    if (!authResult.ok) {
+      logAuthFailure(requestId, authResult.reason || 'invalid_token');
+      logRequest({ requestId, method, path, status: 401, latencyMs: Date.now() - startMs, event: 'auth_failure' });
+      return { status: 401, body: buildError('UNAUTHORIZED', requestId), requestId };
+    }
+
+    uid = authResult.uid;
+  }
+
+  // ── Rate limiting ──────────────────────────────────────────────────────────
+  const identity = uid || 'anonymous';
+  const rateResult = rateCheck(identity, method, path);
+  if (!rateResult.allowed) {
+    logRateLimit(requestId, identity.slice(0, 6), path);
+    logRequest({ requestId, method, path, status: 429, latencyMs: Date.now() - startMs, event: 'rate_limited' });
+    const errBody = buildError('RATE_LIMITED', requestId);
+    errBody.retryAfterMs = rateResult.retryAfterMs;
+    return { status: 429, body: errBody, requestId };
+  }
+
+  // ── Firebase admin client (for protected routes) ───────────────────────────
+  if (!matchedRoute.public) {
+    try {
+      adminClient = await createAdminClient(env);
+    } catch (e) {
+      logFirebaseFailure(requestId, 'init', e.constructor.name);
+      logRequest({ requestId, method, path, status: 503, latencyMs: Date.now() - startMs, event: 'firebase_failure' });
+      return { status: 503, body: buildError('FIREBASE_UNAVAILABLE', requestId), requestId };
+    }
+  }
+
+  // ── Parse body ─────────────────────────────────────────────────────────────
+  let body = null;
+  if (method === 'POST' || method === 'PATCH' || method === 'PUT') {
+    const ct = request.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) {
+      logRequest({ requestId, method, path, status: 400, latencyMs: Date.now() - startMs });
+      return { status: 400, body: buildError('INVALID_REQUEST', requestId, 'Content-Type must be application/json.'), requestId };
+    }
+    const rawText = await request.text();
+    if (rawText && rawText.trim().length > 0) {
+      // Oversized payload guard: 64KB max
+      if (rawText.length > 65536) {
+        logRequest({ requestId, method, path, status: 413, latencyMs: Date.now() - startMs });
+        return { status: 413, body: buildError('PAYLOAD_TOO_LARGE', requestId), requestId };
+      }
+      // Dangerous key guard (catches __proto__ before JSON.parse may drop it)
+      if (rawText.includes('"__proto__"') || rawText.includes('"constructor"') || rawText.includes('"prototype"')) {
+        logRequest({ requestId, method, path, status: 400, latencyMs: Date.now() - startMs });
+        return { status: 400, body: buildError('INVALID_REQUEST', requestId, 'Dangerous keys detected.'), requestId };
+      }
+      try {
+        body = JSON.parse(rawText);
+      } catch (e) {
+        logRequest({ requestId, method, path, status: 400, latencyMs: Date.now() - startMs });
+        return { status: 400, body: buildError('INVALID_REQUEST', requestId, 'Malformed JSON.'), requestId };
+      }
+    }
+  }
+
+  // ── Dispatch ───────────────────────────────────────────────────────────────
+  const handlerCtx = { requestId, uid, adminClient, env };
+  let result;
+  try {
+    result = await matchedRoute.handler(body, handlerCtx, matchedParams);
+  } catch (e) {
+    logRequest({ requestId, method, path, status: 500, latencyMs: Date.now() - startMs, event: 'handler_error' });
+    return { status: 500, body: buildError('INTERNAL_ERROR', requestId), requestId };
+  }
+
+  logRequest({ requestId, method, path, status: result.status, latencyMs: Date.now() - startMs });
+  return { ...result, requestId };
+}
+
+export { dispatch };

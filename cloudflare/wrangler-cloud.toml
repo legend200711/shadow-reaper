@@ -1,0 +1,51 @@
+# Shadow Reaper Cloud API — Wrangler Configuration
+# Worker: cloud-api (cloud data synchronization)
+#
+# Deploy with:
+#   npx wrangler deploy --config cloudflare/wrangler-cloud.toml
+#
+# Local dev:
+#   npx wrangler dev --config cloudflare/wrangler-cloud.toml
+#
+# ⚠️  NEVER commit real secrets to this file.
+# ⚠️  Set secrets via: wrangler secret put SECRET_NAME
+#
+# Required secrets (set before deploying):
+#   wrangler secret put FIREBASE_SERVICE_ACCOUNT   ← paste full service account JSON
+#   wrangler secret put FIREBASE_PROJECT_ID        ← already set to: ffr3r3223
+#   wrangler secret put SR_ALLOWED_ORIGINS         ← set to: ["https://legend200711.github.io"]
+
+name       = "sr-cloud-api"
+account_id = "f276c4406b82d3c1e35efed1ef486235"
+
+main             = "worker/cloud-api.js"
+compatibility_date = "2025-07-04"
+
+[observability]
+enabled = true
+
+[observability.traces]
+enabled = true
+
+[vars]
+SR_PROJECT = "shadow-reaper-standalone"
+SR_ENV     = "production"
+
+# Development override — uncomment for local dev only:
+# SR_ENV = "development"
+
+# ── Workers AI — INTENTIONALLY DISABLED ──────────────────────────────────────
+# Shadow Reaper does not use Cloudflare AI. Never enable this.
+# [ai]
+# binding = "AI"   ← DISABLED BY DESIGN
+
+# ── Secrets (set via CLI — NEVER put values in this file) ─────────────────────
+# wrangler secret put FIREBASE_SERVICE_ACCOUNT
+# wrangler secret put FIREBASE_PROJECT_ID
+# wrangler secret put SR_ALLOWED_ORIGINS
+
+# ── Optional: KV for rate limiting state persistence across isolates ───────────
+# (Uncomment after creating namespace)
+# [[kv_namespaces]]
+# binding = "SR_RATE_LIMIT_KV"
+# id      = "YOUR_KV_NAMESPACE_ID"   # PLACEHOLDER

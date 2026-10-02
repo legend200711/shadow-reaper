@@ -71,6 +71,11 @@ service cloud.firestore {
       allow read, write: if isOwner(uid) && noForbiddenFields();
     }
 
+    // Projects — per-installation project tracking
+    match /users/{uid}/shadowReaperProjects/{projectId} {
+      allow read, write: if isOwner(uid) && noForbiddenFields();
+    }
+
     // Catch-all for any future private subcollections under users/{uid}
     match /users/{uid}/{privateCollection}/{document=**} {
       allow read, write: if isOwner(uid) && noForbiddenFields();

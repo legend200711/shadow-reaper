@@ -168,6 +168,7 @@
   function _translation(){ return global.SRTranslation    || null; }
   function _founder()    { return global.SRFounderControls|| null; }
   function _langFdn()    { return global.SRLanguage       || null; }
+  function _comprehension(){ return global.SRComprehension || null; }
 
   // ─── Founder capability gate ─────────────────────────────────────────────────
   // Returns true if the capability is globally enabled (or founder controls not loaded).
@@ -458,11 +459,40 @@
     // understood so the response engine can reference numeric context.
     // Never blocks; never replaces the pipeline.
     var numIntl = global.SRNumberIntelligence;
+    var numAnalysis = null;
     if (numIntl) {
       try {
-        var numAnalysis = numIntl.analyze(message);
+        numAnalysis = numIntl.analyze(message);
         if (numAnalysis && (numAnalysis.numbers.length || numAnalysis.calculation)) {
           understood._numAnalysis = numAnalysis;
+        }
+      } catch (_) {}
+    }
+
+    // ── COMPREHENSION INDEX — enrich language analysis ────────────────────────
+    // SRComprehension.analyze() runs AFTER SRLanguage and SRNumberIntelligence.
+    // It adds: idiom detection, word-sense disambiguation, sentence structure,
+    // negation scope, number context roles, and unknown word interpretation.
+    // Never blocks; never replaces the pipeline; graceful if not loaded.
+    var comprehensionResult = null;
+    var comprehension = _comprehension();
+    if (comprehension && langAnalysis) {
+      try {
+        comprehensionResult = comprehension.analyze(
+          message, langAnalysis, context
+        );
+        // Attach comprehension result for downstream use
+        understood._comprehension = comprehensionResult;
+        // If comprehension found idioms, attach to langAnalysis for context builders
+        if (langAnalysis && comprehensionResult.idioms && comprehensionResult.idioms.length) {
+          langAnalysis.idioms = comprehensionResult.idioms;
+        }
+        // Upgrade negation info if comprehension has better scope data
+        if (comprehensionResult.negation && comprehensionResult.negation.negated &&
+            comprehensionResult.negation.negatedConcepts.length > 0) {
+          langAnalysis.negation = Object.assign(
+            {}, langAnalysis.negation, comprehensionResult.negation
+          );
         }
       } catch (_) {}
     }
@@ -501,6 +531,12 @@
         negation:         langAnalysis ? langAnalysis.negation : null,
         concepts:         langAnalysis ? langAnalysis.concepts : [],
         unknownWords:     langAnalysis ? langAnalysis.unknownWords : [],
+        // Comprehension enrichment (idioms, word senses, sentence structure, question type)
+        comprehension:    comprehensionResult,
+        idioms:           comprehensionResult ? comprehensionResult.idioms : [],
+        questionType:     comprehensionResult ? comprehensionResult.questionType : null,
+        sentenceStruct:   comprehensionResult ? comprehensionResult.sentenceStruct : null,
+        wordSenses:       comprehensionResult ? comprehensionResult.wordSenses : {},
         // Personality context for response shaping
         personalityCtx:   personalityCtx,
         assistantName:    assistantName,

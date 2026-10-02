@@ -43,6 +43,18 @@ users/
         updatedAt: timestamp
         # PRIVATE — owner UID only
 
+    shadowReaperProjects/
+      {projectId}/
+        name: string             # project name (required)
+        description: string
+        status: string           # 'active' | 'paused' | 'completed'
+        tags: array
+        uid: string              # owner uid
+        createdAt: timestamp
+        updatedAt: timestamp
+        # PRIVATE — owner UID only
+        # Written by the Cloud API Worker via sr-cloud-api.js
+
     shadowReaperPreferences/
       settings/
         historyEnabled: boolean
@@ -51,8 +63,22 @@ users/
         voiceEnabled: boolean
         ttsEnabled: boolean
         theme: string
+        assistantName: string    # e.g. 'Shadow'
+        wakeName: string
+        wakeListening: boolean
         updatedAt: timestamp
         # PRIVATE — owner UID only
+
+      adaptiveProfile/
+        casualness: number       # 0–1 preference scales
+        directness: number
+        humorPreference: number
+        sarcasmTolerance: number
+        verbosity: number
+        formality: number
+        updatedAt: timestamp
+        # PRIVATE — owner UID only
+        # Sync-only: learning decisions are made locally by Shadow Reaper
 
       assistant/
         wakeName: string          # one of: Salem|Shadow|Elsa|Luna|Pepper|Simba|Rambo|Legend
@@ -120,7 +146,10 @@ webResearchCache/                # FUTURE — not yet active
 
 | Collection | Unauthenticated | Authenticated User | Owner UID | Founder |
 |---|---|---|---|---|
-| `users/{uid}/**` | ✗ | ✗ | ✓ read/write | ✗ |
+| `users/{uid}/shadowReaperMemory/**` | ✗ | ✗ | ✓ read/write | ✗ |
+| `users/{uid}/shadowReaperConversations/**` | ✗ | ✗ | ✓ read/write | ✗ |
+| `users/{uid}/shadowReaperProjects/**` | ✗ | ✗ | ✓ read/write | ✗ |
+| `users/{uid}/shadowReaperPreferences/**` | ✗ | ✗ | ✓ read/write | ✗ |
 | `sharedKnowledge` | ✗ | ✓ read | ✓ read | ✓ read/write |
 | `globalLearning` | ✗ | ✓ read | ✓ read | ✓ read/write |
 | `shadowReaperConfig` | ✗ | ✓ read | ✓ read | ✓ read/write |

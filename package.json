@@ -15,7 +15,20 @@
     "test": "node tests/run-tests.js",
     "test:api": "SR_API_TEST_MODE=true node tests/api-v1.test.js",
     "api:start": "SR_API_TEST_MODE=true node api/v1/server.js",
-    "api:test": "node tests/run-tests.js --suite api-v1"
+    "api:test": "node tests/run-tests.js --suite api-v1",
+    "train-language": "node scripts/train-language.js",
+    "train-language:report": "node scripts/train-language.js --report-only",
+    "train-language:quick": "node scripts/train-language.js --quick",
+    "test:comprehension": "node tests/run-tests.js --suite language-comprehension",
+    "test:cloud-api": "node tests/run-tests.js --suite cloud-api",
+    "cloud:dev": "npx wrangler dev --config cloudflare/wrangler-cloud.toml",
+    "cloud:deploy": "npx wrangler deploy --config cloudflare/wrangler-cloud.toml",
+    "cloud:secret:firebase-sa": "npx wrangler secret put FIREBASE_SERVICE_ACCOUNT --config cloudflare/wrangler-cloud.toml",
+    "cloud:secret:project-id": "npx wrangler secret put FIREBASE_PROJECT_ID --config cloudflare/wrangler-cloud.toml",
+    "cloud:secret:origins": "npx wrangler secret put SR_ALLOWED_ORIGINS --config cloudflare/wrangler-cloud.toml",
+    "cloud:health": "curl -s https://sr-cloud-api.nthntjrn.workers.dev/api/v1/health | python3 -m json.tool",
+    "cloud:secrets:list": "npx wrangler secret list --config cloudflare/wrangler-cloud.toml",
+    "cloud:set-firebase-sa": "node scripts/set-firebase-sa-secret.js"
   },
   "repository": {
     "type": "git",

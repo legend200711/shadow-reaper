@@ -175,57 +175,6 @@ body::before {
   align-items: center;
 }
 
-/* ── LOGIN / SIGNUP BUTTON (signed-out) ─────────────────────────────────── */
-.sr-auth-btn {
-  height: 34px;
-  padding: 0 14px;
-  background: transparent;
-  border: 1.5px solid var(--electric-dim);
-  border-radius: 8px;
-  color: var(--electric);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  cursor: pointer;
-  transition: all var(--transition);
-  white-space: nowrap;
-  font-family: inherit;
-}
-.sr-auth-btn:hover {
-  background: var(--electric-glow);
-  border-color: var(--electric);
-  color: var(--accent);
-}
-
-/* ── USER PROFILE BUTTON (signed-in) ───────────────────────────────────── */
-.sr-profile-btn {
-  height: 34px;
-  padding: 0 12px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-bright);
-  border-radius: 8px;
-  color: var(--text-secondary);
-  font-size: 12px;
-  cursor: pointer;
-  transition: all var(--transition);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-family: inherit;
-  max-width: 160px;
-  overflow: hidden;
-}
-.sr-profile-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-.sr-profile-email {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 11px;
-}
-
 /* ── ICON BUTTONS ───────────────────────────────────────────────────────── */
 .sr-icon-btn {
   width: 36px;
@@ -252,9 +201,9 @@ body::before {
   overflow: hidden;
 }
 
-/* ── LEFT NAV SIDEBAR (signed-in only, desktop) ─────────────────────────── */
+/* ── LEFT NAV SIDEBAR (desktop) ────────────────────────────────────────── */
 .sr-nav {
-  display: none; /* hidden by default; shown when signed-in on ≥900px */
+  display: none; /* hidden by default; shown on ≥900px */
   flex: 0 0 220px;
   width: 220px;
   background: var(--bg-panel);
@@ -866,86 +815,113 @@ body::before {
 /* Internal capability matrix styles kept for diagnostic use — not shown in settings UI */
 .sr-device-controls { display: none !important; }
 
-/* Auth-required prompt in settings */
-.sr-auth-gate {
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 14px 14px 16px;
-  text-align: center;
+/* ── FIRST LAUNCH SETUP OVERLAY ─────────────────────────────────────────── */
+.sr-setup-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(5,8,17,0.92);
+  z-index: 200;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
 }
-.sr-auth-gate-text {
+.sr-setup-overlay.visible { display: flex; }
+.sr-setup-card {
+  background: #0d1220;
+  border: 1px solid rgba(30,144,255,0.28);
+  border-radius: 18px;
+  width: 100%;
+  max-width: 400px;
+  padding: 32px 26px 28px;
+  box-shadow: 0 8px 48px rgba(0,0,0,0.6), 0 0 40px rgba(30,144,255,0.06);
+}
+.sr-setup-glyph {
+  font-size: 42px;
+  text-align: center;
+  margin-bottom: 10px;
+  filter: drop-shadow(0 0 14px rgba(30,144,255,0.55));
+}
+.sr-setup-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text-primary);
+  text-align: center;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+.sr-setup-sub {
   font-size: 12px;
   color: var(--text-dim);
-  line-height: 1.6;
-  margin-bottom: 12px;
+  text-align: center;
+  margin-bottom: 24px;
+  line-height: 1.5;
 }
-.sr-auth-gate-btn {
-  display: inline-block;
-  padding: 7px 18px;
-  background: var(--electric-dim);
-  border: 1px solid var(--electric);
-  border-radius: 8px;
-  color: var(--text-primary);
-  font-size: 12px;
+.sr-setup-field {
+  margin-bottom: 16px;
+}
+.sr-setup-field label {
+  display: block;
+  font-size: 11px;
   font-weight: 700;
-  cursor: pointer;
-  letter-spacing: 0.04em;
-  transition: all var(--transition);
-  font-family: inherit;
-}
-.sr-auth-gate-btn:hover { background: var(--electric); }
-
-/* ── AUTH PROMPT INLINE (in conversation) ───────────────────────────────── */
-.sr-auth-prompt {
-  background: var(--bg-panel);
-  border: 1px solid var(--border-bright);
-  border-radius: 12px;
-  padding: 16px 18px;
-  margin: 8px 0 16px;
-  max-width: 400px;
-}
-.sr-auth-prompt-text {
-  font-size: 13px;
   color: var(--text-secondary);
-  line-height: 1.6;
-  margin-bottom: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
 }
-.sr-auth-prompt-actions {
+.sr-setup-input {
+  width: 100%;
+  background: #0e1525;
+  border: 1.5px solid rgba(30,144,255,0.2);
+  border-radius: 10px;
+  padding: 10px 14px;
+  color: var(--text-primary);
+  font-size: 14px;
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.15s;
+}
+.sr-setup-input:focus { border-color: var(--electric-edge); }
+.sr-setup-input::placeholder { color: var(--text-dim); }
+.sr-setup-picker {
   display: flex;
   gap: 8px;
-  flex-wrap: wrap;
 }
-.sr-auth-prompt-btn {
-  padding: 7px 14px;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 700;
+.sr-setup-chip {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1.5px solid rgba(30,144,255,0.2);
+  background: #0e1525;
+  color: var(--text-secondary);
+  font-size: 13px;
   cursor: pointer;
-  letter-spacing: 0.04em;
-  transition: all var(--transition);
+  text-align: center;
+  transition: all 0.15s;
   font-family: inherit;
 }
-.sr-auth-prompt-btn.primary {
-  background: var(--electric-dim);
-  border: 1px solid var(--electric);
-  color: #fff;
+.sr-setup-chip.selected {
+  background: var(--electric-glow);
+  border-color: var(--electric);
+  color: var(--electric);
+  font-weight: 700;
 }
-.sr-auth-prompt-btn.primary:hover { background: var(--electric); }
-.sr-auth-prompt-btn.secondary {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text-dim);
-}
-.sr-auth-prompt-btn.secondary:hover { border-color: var(--border-bright); color: var(--text-secondary); }
-.sr-auth-prompt-btn.ghost {
-  background: none;
+.sr-setup-start-btn {
+  width: 100%;
+  margin-top: 22px;
+  padding: 12px;
+  background: var(--electric);
   border: none;
-  color: var(--text-muted);
-  font-size: 11px;
-  padding: 7px 8px;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+  letter-spacing: 0.05em;
+  transition: background 0.15s;
+  font-family: inherit;
 }
-.sr-auth-prompt-btn.ghost:hover { color: var(--text-secondary); }
+.sr-setup-start-btn:hover { background: var(--accent); }
 
 .sr-build-info {
   margin-top: 20px;
@@ -1115,15 +1091,6 @@ body::before {
 
       <!-- PWA Install button — shown ONLY when SRPWAState confirms INSTALLABLE or IOS_MANUAL_INSTALL. -->
       <button class="sr-install-btn" id="srInstallBtn" aria-label="Install Web App">&#11015; Install Web App</button>
-
-      <!-- LOGIN / SIGN UP — shown when signed out -->
-      <button class="sr-auth-btn" id="srAuthBtn" aria-label="Log in or sign up">LOG IN / SIGN UP</button>
-
-      <!-- Profile / account — shown when signed in -->
-      <button class="sr-profile-btn" id="srProfileBtn" style="display:none" aria-label="Account options">
-        <span>&#9760;</span>
-        <span class="sr-profile-email" id="srProfileEmail"></span>
-      </button>
     </div>
   </header>
 
@@ -1331,10 +1298,8 @@ body::before {
         <div class="sr-settings-section">
           <div class="sr-settings-label">Actions</div>
           <button class="sr-action-btn" id="srClearHistoryBtn">&#8635; New Conversation</button>
-          <!-- Clear memories only shown when signed in -->
-          <button class="sr-action-btn danger" id="srClearMemoryBtn" style="display:none">&#8998; Clear All Memories</button>
-          <!-- Sign out (signed-in only) -->
-          <button class="sr-action-btn" id="srSignOutBtn" style="display:none">&#8594; Sign Out</button>
+          <!-- Clear Shadow Data — available to all users, no login required -->
+          <button class="sr-action-btn danger" id="srClearDataBtn">&#8998; Clear My Shadow Data</button>
           <!-- Native diagnostics — safe, no secrets; for physical device verification -->
           <button class="sr-action-btn" id="srNativeDiagBtn" style="margin-top:6px;font-size:10px;opacity:0.6;" type="button">
             &#9881; Native Bridge Diagnostics
@@ -1358,8 +1323,8 @@ body::before {
 
         <!-- Build info -->
         <div class="sr-build-info" id="srBuildInfo">
-          Shadow Reaper Standalone<br>
-          SR-V2-STANDALONE-UI-3<br>
+          Shadow Reaper — Shadow Edition<br>
+          SR-V2-STANDALONE-UI-4<br>
           <span id="srBuildPlatform"></span>
         </div>
 
@@ -1368,7 +1333,7 @@ body::before {
 
   </div><!-- /body -->
 
-  <!-- Mobile nav drawer (signed-in, <900px) -->
+  <!-- Mobile nav drawer (<900px) — no login required -->
   <nav class="sr-mobile-nav" id="srMobileNav" aria-label="Navigation">
     <div class="sr-mobile-nav-header">
       <span style="font-size:13px;font-weight:700;color:var(--text-primary);letter-spacing:0.05em;text-transform:uppercase;">Menu</span>
@@ -1393,13 +1358,6 @@ body::before {
         <button class="sr-nav-item" id="srMobileNavSettings">
           <span class="sr-nav-icon">&#9881;</span>
           <span class="sr-nav-label">Settings</span>
-        </button>
-
-        <div style="height:1px;background:var(--border);margin:8px 2px;"></div>
-
-        <button class="sr-nav-item" id="srMobileNavSignOut">
-          <span class="sr-nav-icon">&#8594;</span>
-          <span class="sr-nav-label">Sign Out</span>
         </button>
       </div>
     </div>
@@ -1436,6 +1394,41 @@ body::before {
     </div>
     <!-- Project list populated by JS -->
     <div id="srProjectsList"></div>
+  </div>
+</div>
+
+<!-- ── FIRST LAUNCH SETUP OVERLAY ────────────────────────────────────────── -->
+<!-- Shown only on first launch. Collects assistant name + voice preference.  -->
+<!-- No email, no password, no account. Pure local setup stored in localStorage. -->
+<div class="sr-setup-overlay" id="srSetupOverlay" role="dialog" aria-modal="true" aria-label="Shadow Reaper first-time setup">
+  <div class="sr-setup-card">
+    <div class="sr-setup-glyph" aria-hidden="true">&#9760;</div>
+    <div class="sr-setup-title">SHADOW REAPER</div>
+    <div class="sr-setup-sub">Shadow Edition — Quick Setup<br><span style="color:var(--text-muted);">No account needed.</span></div>
+
+    <div class="sr-setup-field">
+      <label for="srSetupName">What should Shadow call you? <span style="font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></label>
+      <input type="text" id="srSetupName" class="sr-setup-input" placeholder="Leave blank to skip" maxlength="40" autocomplete="off" spellcheck="false" />
+    </div>
+
+    <div class="sr-setup-field">
+      <label>Voice response</label>
+      <div class="sr-setup-picker">
+        <button type="button" class="sr-setup-chip selected" id="srSetupVoiceOff" data-voice="off">Off</button>
+        <button type="button" class="sr-setup-chip" id="srSetupVoiceM" data-voice="male">&#128266; Male</button>
+        <button type="button" class="sr-setup-chip" id="srSetupVoiceF" data-voice="female">&#128266; Female</button>
+      </div>
+    </div>
+
+    <div class="sr-setup-field">
+      <label>Memory &amp; learning</label>
+      <div class="sr-setup-picker">
+        <button type="button" class="sr-setup-chip selected" id="srSetupMemOn" data-mem="on">On</button>
+        <button type="button" class="sr-setup-chip" id="srSetupMemOff" data-mem="off">Off</button>
+      </div>
+    </div>
+
+    <button type="button" class="sr-setup-start-btn" id="srSetupStartBtn">Shadow is ready. Start.</button>
   </div>
 </div>
 
@@ -1510,6 +1503,10 @@ body::before {
 <script src="./language/lexicon/sr-lexicon.js"></script>
 <script src="./language/sr-language.js"></script>
 <script src="./language/sr-number-intelligence.js"></script>
+<!-- ── Language Comprehension Index ─────────────────────────────────── -->
+<!-- Load AFTER sr-language.js — enriches the existing pipeline          -->
+<script src="./language/indexes/sense-index.js"></script>
+<script src="./language/sr-comprehension-index.js"></script>
 
 <!-- ── Connection + Offline State ────────────────────────────────────── -->
 <script src="./sr-connection-monitor.js"></script>
@@ -1532,23 +1529,43 @@ body::before {
 <!-- Auth UI (must load after Firebase adapter) -->
 <script src="./sr-auth-ui.js"></script>
 
+<!-- Cloud API client (must load after sr-auth-ui.js) -->
+<!-- sr-cloud-api.js provides SRCloudAPI — offline queue + Cloudflare Worker sync -->
+<script src="./sr-cloud-api.js"></script>
+<script>
+/* ── Shadow Reaper Cloud API — Configuration ───────────────────────────────
+   Worker URL is set here after deployment.
+   Shadow works fully offline if this is unconfigured or if the Worker is down.
+   SECURITY: No secrets here. The Worker URL is public infrastructure, not a credential.
+   The Firebase ID token (obtained automatically by SRCloudAPI) proves identity.
+─────────────────────────────────────────────────────────────────────────────── */
+(function () {
+  'use strict';
+  // Production Worker URL — set after deployment
+  // Leave empty string '' to disable cloud sync (Shadow still works fully offline)
+  var SR_CLOUD_WORKER_URL = 'https://sr-cloud-api.nthntjrn.workers.dev';
+
+  if (window.SRCloudAPI && SR_CLOUD_WORKER_URL) {
+    window.SRCloudAPI.configure({ workerUrl: SR_CLOUD_WORKER_URL });
+  }
+})();
+</script>
+
 <script>
 /* ─────────────────────────────────────────────────────────────────────────
-   SHADOW REAPER — PUBLIC-FIRST UI
-   Build: SR-V2-STANDALONE-UI-2
+   SHADOW REAPER — SHADOW EDITION UI
+   Build: SR-V2-STANDALONE-UI-3
 
-   SECURITY MODEL:
-   - AI conversation requires NO authentication (session-only)
-   - Private data (History/Memory/Adaptive/Devices) requires authentication
-   - Firebase Firestore rules enforce auth at the DB level (not just CSS)
-   - Device commands require auth before dispatch
-   - Unsigned users get zero persistent storage — all modules handle this
-     internally via _isGuest() → uid === null checks
-   - No SNS globals, no cross-user data
+   ACCESS MODEL:
+   - NO login, NO registration, NO email, NO password required
+   - Anonymous Firebase session auto-created by SRAuthUI (sr-auth-ui.js)
+   - Each installation gets a stable UID via Firebase Anonymous Auth
+   - All private data is UID-isolated (Firestore rules unchanged)
+   - Firestore is NOT publicly readable or writable
+   - First-launch setup: optional name + voice pref — stored in localStorage
 
    XSS SAFETY:
    - All user-generated content appended via textContent only (never innerHTML)
-   - Auth modal built in sr-auth-ui.js without user-generated innerHTML
 ─────────────────────────────────────────────────────────────────────────── */
 (function () {
   'use strict';
@@ -1577,9 +1594,6 @@ body::before {
   var $nav          = document.getElementById('srNav');
   var $mobileNav    = document.getElementById('srMobileNav');
   var $menuBtn      = document.getElementById('srMenuBtn');
-  var $authBtn      = document.getElementById('srAuthBtn');
-  var $profileBtn   = document.getElementById('srProfileBtn');
-  var $profileEmail = document.getElementById('srProfileEmail');
   var $recentList   = document.getElementById('srRecentList');
   var $mobileRecent = document.getElementById('srMobileRecentList');
 
@@ -1588,12 +1602,91 @@ body::before {
   var $tAdaptive    = document.getElementById('srToggleAdaptive');
   var $tVoice       = document.getElementById('srToggleVoice');
   var $tTTS         = document.getElementById('srToggleTTS');
+
   // ── State ─────────────────────────────────────────────────────────────────
   var _isProcessing = false;
   var _isListening  = false;
   var _msgCount     = 0;
-  var _isAuth       = false;            // current auth state
-  var _sessionMsgs  = [];              // [{role,text}] — unsigned session buffer
+  var _sessionMsgs  = [];  // [{role,text}] — in-memory session buffer
+
+  // ── FIRST LAUNCH SETUP ───────────────────────────────────────────────────
+  var SR_SETUP_KEY = 'srShadowEditionSetupDone';
+
+  function _isSetupDone() {
+    try { return !!localStorage.getItem(SR_SETUP_KEY); } catch (e) { return true; }
+  }
+
+  function _completeSetup(name, voice, mem) {
+    try {
+      var prefs = { name: name || '', voice: voice || 'off', memory: mem !== 'off' };
+      localStorage.setItem(SR_SETUP_KEY, '1');
+      localStorage.setItem('srShadowEditionPrefs', JSON.stringify(prefs));
+      // Apply voice preference
+      if (SRVoice && voice !== 'off') {
+        SR.setTTSEnabled(true);
+        SR.setVoiceEnabled(true);
+      }
+      // Apply memory preference
+      if (mem === 'off') {
+        SR.setMemoryEnabled(false);
+        SR.setAdaptiveEnabled(false);
+      }
+    } catch (e) {}
+  }
+
+  function _initSetupOverlay() {
+    var overlay = document.getElementById('srSetupOverlay');
+    if (!overlay) return;
+
+    if (_isSetupDone()) {
+      // Already set up — do not show
+      overlay.style.display = 'none';
+      return;
+    }
+
+    overlay.classList.add('visible');
+
+    // Voice picker
+    var voiceChips = overlay.querySelectorAll('[data-voice]');
+    var _selectedVoice = 'off';
+    voiceChips.forEach(function (chip) {
+      chip.addEventListener('click', function () {
+        voiceChips.forEach(function (c) { c.classList.remove('selected'); });
+        chip.classList.add('selected');
+        _selectedVoice = chip.getAttribute('data-voice');
+      });
+    });
+
+    // Memory picker
+    var memChips = overlay.querySelectorAll('[data-mem]');
+    var _selectedMem = 'on';
+    memChips.forEach(function (chip) {
+      chip.addEventListener('click', function () {
+        memChips.forEach(function (c) { c.classList.remove('selected'); });
+        chip.classList.add('selected');
+        _selectedMem = chip.getAttribute('data-mem');
+      });
+    });
+
+    // Start button
+    var startBtn = document.getElementById('srSetupStartBtn');
+    if (startBtn) {
+      startBtn.addEventListener('click', function () {
+        var nameInput = document.getElementById('srSetupName');
+        var name = nameInput ? nameInput.value.trim() : '';
+        _completeSetup(name, _selectedVoice, _selectedMem);
+        overlay.classList.remove('visible');
+        _syncToggles();
+        _updateStatusChips();
+        // Greet by name if provided
+        if (name) {
+          _appendMessage('sr', 'Shadow is ready. Welcome, ' + name + '.');
+        } else {
+          _appendMessage('sr', 'Shadow is ready.');
+        }
+      });
+    }
+  }
 
   // ── BOOT ──────────────────────────────────────────────────────────────────
   function boot() {
@@ -1607,29 +1700,26 @@ body::before {
     if (SRPlat && $buildPlat) $buildPlat.textContent = SRPlat.getRuntime();
 
     // ── FIREBASE INIT (must happen before SRAuth.init) ─────────────────────
-    // SRFirebaseAdapter.init() calls firebase.initializeApp() which is
-    // required before firebase.auth() can be used in SRAuth.init().
-    // Without this, onAuthStateChanged is never registered and the UI
-    // is permanently locked in signed-out mode after login.
-    var SRFb = window.SRFirebaseAdapter;
-    if (SRFb && typeof SRFb.init === 'function') {
-      var fbResult = SRFb.init();
+    // SRFirebaseAdapter.init() initializes the Firebase app instance.
+    // SRAuthUI.init() then calls signInAnonymously() if no session exists.
+    var SRFbLocal = window.SRFirebaseAdapter;
+    if (SRFbLocal && typeof SRFbLocal.init === 'function') {
+      var fbResult = SRFbLocal.init();
       if (!fbResult.ok) {
         console.warn('[SR-UI] Firebase adapter init:', fbResult.reason);
       }
     }
 
-    // Initialize Shadow Reaper AI (no auth required)
+    // Initialize Shadow Reaper AI
     var ok = SR.init();
     if (!ok) {
       _setStatus('Init failed — check console', 'error');
       return;
     }
 
-    // Wire capability state → UI status (truthful local/model/network state)
+    // Wire capability state → UI status
     if (window.SRCapabilityState) {
       window.SRCapabilityState.onChange(function (dim, newState, reason, snap) {
-        // Only update status if not in a "transient" UI state (thinking, listening)
         if (!_isProcessing && !_isListening) {
           _setStatus(snap.uiStatus, snap.uiClass);
         }
@@ -1642,103 +1732,46 @@ body::before {
     _updateStatusChips();
     _syncToggles();
 
-    // App Options (PWA install) — not auth-gated, runs on boot
+    // PWA install option
     _initAppOptions();
 
-    // ── AUTH INIT ──────────────────────────────────────────────────────────
-    // Show a brief "Connecting…" state so that on page reload, the user does
-    // not see the signed-out nav flash before Firebase resolves the session.
-    // _onAuthChange() will replace this once Firebase resolves (async).
+    // ── ANONYMOUS AUTH INIT ───────────────────────────────────────────────
+    // SRAuthUI.init() auto-signs-in anonymously. No login screen.
+    // _onAnonReady() fires when the anonymous session is established
+    // (or immediately if Firebase is unavailable — session-only mode).
     if (SRAuth) {
-      // Temporarily hide both auth button and profile button during the
-      // async Firebase session check so the header does not flicker.
-      $authBtn.style.display    = 'none';
-      $profileBtn.style.display = 'none';
-      _setStatus('Connecting…', 'loading');
-
       SRAuth.init();
-      SRAuth.onAuthChange(_onAuthChange);
+      SRAuth.onAuthChange(_onAnonReady);
     } else {
-      // No auth module — treat as signed out
-      _onAuthChange(null);
+      _onAnonReady(null);
     }
   }
 
-  // ── AUTH STATE CHANGE ─────────────────────────────────────────────────────
-  // This is the single source of truth for all UI auth-dependent changes.
-  function _onAuthChange(user) {
-    _isAuth = !!user;
+  // ── ANONYMOUS SESSION READY ───────────────────────────────────────────────
+  // Called once the anonymous Firebase session resolves (or falls back to
+  // session-only mode). The UI is already visible at this point — no gating.
+  function _onAnonReady(user) {
+    // Show hamburger on mobile always (no auth gate)
+    if (_isMobile()) $menuBtn.style.display = '';
 
-    if (_isAuth) {
-      // ── SIGNED IN ──
-      $authBtn.style.display    = 'none';
-      $profileBtn.style.display = '';
+    // Show desktop nav always (no auth gate)
+    if (!_isMobile()) $nav.classList.add('visible');
 
-      var email = user.email || user.displayName || 'Account';
-      $profileEmail.textContent = email;
-
-      // Show hamburger on mobile (signed-in only)
-      if (_isMobile()) $menuBtn.style.display = '';
-
-      // Show desktop nav
-      if (!_isMobile()) $nav.classList.add('visible');
-
-      // Show settings items that require auth
-      var cmb = document.getElementById('srClearMemoryBtn');
-      var sob = document.getElementById('srSignOutBtn');
-      if (cmb) cmb.style.display = '';
-      if (sob) sob.style.display = '';
-
-      // Update status: reflect persistence now active
-      if (window.SRCapabilityState) {
-        var _authSnap = window.SRCapabilityState.getSnapshot();
-        _setStatus(_authSnap.uiStatus, _authSnap.uiClass);
-      } else {
-        _setStatus('Ready', 'ready');
-      }
-      _updateStatusChips();
-      _syncToggles();
-
-      // Load recent conversations for sidebar
-      _loadRecentConversations();
-
+    // Update status
+    if (window.SRCapabilityState) {
+      var snap = window.SRCapabilityState.getSnapshot();
+      _setStatus(snap.uiStatus, snap.uiClass);
     } else {
-      // ── SIGNED OUT ──
-      $authBtn.style.display    = '';
-      $profileBtn.style.display = 'none';
-      $menuBtn.style.display    = 'none';
-
-      // Hide desktop nav
-      $nav.classList.remove('visible');
-
-      // Close mobile nav if open
-      $mobileNav.classList.remove('open');
-
-      // Hide auth-only settings items
-      var cmb = document.getElementById('srClearMemoryBtn');
-      var sob = document.getElementById('srSignOutBtn');
-      if (cmb) cmb.style.display = 'none';
-      if (sob) sob.style.display = 'none';
-
-      // Close projects panel if open
-      _closeProjectsPanel();
-
-      // Clear recent lists
-      if ($recentList)   $recentList.innerHTML   = '';
-      if ($mobileRecent) $mobileRecent.innerHTML = '';
-
-      // Status: session-only mode — but local intelligence is still available
-      if (window.SRCapabilityState) {
-        var _soSnap = window.SRCapabilityState.getSnapshot();
-        // Show "Session mode" prefix but preserve offline intelligence info
-        var _soText = _soSnap.localState === 'LOCAL_READY'
-          ? 'Session mode · Local intelligence'
-          : 'Session mode';
-        _setStatus(_soText, _soSnap.localState === 'LOCAL_READY' ? 'ready' : 'warn');
-      } else {
-        _setStatus('Session mode', 'warn');
-      }
+      _setStatus('Ready', 'ready');
     }
+    _updateStatusChips();
+    _syncToggles();
+
+    // Load recent conversations (works with anonymous UID or session-only)
+    _loadRecentConversations();
+
+    // Show first-launch setup if this is the first time
+    _initSetupOverlay();
   }
 
   // ── APP OPTIONS — platform-aware PWA install visibility ──────────────────
@@ -1794,7 +1827,7 @@ body::before {
 
   // ── RECENT CONVERSATIONS ──────────────────────────────────────────────────
   function _loadRecentConversations() {
-    if (!_isAuth || !SRHist || typeof SRHist.listRecent !== 'function') return;
+    if (!SRHist || typeof SRHist.listRecent !== 'function') return;
 
     SRHist.listRecent(function (result) {
       var convs = (result && result.conversations) ? result.conversations : [];
@@ -1833,7 +1866,6 @@ body::before {
   }
 
   function _openConversation(convId, preview) {
-    if (!_isAuth) { _showAuthPrompt('save'); return; }
     if (!SRHist || typeof SRHist.loadConversation !== 'function') return;
 
     SRHist.loadConversation(convId, function (result) {
@@ -1855,64 +1887,6 @@ body::before {
         }
       });
     });
-  }
-
-  // ── AUTH PROMPTS ──────────────────────────────────────────────────────────
-  function _showAuthPrompt(reason) {
-    // Build prompt text based on reason
-    var text = 'Sign in or create an account to access this feature.';
-    var loginLabel  = 'LOG IN';
-    var signupLabel = 'SIGN UP';
-
-    if (reason === 'save') {
-      text = 'Sign in or create an account to save this conversation and continue it later.';
-    } else if (reason === 'device') {
-      text = 'Sign in to securely pair and control your devices.';
-    } else if (reason === 'history') {
-      text = 'Sign in to access your saved conversations and pick up where you left off.';
-    } else if (reason === 'memory') {
-      text = 'Sign in to use Personal Memory — save and recall information across sessions.';
-    }
-
-    // Build inline prompt DOM
-    var wrap = document.createElement('div');
-    wrap.className = 'sr-auth-prompt';
-
-    var textEl = document.createElement('div');
-    textEl.className   = 'sr-auth-prompt-text';
-    textEl.textContent = text;
-
-    var actions = document.createElement('div');
-    actions.className = 'sr-auth-prompt-actions';
-
-    var loginBtn = document.createElement('button');
-    loginBtn.className   = 'sr-auth-prompt-btn primary';
-    loginBtn.textContent = loginLabel;
-    loginBtn.addEventListener('click', function () {
-      if (SRAuth) SRAuth.showModal('login');
-      wrap.remove();
-    });
-
-    var signupBtn = document.createElement('button');
-    signupBtn.className   = 'sr-auth-prompt-btn secondary';
-    signupBtn.textContent = signupLabel;
-    signupBtn.addEventListener('click', function () {
-      if (SRAuth) SRAuth.showModal('signup');
-      wrap.remove();
-    });
-
-    var notNowBtn = document.createElement('button');
-    notNowBtn.className   = 'sr-auth-prompt-btn ghost';
-    notNowBtn.textContent = 'Not now';
-    notNowBtn.addEventListener('click', function () { wrap.remove(); });
-
-    actions.appendChild(loginBtn);
-    actions.appendChild(signupBtn);
-    actions.appendChild(notNowBtn);
-    wrap.appendChild(textEl);
-    wrap.appendChild(actions);
-    $conv.appendChild(wrap);
-    _scrollToBottom();
   }
 
   // ── STATUS ────────────────────────────────────────────────────────────────
@@ -1956,8 +1930,8 @@ body::before {
     if (_msgCount === 0 && $welcome) $welcome.style.display = 'none';
     _msgCount++;
 
-    // Buffer unsigned-session messages for potential save-on-login
-    if (!_isAuth && (role === 'user' || role === 'sr')) {
+    // Buffer in-memory session messages
+    if (role === 'user' || role === 'sr') {
       _sessionMsgs.push({ role: role, text: text });
     }
 
@@ -2035,17 +2009,6 @@ body::before {
     $sendBtn.disabled = true;
     _isProcessing = true;
     _setStatus('Thinking…', 'loading');
-
-    // ── AUTH GATES ────────────────────────────────────────────────────────
-    // Explicit save request: require auth
-    if (!_isAuth && /\b(save|keep|store)\s+(this|the)?\s*(conversation|chat)\b/i.test(msg)) {
-      _appendMessage('user', msg);
-      _isProcessing = false;
-      _setStatus('Ready', 'ready');
-      $sendBtn.disabled = $input.value.trim() === '';
-      _showAuthPrompt('save');
-      return;
-    }
 
     _appendMessage('user', msg);
     _showTyping();
@@ -2154,9 +2117,8 @@ body::before {
     _closeSidebars();
   });
 
-  // Projects — open real Projects panel (connected to context engine + adaptive brain)
+  // Projects — open real Projects panel (no auth gate — works with anonymous UID)
   function _goProjects() {
-    if (!_isAuth) { _showAuthPrompt('save'); return; }
     _closeSidebars();
     _openProjectsPanel();
   }
@@ -2191,18 +2153,6 @@ body::before {
   // Scrim
   $scrim.addEventListener('click', _closeSidebars);
 
-  // Auth button (top-right, signed-out)
-  $authBtn.addEventListener('click', function () {
-    if (SRAuth) SRAuth.showModal('login');
-  });
-
-  // Profile button (top-right, signed-in)
-  $profileBtn.addEventListener('click', function () {
-    $settings.classList.add('open');
-    if (_isMobile()) $scrim.classList.add('visible');
-    _syncToggles();
-  });
-
   // New conversation (settings panel)
   document.getElementById('srClearHistoryBtn').addEventListener('click', function () {
     SR.newConversation();
@@ -2211,25 +2161,42 @@ body::before {
     _closeSidebars();
   });
 
-  // Clear memories (settings panel, auth-gated)
-  document.getElementById('srClearMemoryBtn').addEventListener('click', function () {
-    if (!_isAuth) { _showAuthPrompt('memory'); _closeSidebars(); return; }
-    SR.ask('forget everything', function (r) { _appendMessage('sr', r); });
-    _closeSidebars();
-  });
+  // Clear My Shadow Data — clears all local and Firestore data (no auth required)
+  (function () {
+    var btn = document.getElementById('srClearDataBtn');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      if (!confirm('Clear all Shadow Reaper data on this device?\n\nThis will delete:\n• Conversation history\n• Personal memories\n• Adaptive learning\n• Preferences\n\nThis cannot be undone.')) return;
 
-  // Sign out
-  function _doSignOut() {
-    if (!SRAuth) return;
-    SRAuth.signOut(function () {
       _closeSidebars();
-      _appendDivider('Signed out');
-      // Clear session buffer
+
+      // Clear in-memory session
       _sessionMsgs = [];
+
+      // Clear localStorage preferences and setup flag
+      try {
+        var keysToRemove = ['srShadowEditionSetupDone', 'srShadowEditionPrefs', 'snxShadowAdaptiveEnabled'];
+        keysToRemove.forEach(function (k) { localStorage.removeItem(k); });
+      } catch (e) {}
+
+      // Clear persistence modules
+      if (window.SNXShadowMemory && typeof window.SNXShadowMemory.clearAll === 'function') {
+        window.SNXShadowMemory.clearAll(true, function () {});
+      }
+      if (window.SNXShadowAdaptive && typeof window.SNXShadowAdaptive.clearAll === 'function') {
+        window.SNXShadowAdaptive.clearAll(function () {});
+      }
+      if (window.SRAdaptiveBrain && typeof window.SRAdaptiveBrain.clearAll === 'function') {
+        window.SRAdaptiveBrain.clearAll(function () {});
+      }
+
+      // Start fresh conversation
+      SR.newConversation();
+      _appendDivider('Shadow data cleared');
+      _appendMessage('sr', 'All Shadow data has been cleared on this device.');
+      _updateStatusChips();
     });
-  }
-  document.getElementById('srSignOutBtn').addEventListener('click', _doSignOut);
-  document.getElementById('srMobileNavSignOut').addEventListener('click', _doSignOut);
+  })();
 
   // ── NATIVE DIAGNOSTICS BUTTON ─────────────────────────────────────────────
   (function () {
@@ -2404,7 +2371,6 @@ body::before {
 
   // ── RESPONSIVE HANDLER ──────────────────────────────────────────────────────
   window.addEventListener('resize', function () {
-    if (!_isAuth) return;
     if (!_isMobile()) {
       // Desktop: show nav, hide hamburger, close mobile nav
       $nav.classList.add('visible');
