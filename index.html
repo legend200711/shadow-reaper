@@ -1808,33 +1808,38 @@ body::before {
       });
     }
 
-    // Wire capability state → UI status
+    // Wire capability state → UI status only when the unified inference runtime
+    // is unavailable. SRInferenceRuntime is the authoritative source for which
+    // generator actually serves the conversation (GPU / CPU / hosted / fallback).
+    // This prevents local capability state from overwriting a truthful hosted status.
     if (window.SRCapabilityState) {
       window.SRCapabilityState.onChange(function (dim, newState, reason, snap) {
-        if (!_isProcessing && !_isListening) {
+        if (!window.SRInferenceRuntime && !_isProcessing && !_isListening) {
           _setStatus(snap.uiStatus, snap.uiClass);
         }
       });
-      var _initSnap = window.SRCapabilityState.getSnapshot();
-      _setStatus(_initSnap.uiStatus, _initSnap.uiClass);
-    } else {
+      if (!window.SRInferenceRuntime) {
+        var _initSnap = window.SRCapabilityState.getSnapshot();
+        _setStatus(_initSnap.uiStatus, _initSnap.uiClass);
+      }
+    } else if (!window.SRInferenceRuntime) {
       _setStatus('Ready', 'ready');
     }
 
     // ── WIRE LOCAL MODEL STATE → UI STATUS ───────────────────────────────────
-    // When the model transitions (LOADING → READY / FAILED), reflect it in the
-    // header status chip so the user sees truthful state rather than always
-    // reading "Ready" while the model is actually still loading.
-    if (window.SRLocalModel && typeof window.SRLocalModel.onStateChange === 'function') {
+    // Legacy fallback only. When SRInferenceRuntime exists it owns the primary
+    // runtime status; a failed local model must never overwrite "Ready (hosted)".
+    if (!window.SRInferenceRuntime && window.SRLocalModel &&
+        typeof window.SRLocalModel.onStateChange === 'function') {
       window.SRLocalModel.onStateChange(function (state, pct) {
         if (_isProcessing || _isListening) return;
         if (state === 'LOADING' || state === 'VERIFYING') {
           var loadPct = (pct && pct > 0) ? ' (' + pct + '%)' : '';
           _setStatus('Loading model' + loadPct + '…', 'loading');
         } else if (state === 'READY') {
-          _setStatus('Ready', 'ready');
+          _setStatus('Ready (local)', 'ready');
         } else if (state === 'FAILED') {
-          _setStatus('Ready (local mode)', 'ready');
+          _setStatus('Ready (fallback)', 'ready');
         }
       });
     }
@@ -1866,8 +1871,19 @@ body::before {
     // Show desktop nav always (no auth gate)
     if (!_isMobile()) $nav.classList.add('visible');
 
-    // Update status
-    if (window.SRCapabilityState) {
+    // Update status. Do not let auth/capability initialization overwrite the
+    // runtime selected by SRInferenceRuntime (especially hosted inference).
+    if (window.SRInferenceRuntime) {
+      var rt = window.SRInferenceRuntime.getStatus();
+      if (rt.aiState === 'AI_READY') {
+        if (rt.activeRuntime === 'shadow-api') _setStatus('Ready (hosted)', 'ready');
+        else if (rt.activeRuntime === 'cpu-local') _setStatus('Ready (local CPU)', 'ready');
+        else if (rt.activeRuntime === 'webgpu-local') _setStatus('Ready (GPU)', 'ready');
+        else _setStatus('Ready', 'ready');
+      } else if (rt.aiState === 'DEGRADED_TEMPLATE_ONLY') {
+        _setStatus('Ready (offline mode)', 'ready');
+      }
+    } else if (window.SRCapabilityState) {
       var snap = window.SRCapabilityState.getSnapshot();
       _setStatus(snap.uiStatus, snap.uiClass);
     } else {
