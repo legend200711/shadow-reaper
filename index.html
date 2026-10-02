@@ -9,15 +9,15 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="Shadow Reaper" />
 <meta name="mobile-web-app-capable" content="yes" />
-<!-- PWA manifest -->
-<link rel="manifest" href="/manifest.json" />
+<!-- PWA manifest — path relative to GitHub Pages subdirectory /shadow-reaper/ -->
+<link rel="manifest" href="/shadow-reaper/manifest.json" />
 <!-- Apple Touch Icon -->
-<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
-<link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png" />
-<link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512.png" />
+<link rel="apple-touch-icon" href="/shadow-reaper/icons/apple-touch-icon.png" />
+<link rel="apple-touch-icon" sizes="192x192" href="/shadow-reaper/icons/icon-192.png" />
+<link rel="apple-touch-icon" sizes="512x512" href="/shadow-reaper/icons/icon-512.png" />
 <!-- Standard icon -->
-<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
-<link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512.png" />
+<link rel="icon" type="image/png" sizes="192x192" href="/shadow-reaper/icons/icon-192.png" />
+<link rel="icon" type="image/png" sizes="512x512" href="/shadow-reaper/icons/icon-512.png" />
 <title>Shadow Reaper</title>
 <style>
 /* ── RESET ──────────────────────────────────────────────────────────────── */
@@ -58,6 +58,16 @@
   --header-h:      60px;
   --sidebar-w:     280px;
   --transition:    0.18s ease;
+
+  /* Safe-area bottom inset — 0 on devices without system navigation overlap.
+     Overridden to env(safe-area-inset-bottom) below via @supports.
+     This ensures the composer always clears Android gesture-nav / iPhone home
+     indicator, but adds no gap on devices that don't need it. */
+  --safe-b: 0px;
+}
+/* Apply env() only when the browser actually supports it (all modern mobile). */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  :root { --safe-b: env(safe-area-inset-bottom); }
 }
 
 /* ── BASE ───────────────────────────────────────────────────────────────── */
@@ -90,8 +100,12 @@ body::before {
   z-index: 1;
   display: flex;
   flex-direction: column;
-  height: 100dvh;
+  /* 100vh first as the safe baseline, then 100dvh for browsers that support
+     dynamic viewport units (Android Chrome 108+, Safari 15.4+, Firefox 101+).
+     dvh shrinks when the browser URL bar is visible, preventing the composer
+     from being pushed below the visible viewport. */
   height: 100vh;
+  height: 100dvh;
 }
 
 /* ── HEADER ─────────────────────────────────────────────────────────────── */
@@ -352,7 +366,10 @@ body::before {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 65vh;
+  /* Use flex-grow instead of min-height to fill available space without ever
+     forcing the container taller than the viewport column allows. A fixed
+     min-height: 65vh pushed content below the visible area on short screens. */
+  flex: 1 0 auto;
   text-align: center;
   padding: 32px 16px 24px;
   gap: 14px;
@@ -506,9 +523,15 @@ body::before {
 /* ── INPUT AREA ─────────────────────────────────────────────────────────── */
 .sr-input-area {
   flex: 0 0 auto;
-  padding: 10px 14px 14px;
+  /* Bottom padding absorbs safe-area-inset-bottom (Android gesture nav,
+     iPhone home indicator). On devices without system nav overlap --safe-b
+     resolves to 0px so no extra gap is added. */
+  padding: 10px 14px calc(14px + var(--safe-b));
   background: var(--bg-deep);
   border-top: 1px solid var(--border);
+  /* Ensure composer is always rendered above conversation content. */
+  position: relative;
+  z-index: 5;
 }
 .sr-input-row {
   display: flex;
@@ -577,8 +600,8 @@ body::before {
   position: fixed;
   top: 0; left: 0;
   width: 100%;
-  height: 100dvh;
   height: 100vh;
+  height: 100dvh;
   background: var(--bg-deep);
   z-index: 60;
   display: flex;
@@ -729,8 +752,8 @@ body::before {
   top: 0; right: 0;
   width: var(--sidebar-w);
   max-width: 92vw;
-  height: 100dvh;
   height: 100vh;
+  height: 100dvh;
   background: var(--bg-panel);
   border-left: 1px solid var(--border-bright);
   z-index: 50;
@@ -968,8 +991,8 @@ body::before {
   top: 0; left: 0;
   width: 260px;
   max-width: 86vw;
-  height: 100dvh;
   height: 100vh;
+  height: 100dvh;
   background: var(--bg-panel);
   border-right: 1px solid var(--border-bright);
   z-index: 50;
@@ -996,7 +1019,8 @@ body::before {
 /* ── RESPONSIVE ─────────────────────────────────────────────────────────── */
 @media (min-width: 600px) {
   .sr-conversation { padding: 24px 22px 0; }
-  .sr-input-area   { padding: 10px 22px 18px; }
+  /* On wider screens keep the calc() pattern so safe-area still applies. */
+  .sr-input-area   { padding: 10px 22px calc(18px + var(--safe-b)); }
 }
 
 @media (min-width: 900px) {
@@ -1042,7 +1066,8 @@ body::before {
   bottom: 0; left: 0; right: 0;
   background: #0d1626;
   border-top: 1px solid rgba(30,144,255,0.3);
-  padding: 14px 18px 18px;
+  /* Account for home indicator / gesture-nav at the bottom. */
+  padding: 14px 18px calc(18px + var(--safe-b));
   z-index: 80;
   font-size: 13px;
   color: var(--text-secondary);
@@ -1116,8 +1141,8 @@ body::before {
       <!-- Settings gear (always visible) -->
       <button class="sr-icon-btn" id="srSettingsBtn" title="Settings" aria-label="Settings">&#9881;</button>
 
-      <!-- PWA Install button — shown only when browser install is available and app is not yet installed -->
-      <button class="sr-install-btn" id="srInstallBtn" aria-label="Install Shadow Reaper">&#11015; Install</button>
+      <!-- PWA Install button — shown ONLY when SRPWAState confirms INSTALLABLE or IOS_MANUAL_INSTALL -->
+      <button class="sr-install-btn" id="srInstallBtn" aria-label="Install Shadow Reaper">&#11015; Install Shadow Reaper</button>
 
       <!-- LOGIN / SIGN UP — shown when signed out -->
       <button class="sr-auth-btn" id="srAuthBtn" aria-label="Log in or sign up">LOG IN / SIGN UP</button>
@@ -1495,6 +1520,9 @@ body::before {
 <script src="./adapters/founder-controls.js"></script>
 <script src="./security/sr-founder-security.js"></script>
 <script src="./shadow-reaper.js"></script>
+
+<!-- PWA Install-State Manager (must load before the PWA init block below) -->
+<script src="./sr-pwa-state.js"></script>
 
 <!-- Feature Registry (diagnostics + UI guard) -->
 <script src="./sr-feature-registry.js"></script>
@@ -2282,6 +2310,45 @@ body::before {
     }
   });
 
+  // ── KEYBOARD / VISUAL VIEWPORT HANDLER ────────────────────────────────────
+  // When the software keyboard opens on Android/iOS the layout must shift so
+  // the composer stays visible above the keyboard. The Visual Viewport API
+  // reports the *actual* visible area excluding the keyboard and browser chrome.
+  //
+  // Strategy: pin .sr-app height to window.visualViewport.height while the
+  // keyboard is open so the flex layout reflows and the composer stays on-screen.
+  // We do NOT force-scroll or call scrollIntoView in a loop — that causes
+  // jitter. We only update height on visualViewport resize events.
+  //
+  // Fallback: on browsers without visualViewport (very old), the 100dvh CSS
+  // already handles the common Android case.
+  (function () {
+    if (!window.visualViewport) return; // not available — CSS handles it
+
+    var $app = document.getElementById('srApp');
+    if (!$app) return;
+
+    var _rafId = null;
+
+    function _applyViewportHeight() {
+      _rafId = null;
+      var h = window.visualViewport.height;
+      // Only apply when the keyboard is likely open (viewport is significantly
+      // shorter than the window). This avoids fighting with browser chrome
+      // expand/collapse animations on normal scroll.
+      $app.style.height = h + 'px';
+    }
+
+    function _scheduleApply() {
+      if (_rafId) return;
+      _rafId = requestAnimationFrame(_applyViewportHeight);
+    }
+
+    window.visualViewport.addEventListener('resize', _scheduleApply);
+    // Also handle offset changes (iOS Safari scrolls the viewport on focus)
+    window.visualViewport.addEventListener('scroll', _scheduleApply);
+  })();
+
   // ── PROJECTS PANEL ────────────────────────────────────────────────────────
   // Connected to: SRFirebaseAdapter (userLearnedContextCol) for PROJECT entries,
   // SRContext.getSnapshot().projectName (current session project),
@@ -2507,96 +2574,102 @@ body::before {
 <script>
 /* ─────────────────────────────────────────────────────────────────────────────
    Shadow Reaper PWA — Service Worker Registration + Install Prompt
-   Build: SR-PWA-1
+   Build: SR-PWA-2
 
    INSTALL STRATEGY:
-   - Captures the beforeinstallprompt event (Chrome/Edge/Android).
-   - Shows a subtle "Install" button ONLY when the browser signals readiness.
-   - Never shows the button if the app is already running in standalone mode.
-   - iOS Safari: shows step-by-step Add-to-Home-Screen instructions when the
-     user taps Install (no browser prompt available on iOS).
-   - The button is hidden if the app is already installed (standalone display).
+   - All install-state logic is delegated to SRPWAState (sr-pwa-state.js).
+   - SRPWAState is the SINGLE source of truth — no duplicate detection here.
+   - The install button is shown ONLY when SRPWAState reports INSTALLABLE or
+     IOS_MANUAL_INSTALL. It is NEVER shown based on service-worker presence,
+     cached files, manifest availability, or any other indirect signal.
+   - INSTALLED is ONLY reported when display-mode: standalone is detected, or
+     navigator.standalone === true (iOS Safari). A normal browser tab is NOT
+     classified as installed regardless of SW registration state.
+   - The real browser install prompt is triggered on button click. Installation
+     is confirmed only when the browser fires appinstalled.
 
    SERVICE WORKER STRATEGY:
+   - Registered at /shadow-reaper/sw.js with scope /shadow-reaper/.
+   - Correct for GitHub Pages subdirectory hosting.
    - Safe no-skipWaiting registration — no forced reloads.
    - Updates apply when all tabs are closed (standard browser behavior).
-   - Prevents stale-HTML trap via network-first on index.html.
 ─────────────────────────────────────────────────────────────────────────────── */
 (function () {
   'use strict';
 
-  // ── Detection helpers ──────────────────────────────────────────────────────
-  var _isStandalone = (
-    window.matchMedia('(display-mode: standalone)').matches ||
-    window.navigator.standalone === true  // iOS Safari
-  );
-
-  var _isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) ||
-               (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  var _isIOSSafari = _isIOS && /safari/i.test(navigator.userAgent) &&
-                    !/crios|fxios|opios/i.test(navigator.userAgent);
-
   // ── DOM refs ───────────────────────────────────────────────────────────────
-  var $installBtn  = document.getElementById('srInstallBtn');
-  var $iosGuide    = document.getElementById('srIosGuide');
-  var $iosClose    = document.getElementById('srIosGuideClose');
+  var $installBtn = document.getElementById('srInstallBtn');
+  var $iosGuide   = document.getElementById('srIosGuide');
+  var $iosClose   = document.getElementById('srIosGuideClose');
 
-  // ── PWA install event capture ─────────────────────────────────────────────
-  var _deferredPrompt = null;
-
-  // If already running in standalone/installed mode, never show install UI
-  if (_isStandalone) {
-    // Installed — nothing to do
-  } else if (_isIOSSafari) {
-    // iOS Safari: real browser prompt is not available.
-    // Show Install button that triggers the manual guide instead.
-    if ($installBtn) {
-      $installBtn.classList.add('visible');
-      $installBtn.addEventListener('click', function () {
-        if ($iosGuide) $iosGuide.classList.add('visible');
-      });
-    }
-    if ($iosClose) {
-      $iosClose.addEventListener('click', function () {
-        if ($iosGuide) $iosGuide.classList.remove('visible');
-      });
-    }
-  } else {
-    // Chrome / Edge / Samsung Internet / other Chromium: real install prompt
-    window.addEventListener('beforeinstallprompt', function (e) {
-      // Prevent the mini-infobar from appearing automatically
-      e.preventDefault();
-      _deferredPrompt = e;
-
-      // Reveal the install button now that we know installation is possible
-      if ($installBtn) $installBtn.classList.add('visible');
-    });
-
-    // Handle the install button click — trigger the REAL browser prompt
-    if ($installBtn) {
-      $installBtn.addEventListener('click', function () {
-        if (!_deferredPrompt) return;
-        _deferredPrompt.prompt();
-        _deferredPrompt.userChoice.then(function (choice) {
-          // Regardless of outcome, hide the button — the event is consumed
-          $installBtn.classList.remove('visible');
-          _deferredPrompt = null;
-        });
-      });
-    }
-
-    // App was installed — hide the button if it was visible
-    window.addEventListener('appinstalled', function () {
-      if ($installBtn) $installBtn.classList.remove('visible');
-      _deferredPrompt = null;
-      console.log('[SR-PWA] Shadow Reaper installed successfully.');
+  // ── iOS guide close button (wired regardless of state) ────────────────────
+  if ($iosClose) {
+    $iosClose.addEventListener('click', function () {
+      if ($iosGuide) $iosGuide.classList.remove('visible');
     });
   }
 
+  // ── Install button click ───────────────────────────────────────────────────
+  // Delegates to SRPWAState which holds the deferred prompt.
+  if ($installBtn) {
+    $installBtn.addEventListener('click', function () {
+      if (!window.SRPWAState) return;
+      var state = window.SRPWAState.getState();
+      if (state === window.SRPWAState.STATE.IOS_MANUAL_INSTALL) {
+        // iOS Safari: show manual guide
+        if ($iosGuide) $iosGuide.classList.add('visible');
+        return;
+      }
+      // Chromium-based: trigger the real browser prompt.
+      // Waits for the browser's userChoice before updating UI.
+      window.SRPWAState.triggerInstallPrompt(function (outcome) {
+        // 'accepted' or 'dismissed' — either way the prompt is consumed.
+        // If accepted, appinstalled will fire and SRPWAState updates via its
+        // own appinstalled listener. No further action needed here.
+        console.log('[SR-PWA] Install prompt outcome:', outcome);
+      });
+    });
+  }
+
+  // ── SRPWAState: initialize and wire UI ────────────────────────────────────
+  // SRPWAState.init() sets up beforeinstallprompt and appinstalled listeners.
+  // onChange fires whenever the install state changes.
+  function _applyPWAState(newState) {
+    var S = window.SRPWAState ? window.SRPWAState.STATE : null;
+    if (!S || !$installBtn) return;
+
+    if (newState === S.INSTALLABLE) {
+      // Browser confirmed this specific PWA is installable.
+      $installBtn.classList.add('visible');
+    } else if (newState === S.IOS_MANUAL_INSTALL) {
+      // iOS Safari: manual Add-to-Home-Screen flow.
+      $installBtn.classList.add('visible');
+    } else {
+      // INSTALLED, NOT_INSTALLABLE, or UNKNOWN — hide the install button.
+      // INSTALLED = running in standalone mode; nothing to install.
+      // NOT_INSTALLABLE = browser has not offered install prompt.
+      // UNKNOWN = detection not yet complete; do not prematurely show anything.
+      $installBtn.classList.remove('visible');
+    }
+  }
+
+  if (window.SRPWAState) {
+    window.SRPWAState.onChange(_applyPWAState);
+    window.SRPWAState.init();
+    // Apply initial state (handles the case where init() resolves synchronously,
+    // e.g. standalone mode detected immediately on page load).
+    _applyPWAState(window.SRPWAState.getState());
+  } else {
+    console.warn('[SR-PWA] SRPWAState not loaded — install detection unavailable.');
+  }
+
   // ── Service Worker Registration ────────────────────────────────────────────
+  // Registered at the correct GitHub Pages subdirectory path and scope.
+  // A wrong scope (e.g. scope '/') would cause this SW to control the entire
+  // domain, potentially conflicting with other PWAs (e.g. Shadow Nexus Social).
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () {
-      navigator.serviceWorker.register('/sw.js', { scope: '/' })
+      navigator.serviceWorker.register('/shadow-reaper/sw.js', { scope: '/shadow-reaper/' })
         .then(function (reg) {
           console.log('[SR-SW] Registered, scope:', reg.scope);
 

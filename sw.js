@@ -1,6 +1,6 @@
 /**
  * Shadow Reaper PWA — Service Worker
- * Build: SR-SW-1
+ * Build: SR-SW-2
  *
  * DESIGN PRINCIPLES:
  * ─────────────────────────────────────────────────────────────────────────────
@@ -16,59 +16,73 @@
  * 5. External API calls (Cloudflare, Firebase) always go to the network.
  *    Cache bypasses those origins entirely.
  * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * GITHUB PAGES HOSTING:
+ *   This service worker is scoped to /shadow-reaper/ (the GitHub Pages repo
+ *   subdirectory). All cache keys use /shadow-reaper/ prefixed paths.
+ *   Cache namespace: sr-shell-v3 (Shadow Reaper-specific — does NOT conflict
+ *   with any other PWA on the same domain).
+ * ─────────────────────────────────────────────────────────────────────────────
  */
 
 'use strict';
 
-const CACHE_VERSION = 'sr-shell-v2';
+// Shadow Reaper-specific cache namespace.
+// Bump version here to force a full re-cache on next visit.
+const CACHE_VERSION = 'sr-shell-v3';
+
+// GitHub Pages subdirectory prefix.
+// All app URLs are under this path.
+const BASE = '/shadow-reaper';
 
 // App-shell resources to pre-cache at install time.
-// These are the minimal files needed to render the application skeleton.
+// Paths are relative to the GitHub Pages subdirectory.
 const APP_SHELL = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png',
-  '/icons/apple-touch-icon.png',
+  BASE + '/',
+  BASE + '/index.html',
+  BASE + '/manifest.json',
+  BASE + '/icons/icon-192.png',
+  BASE + '/icons/icon-512.png',
+  BASE + '/icons/apple-touch-icon.png',
   // Core JS modules (application logic)
-  '/shadow-reaper.js',
-  '/sr-auth-ui.js',
-  '/snx-shadow-conv-history.js',
-  '/snx-shadow-memory.js',
-  '/snx-shadow-adaptive.js',
-  '/config/environment.js',
-  '/security/security-policy.js',
-  '/security/web-research-guard.js',
-  '/security/sr-founder-security.js',
-  '/adapters/firebase-adapter.js',
-  '/adapters/cloudflare-adapter.js',
-  '/adapters/founder-controls.js',
-  '/platform/sr-platform-detector.js',
-  '/platform/sr-capability-manager.js',
-  '/platform/sr-permission-manager.js',
-  '/platform/sr-device-action-router.js',
-  '/platform/adapters/sr-web-adapter.js',
-  '/platform/adapters/sr-android-adapter.js',
-  '/platform/adapters/sr-ios-adapter.js',
-  '/history/sr-conversation-history.js',
-  '/memory/sr-personal-memory.js',
-  '/global-learning/sr-global-learning.js',
-  '/research/sr-web-research.js',
-  '/core/adaptive-brain.js',
-  '/core/understanding-engine.js',
-  '/core/context-engine.js',
-  '/core/conversation-engine.js',
-  '/core/response-engine.js',
-  '/core/persistence-bridge.js',
-  '/core/local-model.js',
-  '/knowledge/knowledge-engine.js',
-  '/knowledge/sr-knowledge-learner.js',
-  '/translation/translation-engine.js',
-  '/voice/sr-wake-name.js',
-  '/voice/voice-engine.js',
-  '/sr-feature-registry.js',
-  '/firebase/firebase-config.js',
+  BASE + '/shadow-reaper.js',
+  BASE + '/sr-auth-ui.js',
+  BASE + '/sr-pwa-state.js',
+  BASE + '/snx-shadow-conv-history.js',
+  BASE + '/snx-shadow-memory.js',
+  BASE + '/snx-shadow-adaptive.js',
+  BASE + '/config/environment.js',
+  BASE + '/security/security-policy.js',
+  BASE + '/security/web-research-guard.js',
+  BASE + '/security/sr-founder-security.js',
+  BASE + '/adapters/firebase-adapter.js',
+  BASE + '/adapters/cloudflare-adapter.js',
+  BASE + '/adapters/founder-controls.js',
+  BASE + '/platform/sr-platform-detector.js',
+  BASE + '/platform/sr-capability-manager.js',
+  BASE + '/platform/sr-permission-manager.js',
+  BASE + '/platform/sr-device-action-router.js',
+  BASE + '/platform/adapters/sr-web-adapter.js',
+  BASE + '/platform/adapters/sr-android-adapter.js',
+  BASE + '/platform/adapters/sr-ios-adapter.js',
+  BASE + '/history/sr-conversation-history.js',
+  BASE + '/memory/sr-personal-memory.js',
+  BASE + '/global-learning/sr-global-learning.js',
+  BASE + '/research/sr-web-research.js',
+  BASE + '/core/adaptive-brain.js',
+  BASE + '/core/understanding-engine.js',
+  BASE + '/core/context-engine.js',
+  BASE + '/core/conversation-engine.js',
+  BASE + '/core/response-engine.js',
+  BASE + '/core/persistence-bridge.js',
+  BASE + '/core/local-model.js',
+  BASE + '/knowledge/knowledge-engine.js',
+  BASE + '/knowledge/sr-knowledge-learner.js',
+  BASE + '/translation/translation-engine.js',
+  BASE + '/voice/sr-wake-name.js',
+  BASE + '/voice/voice-engine.js',
+  BASE + '/sr-feature-registry.js',
+  BASE + '/firebase/firebase-config.js',
 ];
 
 // Origins that must NEVER be served from cache.
@@ -152,7 +166,8 @@ self.addEventListener('fetch', function (event) {
   // ── index.html: Network-first with cache fallback ──────────────────────────
   // Ensures users always get the latest HTML when online.
   // Falls back to cached shell when offline.
-  if (url.pathname === '/' || url.pathname === '/index.html') {
+  // Match both /shadow-reaper/ and /shadow-reaper/index.html
+  if (url.pathname === BASE + '/' || url.pathname === BASE + '/index.html') {
     event.respondWith(
       fetch(req)
         .then(function (response) {
@@ -167,7 +182,7 @@ self.addEventListener('fetch', function (event) {
         })
         .catch(function () {
           // Offline — serve cached shell
-          return caches.match('/index.html').then(function (cached) {
+          return caches.match(BASE + '/index.html').then(function (cached) {
             if (cached) return cached;
             // Last resort: return offline message in the shell's absence
             return new Response(
@@ -218,6 +233,7 @@ self.addEventListener('message', function (event) {
     event.ports[0] && event.ports[0].postMessage({
       type: 'SR_SW_VERSION_REPLY',
       version: CACHE_VERSION,
+      base: BASE,
     });
   }
 });
