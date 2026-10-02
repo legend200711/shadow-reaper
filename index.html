@@ -9,15 +9,42 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="Shadow Reaper" />
 <meta name="mobile-web-app-capable" content="yes" />
-<!-- PWA manifest — path relative to GitHub Pages subdirectory /shadow-reaper/ -->
-<link rel="manifest" href="/shadow-reaper/manifest.json" />
-<!-- Apple Touch Icon -->
-<link rel="apple-touch-icon" href="/shadow-reaper/icons/apple-touch-icon.png" />
-<link rel="apple-touch-icon" sizes="192x192" href="/shadow-reaper/icons/icon-192.png" />
-<link rel="apple-touch-icon" sizes="512x512" href="/shadow-reaper/icons/icon-512.png" />
-<!-- Standard icon -->
-<link rel="icon" type="image/png" sizes="192x192" href="/shadow-reaper/icons/icon-192.png" />
-<link rel="icon" type="image/png" sizes="512x512" href="/shadow-reaper/icons/icon-512.png" />
+<!-- PWA manifest — injected by inline script below; path auto-detected for localhost vs GitHub Pages -->
+<!-- Apple Touch Icon — injected by inline script below -->
+<!-- Standard icon — injected by inline script below -->
+<script>
+// ── Base-path auto-detection ──────────────────────────────────────────────────
+// On GitHub Pages:  served at https://user.github.io/shadow-reaper/
+//   → base = '/shadow-reaper'
+// On localhost / 127.0.0.1 / file://:
+//   → base = '' (project root IS the web root)
+//
+// Detection: if hostname is localhost or 127.x.x.x or protocol is file:,
+// we are in local development mode and all assets live at '/'.
+// Otherwise assume the GitHub Pages /shadow-reaper/ subdirectory.
+//
+// DO NOT hardcode localhost-only. Both environments must work from this same file.
+(function () {
+  var h = location.hostname;
+  var isLocal = (h === 'localhost' || h === '127.0.0.1' || /^192\.168\./.test(h) ||
+                 /^10\./.test(h) || location.protocol === 'file:');
+  var BASE = isLocal ? '' : '/shadow-reaper';
+  window.__SR_BASE = BASE;  // expose for SW registration below
+
+  function injectLink(attrs) {
+    var el = document.createElement('link');
+    Object.keys(attrs).forEach(function (k) { el.setAttribute(k, attrs[k]); });
+    document.head.appendChild(el);
+  }
+
+  injectLink({ rel: 'manifest', href: BASE + '/manifest.json' });
+  injectLink({ rel: 'apple-touch-icon', href: BASE + '/icons/apple-touch-icon.png' });
+  injectLink({ rel: 'apple-touch-icon', sizes: '192x192', href: BASE + '/icons/icon-192.png' });
+  injectLink({ rel: 'apple-touch-icon', sizes: '512x512', href: BASE + '/icons/icon-512.png' });
+  injectLink({ rel: 'icon', type: 'image/png', sizes: '192x192', href: BASE + '/icons/icon-192.png' });
+  injectLink({ rel: 'icon', type: 'image/png', sizes: '512x512', href: BASE + '/icons/icon-512.png' });
+})();
+</script>
 <title>Shadow Reaper</title>
 <style>
 /* ── RESET ──────────────────────────────────────────────────────────────── */
@@ -1529,24 +1556,32 @@ body::before {
 <!-- Auth UI (must load after Firebase adapter) -->
 <script src="./sr-auth-ui.js"></script>
 
-<!-- Cloud API client (must load after sr-auth-ui.js) -->
+<!-- Central Configuration — MUST load before Cloud API and Inference Runtime -->
+<!-- config/shadow-config.js is the single source of truth for all endpoint URLs. -->
+<!-- To change the Worker URL, edit config/shadow-config.js — not scattered inline. -->
+<script src="./config/shadow-config.js"></script>
+
+<!-- Cloud API client (must load after sr-auth-ui.js and shadow-config.js) -->
 <!-- sr-cloud-api.js provides SRCloudAPI — offline queue + Cloudflare Worker sync -->
 <script src="./sr-cloud-api.js"></script>
 <script>
 /* ── Shadow Reaper Cloud API — Configuration ───────────────────────────────
-   Worker URL is set here after deployment.
-   Shadow works fully offline if this is unconfigured or if the Worker is down.
-   SECURITY: No secrets here. The Worker URL is public infrastructure, not a credential.
+   Worker URL comes from config/shadow-config.js (single source of truth).
+   SRConfig auto-detects environment: localhost → dev Worker, else → production Worker.
+   Shadow works fully offline if the Worker is down.
+   SECURITY: No secrets here. Worker URLs are public infrastructure, not credentials.
    The Firebase ID token (obtained automatically by SRCloudAPI) proves identity.
 ─────────────────────────────────────────────────────────────────────────────── */
 (function () {
   'use strict';
-  // Production Worker URL — set after deployment
-  // Leave empty string '' to disable cloud sync (Shadow still works fully offline)
-  var SR_CLOUD_WORKER_URL = 'https://sr-cloud-api.nthntjrn.workers.dev';
+  // Worker URL is managed by config/shadow-config.js.
+  // SRConfig.getWorkerUrl() returns the correct URL for the current environment.
+  var workerUrl = (window.SRConfig && window.SRConfig.getWorkerUrl)
+    ? window.SRConfig.getWorkerUrl()
+    : 'https://sr-cloud-api.nthntjrn.workers.dev';
 
-  if (window.SRCloudAPI && SR_CLOUD_WORKER_URL) {
-    window.SRCloudAPI.configure({ workerUrl: SR_CLOUD_WORKER_URL });
+  if (window.SRCloudAPI && workerUrl) {
+    window.SRCloudAPI.configure({ workerUrl: workerUrl });
   }
 })();
 </script>
@@ -1717,6 +1752,62 @@ body::before {
       return;
     }
 
+    // ── AUTO-START INFERENCE RUNTIME ─────────────────────────────────────────
+    // SRInferenceRuntime probes WebGPU → CPU → Hosted Shadow API in background.
+    // Conversations work immediately (deterministic path); the runtime silently
+    // upgrades responses once any inference path becomes READY.
+    // This also triggers local model load when WebGPU is available.
+    if (window.SRInferenceRuntime &&
+        window.SRInferenceRuntime.getStatus().state === 'UNINITIALIZED') {
+      // initialize() is non-blocking — it probes in the background
+      window.SRInferenceRuntime.initialize().catch(function (e) {
+        console.warn('[SR-UI] Inference runtime init error:', e && e.message);
+      });
+    } else if (window.SRLocalModel && typeof window.SRLocalModel.loadModel === 'function') {
+      // Fallback: if only SRLocalModel is loaded (not SRInferenceRuntime)
+      var lmStatus = window.SRLocalModel.getStatus();
+      if (lmStatus && lmStatus.state === 'UNINITIALIZED') {
+        window.SRLocalModel.loadModel().catch(function (e) {
+          console.warn('[SR-UI] Local model load failed:', e && e.message);
+        });
+      }
+    }
+
+    // ── WIRE INFERENCE RUNTIME STATE → UI STATUS ──────────────────────────────
+    // When the inference runtime selects a runtime (webgpu/cpu/hosted/emergency),
+    // reflect it in the header status chip so the user sees truthful state.
+    if (window.SRInferenceRuntime) {
+      window.SRInferenceRuntime.onStateChange(function (rtState, aiState, activeRuntime) {
+        if (_isProcessing || _isListening) return;
+        var uiText, uiClass;
+        if (aiState === 'AI_READY') {
+          if (activeRuntime === 'shadow-api') {
+            uiText  = 'Ready (hosted)';
+          } else if (activeRuntime === 'cpu-local') {
+            uiText  = 'Ready (local CPU)';
+          } else if (activeRuntime === 'webgpu-local') {
+            uiText  = 'Ready (GPU)';
+          } else {
+            uiText  = 'Ready';
+          }
+          uiClass = 'ready';
+        } else if (aiState === 'DEGRADED_TEMPLATE_ONLY') {
+          uiText  = 'Ready (offline mode)';
+          uiClass = 'ready';
+        } else if (rtState && rtState.indexOf('LOADING') !== -1) {
+          uiText  = 'Loading AI…';
+          uiClass = 'loading';
+        } else if (rtState && (rtState.indexOf('CHECKING') !== -1 || rtState.indexOf('CHECKING') !== -1)) {
+          uiText  = 'Connecting…';
+          uiClass = 'loading';
+        } else {
+          uiText  = 'Initializing…';
+          uiClass = 'loading';
+        }
+        _setStatus(uiText, uiClass);
+      });
+    }
+
     // Wire capability state → UI status
     if (window.SRCapabilityState) {
       window.SRCapabilityState.onChange(function (dim, newState, reason, snap) {
@@ -1728,6 +1819,24 @@ body::before {
       _setStatus(_initSnap.uiStatus, _initSnap.uiClass);
     } else {
       _setStatus('Ready', 'ready');
+    }
+
+    // ── WIRE LOCAL MODEL STATE → UI STATUS ───────────────────────────────────
+    // When the model transitions (LOADING → READY / FAILED), reflect it in the
+    // header status chip so the user sees truthful state rather than always
+    // reading "Ready" while the model is actually still loading.
+    if (window.SRLocalModel && typeof window.SRLocalModel.onStateChange === 'function') {
+      window.SRLocalModel.onStateChange(function (state, pct) {
+        if (_isProcessing || _isListening) return;
+        if (state === 'LOADING' || state === 'VERIFYING') {
+          var loadPct = (pct && pct > 0) ? ' (' + pct + '%)' : '';
+          _setStatus('Loading model' + loadPct + '…', 'loading');
+        } else if (state === 'READY') {
+          _setStatus('Ready', 'ready');
+        } else if (state === 'FAILED') {
+          _setStatus('Ready (local mode)', 'ready');
+        }
+      });
     }
     _updateStatusChips();
     _syncToggles();
@@ -2022,37 +2131,115 @@ body::before {
       _updateStatusChips();
 
       if (SRVoice && SRVoice.isTTSEnabled()) {
-        SRVoice.speak(response);
+        // ONE response → ONE TTS speak. The same text is both displayed and spoken.
+        // Notify conversation session that speaking is starting.
+        var convSess = window.SRConvSession;
+        if (convSess) convSess.onSpeakingStart(response);
+        SRVoice.speak(response, function () {
+          // TTS finished — notify session so it transitions back to LISTENING
+          if (convSess) convSess.onSpeakingEnd();
+        }, function () {
+          // TTS error — graceful recovery
+          if (convSess) convSess.onSpeakingError();
+        });
       }
     });
   }
 
-  // ── VOICE ──────────────────────────────────────────────────────────────────
+  // ── VOICE — Conversation Session integration ───────────────────────────────
+  //
+  // Supports foreground continuous conversation:
+  //   IDLE → LISTENING → THINKING → SPEAKING → LISTENING (loop)
+  //
+  // ONE Shadow response is generated per turn.
+  // That SAME response is displayed AND spoken via TTS.
+  // There is no separate "voice response" or "text response".
+  //
+  // Echo protection: SRConvSession suppresses Shadow's own TTS being heard
+  // back as input (prevents infinite response loops).
+  //
+  // Graceful failures:
+  //   - Mic permission denied: user sees a clear message, no crash
+  //   - STT error: session stays active, error is recoverable
+  //   - TTS error: session continues (text response still shown)
+
+  // Duplicate transcript guard — prevents the same recognized phrase from
+  // being submitted twice if the STT fires multiple times.
+  var _lastVoiceTranscript = '';
+  var _lastVoiceTranscriptTime = 0;
+
   function _toggleVoice() {
     if (!SRVoice || !SRVoice.isSupported()) {
-      _appendMessage('sr', 'Voice input is not supported in this browser.');
+      _appendMessage('sr', 'Voice input is not supported in this browser. You can still type to talk to Shadow.');
       return;
     }
     if (!SRVoice.isVoiceEnabled()) {
-      _appendMessage('sr', 'Voice is currently disabled. Enable it in Settings.');
+      _appendMessage('sr', 'Voice is currently disabled. Enable it in Settings to use voice conversation.');
       return;
     }
     if (_isListening) {
       SRVoice.stopListening();
       _setVoiceUI(false);
+      // End conversation session gracefully
+      var sess = window.SRConvSession;
+      if (sess && sess.isActive()) sess.endSession('user_stopped');
       return;
     }
+
+    // Start continuous session
     _setVoiceUI(true);
+    var convSess = window.SRConvSession;
+    if (convSess) convSess.startSession();
+
     SRVoice.startListening(
       function (rawTranscript) {
-        _setVoiceUI(false);
+        // Duplicate prevention — ignore if same transcript within 2s
+        var now = Date.now();
+        if (rawTranscript === _lastVoiceTranscript && now - _lastVoiceTranscriptTime < 2000) {
+          return;
+        }
+        _lastVoiceTranscript     = rawTranscript;
+        _lastVoiceTranscriptTime = now;
+
         if (!rawTranscript || !rawTranscript.trim()) return;
+
+        // Echo protection via SRConvSession
+        if (convSess) {
+          var res = convSess.onSpeechResult(rawTranscript);
+          if (res && !res.process) {
+            // Echo or end-session command — do not process
+            if (res.sessionEnded) _setVoiceUI(false);
+            return;
+          }
+        }
+
+        // Show the recognized text in the input field
         $input.value = rawTranscript;
+
+        // Notify session: user speech was finalized → THINKING
+        if (convSess) convSess.onThinkingStart();
+
+        // Route through the SAME ShadowReaper.ask() pipeline.
+        // Typed and voice conversation always use the same brain.
         _send(rawTranscript);
+
+        // After _send() completes, the response is both displayed and spoken
+        // (TTS is wired in _send above). Session transitions back to LISTENING
+        // are handled by the TTS callbacks in _send.
       },
       function (err) {
-        _setVoiceUI(false);
-        _appendMessage('sr', 'Voice input error: ' + (err || 'microphone not available.'));
+        // STT error — graceful recovery, no crash
+        if (convSess) convSess.onRecognitionError(err || 'unknown');
+        if (err === 'not-allowed' || err === 'permission-denied') {
+          _setVoiceUI(false);
+          if (convSess) convSess.endSession('mic_permission_denied');
+          _appendMessage('sr', 'Microphone permission was denied. Grant microphone access in your browser settings and try again.');
+        } else if (err === 'no-speech') {
+          // Normal — user paused, stay in session
+        } else {
+          // Other errors — stay in session but surface gently
+          console.warn('[SR-UI] Voice STT error:', err);
+        }
       }
     );
   }
@@ -2270,20 +2457,46 @@ body::before {
       lines.push('── LOCAL MODEL ──');
       if (lm) {
         var ms = lm.getStatus();
-        lines.push('Model state         : ' + ms.state);
-        lines.push('Model ID            : ' + (ms.modelId || 'none'));
-        lines.push('Load progress       : ' + ms.loadPct + '%');
-        lines.push('Last error          : ' + (ms.lastError || 'none'));
         var md = lm.getDiagnostics ? lm.getDiagnostics() : {};
-        lines.push('Error code          : ' + (md.errorCode || 'none'));
+        // Core state
+        lines.push('MODEL_ID            : ' + (md.modelIdRequested || ms.modelId || 'none'));
+        lines.push('MODEL_RUNTIME       : WebLLM via ' + (md.engineApi || '?') + ' / CDN: ' + (md.webllmCDN || '?'));
+        lines.push('FINAL_MODEL_STATE   : ' + ms.state);
+        lines.push('MODEL_READY         : ' + (ms.state === 'READY' ? 'YES — inference-probe passed (verifyResult=' + (md.verifyResult || '?') + ')' : 'NO'));
+        lines.push('Load progress       : ' + ms.loadPct + '%');
+        // WebGPU
+        lines.push('WEBGPU_AVAILABLE    : ' + (md.webgpuAvailable != null ? md.webgpuAvailable : '?'));
+        lines.push('WEBGPU_ADAPTER      : ' + (md.webgpuAdapterAvailable != null ? md.webgpuAdapterAvailable : '?'));
+        lines.push('WEBGPU_DEVICE       : ' + (md.gpuDeviceObtained != null ? md.gpuDeviceObtained : '(not probed — held until load)'));
+        // WebLLM
+        lines.push('WASM_STATUS         : (WebLLM manages WASM internally)');
+        lines.push('WORKER_STATUS       : (WebLLM manages Workers internally)');
         lines.push('WebLLM import       : ' + (md.webllmImportStatus || '?'));
-        lines.push('WebGPU available    : ' + (md.webgpuAvailable != null ? md.webgpuAvailable : '?'));
-        lines.push('GPU adapter         : ' + (md.webgpuAdapterAvailable != null ? md.webgpuAdapterAvailable : '?'));
+        lines.push('WebLLM version      : ' + (md.webllmVersion || '?'));
+        // Load sequence
+        lines.push('MODEL_LOAD_STARTED  : ' + (md.reloadStarted ? 'YES' : 'NO'));
+        lines.push('MODEL_DOWNLOAD_STARTED : ' + (md.downloadStarted ? 'YES' : 'NO'));
+        lines.push('MODEL_DOWNLOAD_PROGRESS: ' + (md.lastDownloadProgress || '?'));
+        lines.push('MODEL_DOWNLOAD_COMPLETED: ' + (md.downloadCompleted ? 'YES' : 'NO'));
+        lines.push('MODEL_CACHE_HIT     : ' + (md.modelCacheStatus === 'CACHED' ? 'YES' : (md.modelCacheStatus || '?')));
+        lines.push('MODEL_CACHE_MISS    : ' + (md.modelCacheStatus === 'DOWNLOADING' ? 'YES (downloading)' : (md.modelCacheStatus ? 'NO' : '?')));
+        lines.push('MODEL_PIPELINE_COUNT: ' + (md.pipelineState || '?'));
         lines.push('Model in registry   : ' + (md.modelExistsInRegistry != null ? md.modelExistsInRegistry : '?'));
-        lines.push('Cache status        : ' + (md.modelCacheStatus || '?'));
+        // Verify
         lines.push('Verify result       : ' + (md.verifyResult || '?'));
+        lines.push('Verify response     : ' + (md.verifyInferenceText ? '"' + md.verifyInferenceText.substring(0, 80) + '"' : '?'));
+        // Errors — always show raw original exception
+        lines.push('ORIGINAL_ERROR_NAME : ' + (md.lastErrorName || 'none'));
+        lines.push('ORIGINAL_ERROR_MSG  : ' + (md.lastErrorMessage || 'none'));
+        lines.push('ORIGINAL_ERROR_STACK: ' + (md.lastErrorStack ? md.lastErrorStack.split('\n').slice(0,2).join(' | ') : 'none'));
+        lines.push('Error code          : ' + (md.errorCode || 'none'));
+        lines.push('AbortError          : ' + (md.abortError ? 'YES' : (md.abortError === false ? 'NO' : '?')));
+        lines.push('ModelNotLoadedError : ' + (md.modelNotLoadedError ? 'YES' : (md.modelNotLoadedError === false ? 'NO' : '?')));
+        lines.push('Last error msg      : ' + (ms.lastError || 'none'));
+        lines.push('');
         lines.push('Note: Model requires internet for first download (WebLLM CDN).');
-        lines.push('      Once downloaded, cached by browser storage (IndexedDB).');
+        lines.push('      Once downloaded, cached by browser IndexedDB.');
+        lines.push('      Use diag-probe.html for full browser-native load test.');
       } else {
         lines.push('SRLocalModel        : NOT LOADED');
       }
@@ -2701,12 +2914,15 @@ body::before {
   }
 
   // ── Service Worker Registration ────────────────────────────────────────────
-  // Registered at the correct GitHub Pages subdirectory path and scope.
-  // A wrong scope (e.g. scope '/') would cause this SW to control the entire
-  // domain, potentially conflicting with other installed PWAs on the same origin.
+  // Uses the base path detected at page load (window.__SR_BASE).
+  // On GitHub Pages: scope = /shadow-reaper/
+  // On localhost:    scope = /
+  // A wrong scope (e.g. always '/shadow-reaper/') causes a 404 on localhost.
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () {
-      navigator.serviceWorker.register('/shadow-reaper/sw.js', { scope: '/shadow-reaper/' })
+      var base  = (typeof window.__SR_BASE !== 'undefined') ? window.__SR_BASE : '/shadow-reaper';
+      var scope = base ? (base + '/') : '/';
+      navigator.serviceWorker.register(base + '/sw.js', { scope: scope })
         .then(function (reg) {
           console.log('[SR-SW] Registered, scope:', reg.scope);
 

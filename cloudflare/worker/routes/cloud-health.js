@@ -174,12 +174,21 @@ async function handleHealth(ctx) {
     }
   }
 
+  // Inference availability — true when Workers AI binding is present.
+  // SRInferenceRuntime reads this flag during health check to determine
+  // whether to attempt /api/v1/inference or skip to emergency fallback.
+  const inferenceAvailable = !!(env && env.AI && typeof env.AI.run === 'function');
+
   const body = buildSuccess({
     service:     'shadow-reaper-cloud-api',
     apiVersion:  'v1',
     status:      firebaseStatus === 'connected' ? 'ok' : 'degraded',
     firebase:    firebaseStatus,
     timestamp:   new Date().toISOString(),
+    // inference: true  → Workers AI binding is present; SRInferenceRuntime will
+    //                     attempt /api/v1/inference as the hosted runtime.
+    // inference: false → AI binding absent; client skips to emergency fallback.
+    inference:   inferenceAvailable,
     diagnostics,
   }, requestId);
 

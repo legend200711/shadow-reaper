@@ -493,11 +493,24 @@
     }
 
     // FOLLOW-UP
+    // Guard: only treat as a project/design follow-up when the resolved subject is
+    // genuinely a short noun phrase (≤3 words). If SRContext.resolvePronouns grabbed a
+    // long fragment of the user's message (>3 content words), it means pronoun
+    // resolution found no real antecedent and fell back to extracting text from the
+    // current message — that produces garbage in the followUpAcknowledge template.
+    // In that case, fall through to GENERAL_CONVERSATION handling instead.
     if (intent === 'FOLLOW_UP') {
-      if (resolvedSubject || context.lastUserSubject) {
+      var _subj = resolvedSubject || context.lastUserSubject;
+      // Count words — a real subject pronoun/noun phrase is typically 1-3 words
+      var _subjWordCount = _subj ? _subj.trim().split(/\s+/).length : 0;
+      var _subjIsReal = _subj && _subjWordCount <= 3;
+      if (_subjIsReal) {
         return fill(pickVaried(POOLS.followUpAcknowledge), ctx);
       }
-      return pick(POOLS.followUpNoSubject);
+      if (!resolvedSubject && !context.lastUserSubject) {
+        return pick(POOLS.followUpNoSubject);
+      }
+      // Long/garbage subject — fall through to GENERAL_CONVERSATION handling below
     }
 
     // PROJECT STATEMENT
@@ -760,6 +773,84 @@
     return "Here's what I have from our conversations:\n" + parts.map(function (p) { return '• ' + p; }).join('\n');
   }
 
+  // ─── Weather snippet → natural sentence composer ─────────────────────────────
+  // Used when the local model is not yet READY but a live weather snippet is
+  // available. Parses the structured snippet produced by SRResearchRouter /
+  // sr-weather.js and forms a natural human-readable sentence.
+
+  function _composeWeatherResponse(snippet, _raw) {
+    // Extract labelled fields from the snippet (format produced by sr-weather.js /
+    // SRResearchRouter.formatForContext). Example snippet:
+    //   [WEATHER — Austin, TX | 2024-05-10]
+    //   Conditions: Clear sky
+    //   Temperature: 24°C (feels like 23°C)
+    //   Humidity: 45%
+    //   Wind: 12 km/h
+    //   Precipitation: 0 mm
+    //   Source: Open-Meteo | Retrieved: 2024-05-10T18:00Z
+
+    var location    = (snippet.match(/WEATHER\s*[—\-]+\s*([^\|\n]+)/i) || [])[1];
+    var conditions  = (snippet.match(/Conditions:\s*([^\n]+)/i) || [])[1];
+    var temperature = (snippet.match(/Temperature:\s*([^\n]+)/i) || [])[1];
+    var humidity    = (snippet.match(/Humidity:\s*([^\n]+)/i) || [])[1];
+    var wind        = (snippet.match(/Wind:\s*([^\n]+)/i) || [])[1];
+    var precip      = (snippet.match(/Precipitation:\s*([^\n]+)/i) || [])[1];
+    var forecast    = (snippet.match(/Forecast:\s*([^\n]+)/i) || [])[1];
+    var source      = (snippet.match(/Source:\s*([^\n|]+)/i) || [])[1];
+
+    // Trim extracted fields
+    function t(v) { return v ? v.trim() : null; }
+    location    = t(location);
+    conditions  = t(conditions);
+    temperature = t(temperature);
+    humidity    = t(humidity);
+    wind        = t(wind);
+    precip      = t(precip);
+    forecast    = t(forecast);
+    source      = t(source);
+
+    // Build a natural sentence
+    var parts = [];
+    var intro = location ? ('Here\'s the current weather for ' + location + ':') : 'Here\'s the current weather:';
+    parts.push(intro);
+
+    var detail = [];
+    if (conditions)  detail.push(conditions);
+    if (temperature) detail.push(temperature);
+    if (humidity)    detail.push('humidity ' + humidity);
+    if (wind)        detail.push('wind ' + wind);
+    if (precip && precip !== '0 mm' && precip !== '0.0 mm') {
+      detail.push('precipitation ' + precip);
+    }
+
+    if (detail.length > 0) {
+      parts.push(detail.join(', ') + '.');
+    }
+
+    if (forecast) {
+      parts.push('Forecast: ' + forecast + '.');
+    }
+
+    if (source) {
+      parts.push('(Source: ' + source + ')');
+    }
+
+    var result = parts.join(' ');
+
+    // Fallback: if parsing completely failed, return the raw snippet trimmed
+    if (!conditions && !temperature) {
+      // Try to strip the internal header bracket tags and return cleaned snippet
+      result = snippet
+        .replace(/\[WEATHER[^\]]*\]/gi, '')
+        .replace(/Source:[^\n]*/gi, '')
+        .replace(/Retrieved:[^\n]*/gi, '')
+        .trim();
+      if (!result) result = "I have weather data but couldn't parse the details. Try again?";
+    }
+
+    return result;
+  }
+
   // ─── composeAsync — Stage 4-LEARN entry point ────────────────────────────────
 
   /**
@@ -813,16 +904,28 @@
     }
 
     // ── Adaptive snippets path ────────────────────────────────────────────────
-    // Only use adaptive snippets when the local model is explicitly FAILED (not
-    // just UNINITIALIZED). An UNINITIALIZED model should fall through to
-    // deterministic compose() for open-ended questions, not produce a potentially
-    // off-topic adaptive response based on session project context.
+    // Only use adaptive snippets when the inference runtime is explicitly FAILED
+    // (not just UNINITIALIZED). Check via SRInferenceRuntime if available,
+    // falling back to SRLocalModel state for backward compatibility.
     var adaptiveSnippets = opts.adaptiveSnippets || [];
-    var localModelForAdaptiveCheck = global.SRLocalModel;
-    var modelStatForAdaptive = localModelForAdaptiveCheck
-      ? localModelForAdaptiveCheck.getStatus().state
-      : 'NOT_LOADED';
-    var _adaptiveShouldFire = (modelStatForAdaptive === 'FAILED' || modelStatForAdaptive === 'NOT_LOADED');
+
+    var _inferRuntime = global.SRInferenceRuntime;
+    var _inferDegraded = _inferRuntime
+      ? (_inferRuntime.getStatus().isDegraded || _inferRuntime.getStatus().state === 'DEGRADED')
+      : false;
+
+    // Legacy: also check SRLocalModel directly for FAILED state
+    var _localModelFailed = false;
+    var _lm = global.SRLocalModel;
+    if (_lm) {
+      var _lms = _lm.getStatus().state;
+      _localModelFailed = (_lms === 'FAILED');
+    } else {
+      _localModelFailed = true;  // No model module at all
+    }
+
+    // Fire adaptive snippets only when all generative paths are known-failed
+    var _adaptiveShouldFire = (_inferDegraded || (!_inferRuntime && _localModelFailed));
 
     if (_adaptiveShouldFire && adaptiveSnippets.length &&
         (intent === 'QUESTION' || intent === 'GENERAL_CONVERSATION')) {
@@ -833,62 +936,222 @@
       }
     }
 
-    // ── Everything else → local model ─────────────────────────────────────────
-    var localModel = global.SRLocalModel;
-
-    // Model not loaded at all
-    if (!localModel) {
-      var diag = 'LOCAL MODEL ERROR: SRLocalModel not loaded. Cannot generate response.';
-      callback(diag, 'ERROR');
-      return;
-    }
-
-    var modelStatus = localModel.getStatus();
-
-    // Model in FAILED state — surface diagnostic, do NOT silently fallback
-    if (modelStatus.state === 'FAILED') {
-      var diagInfo = (localModel.getDiagnostics && localModel.getDiagnostics()) || {};
-      var errCode  = diagInfo.errorCode || modelStatus.lastError || 'UNKNOWN';
-      var failMsg  = 'LOCAL MODEL ERROR: Model in FAILED state [' + errCode + ']. Cannot generate response.';
-      callback(failMsg, 'ERROR');
-      return;
-    }
-
-    // Model exists but not yet READY (loading, verifying, uninitialized).
-    // Fall back to deterministic compose() rather than showing a raw error message.
-    // The deterministic path handles tone, intent, and general conversation naturally.
-    if (modelStatus.state !== 'READY') {
-      var detResponse = compose(understood, context);
-      // Only surface raw error if deterministic also gave nothing useful
-      if (detResponse && detResponse.indexOf('LOCAL MODEL ERROR') === -1) {
-        callback(detResponse, 'DETERMINISTIC');
-      } else {
-        var notReadyMsg = 'LOCAL MODEL ERROR: Model not ready (state=' + modelStatus.state + '). Cannot generate response.';
-        callback(notReadyMsg, 'ERROR');
+    // ── Research/weather snippet check — runs before inference ───────────────
+    // Weather/electronics data was fetched before composeAsync was called.
+    // If a research snippet exists and inference is degraded, present it directly.
+    // This ensures weather works even when the model is unavailable.
+    var _researchSnippet = opts.researchSnippet || null;
+    if (_researchSnippet && typeof _researchSnippet === 'string' &&
+        _researchSnippet.trim().length > 0 && _inferDegraded) {
+      var _rsnLower = _researchSnippet.toLowerCase();
+      if (_rsnLower.indexOf('[weather') !== -1 || _rsnLower.indexOf('temperature') !== -1 ||
+          _rsnLower.indexOf('conditions:') !== -1 || _rsnLower.indexOf('forecast') !== -1) {
+        callback(_composeWeatherResponse(_researchSnippet, raw), 'DETERMINISTIC');
+        return;
       }
+      if (_rsnLower.indexOf('[electronics') !== -1) {
+        var _rsnOffline = _researchSnippet.match(/\(Tell the user:\s*"([^"]+)"\)/);
+        callback(
+          _rsnOffline
+            ? _rsnOffline[1]
+            : "I can't reach online technical sources right now, but I can still help using what I know locally.",
+          'DETERMINISTIC'
+        );
+        return;
+      }
+      callback(_researchSnippet.trim(), 'DETERMINISTIC');
       return;
     }
 
-    // Build opts for the model call — forward all enriched context from langAnalysis
+    // ── No inference module at all ────────────────────────────────────────────
+    // SRInferenceRuntime not loaded AND SRLocalModel not loaded.
+    // Use research snippet if available, otherwise graceful deterministic response.
+    if (!_inferRuntime && !_lm) {
+      if (_researchSnippet && _researchSnippet.trim().length > 0) {
+        var _nmsLower = _researchSnippet.toLowerCase();
+        if (_nmsLower.indexOf('[weather') !== -1 || _nmsLower.indexOf('temperature') !== -1 ||
+            _nmsLower.indexOf('conditions:') !== -1 || _nmsLower.indexOf('forecast') !== -1) {
+          callback(_composeWeatherResponse(_researchSnippet, raw), 'DETERMINISTIC');
+          return;
+        }
+        if (_nmsLower.indexOf('[electronics') !== -1) {
+          var _nmsElOff = _researchSnippet.match(/\(Tell the user:\s*"([^"]+)"\)/);
+          callback(
+            _nmsElOff ? _nmsElOff[1] : "I can't reach online technical sources right now, but I can still help locally.",
+            'DETERMINISTIC'
+          );
+          return;
+        }
+        callback(_researchSnippet.trim(), 'DETERMINISTIC');
+        return;
+      }
+      // No inference module and no research snippet — use graceful deterministic response.
+      // Raw "LOCAL MODEL ERROR" strings are never shown to users.
+      var _noModDet2 = compose(understood, context);
+      callback(_noModDet2, 'DETERMINISTIC');
+      return;
+    }
+
+    // ── Runtime degraded (all runtimes failed) ────────────────────────────────
+    // Do NOT show raw "LOCAL MODEL ERROR" or technical errors to the user.
+    // Use deterministic compose() — never expose backend failure messages.
+    if (_inferDegraded) {
+      // If we have a research snippet (weather/electronics), present it cleanly
+      // even in degraded mode — the data was already fetched successfully.
+      if (_researchSnippet && _researchSnippet.trim().length > 0) {
+        var _degSnLower = _researchSnippet.toLowerCase();
+        if (_degSnLower.indexOf('[weather') !== -1 || _degSnLower.indexOf('temperature') !== -1 ||
+            _degSnLower.indexOf('conditions:') !== -1 || _degSnLower.indexOf('forecast') !== -1) {
+          callback(_composeWeatherResponse(_researchSnippet, raw), 'DETERMINISTIC');
+          return;
+        }
+        if (_degSnLower.indexOf('[electronics') !== -1) {
+          var _degElOff = _researchSnippet.match(/\(Tell the user:\s*"([^"]+)"\)/);
+          callback(
+            _degElOff
+              ? _degElOff[1]
+              : "I can't reach online technical sources right now, but I can still help using what I know locally.",
+            'DETERMINISTIC'
+          );
+          return;
+        }
+        callback(_researchSnippet.trim(), 'DETERMINISTIC');
+        return;
+      }
+      var _degDet = compose(understood, context);
+      callback(_degDet, 'DEGRADED');
+      return;
+    }
+
+    // ── Build context for inference ───────────────────────────────────────────
+    // _buildMessages() is in SRLocalModel — use it to build the messages array
+    // once, then route through SRInferenceRuntime.generate() which may use
+    // WebGPU, CPU, or hosted Shadow API without rebuilding context each time.
+    //
+    // IMPORTANT: rawMessage is ALWAYS preserved.
+    // We pass the original user message (raw) — never a reduced fragment.
+    // Metadata (resolvedRef, concepts, research snippets) enriches context
+    // but does NOT replace the user's actual words.
     var genOpts = {
       projectName:      context.projectName,
       currentTopic:     context.currentTopic,
       memorySnippets:   opts.memorySnippets   || [],
       adaptiveSnippets: adaptiveSnippets,
       recentTurns:      opts.recentTurns      || [],
-      // Language analysis enrichments — forwarded from _runNormalPipeline
+      // Reference resolution: what "it"/"that"/"they" refers to in this turn
       resolvedRef:      opts.resolvedRef      || null,
       negation:         opts.negation         || null,
       concepts:         opts.concepts         || [],
       unknownWords:     opts.unknownWords      || [],
+      // Research data (weather / electronics) — pass to model even when ready
+      researchSnippet:  _researchSnippet      || null,
+      // Personality context
+      personalityCtx:   opts.personalityCtx   || null,
+      assistantName:    opts.assistantName     || 'Shadow',
+      // Comprehension enrichment
+      comprehension:    opts.comprehension     || null,
     };
+
+    // Build the messages array using SRLocalModel's context builder.
+    // Works regardless of which runtime ultimately executes inference.
+    var builtMessages = null;
+    if (_lm && typeof _lm._buildMessages === 'function') {
+      try { builtMessages = _lm._buildMessages(raw, genOpts); } catch (_e) {}
+    }
+
+    // ── Route through SRInferenceRuntime ──────────────────────────────────────
+    if (_inferRuntime && builtMessages) {
+      var runtimeOpts = {
+        maxTokens:       256,
+        temperature:     0.7,
+        conversationId:  opts.conversationId || null,
+      };
+      _inferRuntime.generate(builtMessages, runtimeOpts, function (inferErr, inferText, runtimeUsed) {
+        if (inferErr || !inferText || inferText.trim().length === 0) {
+          // Inference failed across all runtimes — use graceful deterministic response.
+          // NEVER show raw error messages (LOCAL MODEL ERROR, etc.) to the user.
+          // If we have a research snippet, use it; otherwise use deterministic compose.
+          if (_researchSnippet && _researchSnippet.trim().length > 0) {
+            var _fsnLower = _researchSnippet.toLowerCase();
+            if (_fsnLower.indexOf('[weather') !== -1 || _fsnLower.indexOf('temperature') !== -1 ||
+                _fsnLower.indexOf('conditions:') !== -1 || _fsnLower.indexOf('forecast') !== -1) {
+              callback(_composeWeatherResponse(_researchSnippet, raw), 'DETERMINISTIC');
+              return;
+            }
+            callback(_researchSnippet.trim(), 'DETERMINISTIC');
+            return;
+          }
+          var detFallback = compose(understood, context);
+          callback(detFallback, 'DEGRADED');
+          return;
+        }
+        // Map runtime ID to source tag for diagnostics
+        var srcTag = runtimeUsed === 'webgpu-local'  ? 'LOCAL_MODEL'   :
+                     runtimeUsed === 'cpu-local'     ? 'CPU_MODEL'     :
+                     runtimeUsed === 'shadow-api'    ? 'SHADOW_API'    :
+                                                       'LOCAL_MODEL';
+        callback(inferText.trim(), srcTag);
+      });
+      return;
+    }
+
+    // ── Legacy path: SRLocalModel directly (no runtime router loaded) ─────────
+    // Preserved for backward compatibility when SRInferenceRuntime is not
+    // included in the page (e.g., test environments that load only SRLocalModel).
+    var localModel = _lm;
+    if (!localModel) {
+      // No inference at all — use graceful deterministic response, not a raw error string.
+      if (_researchSnippet && _researchSnippet.trim().length > 0) {
+        var _norsLower = _researchSnippet.toLowerCase();
+        if (_norsLower.indexOf('[weather') !== -1 || _norsLower.indexOf('temperature') !== -1 ||
+            _norsLower.indexOf('conditions:') !== -1 || _norsLower.indexOf('forecast') !== -1) {
+          callback(_composeWeatherResponse(_researchSnippet, raw), 'DETERMINISTIC');
+          return;
+        }
+        callback(_researchSnippet.trim(), 'DETERMINISTIC');
+        return;
+      }
+      var _noModDet = compose(understood, context);
+      callback(_noModDet, 'DETERMINISTIC');
+      return;
+    }
+
+    var modelStatus = localModel.getStatus();
+
+    // Research snippet for non-ready states
+    if (modelStatus.state !== 'READY' && _researchSnippet && _researchSnippet.trim().length > 0) {
+      var _lsLower = _researchSnippet.toLowerCase();
+      if (_lsLower.indexOf('[weather') !== -1 || _lsLower.indexOf('temperature') !== -1 ||
+          _lsLower.indexOf('conditions:') !== -1 || _lsLower.indexOf('forecast') !== -1) {
+        callback(_composeWeatherResponse(_researchSnippet, raw), 'DETERMINISTIC');
+        return;
+      }
+      if (_lsLower.indexOf('[electronics') !== -1) {
+        var _lsElOff = _researchSnippet.match(/\(Tell the user:\s*"([^"]+)"\)/);
+        callback(
+          _lsElOff
+            ? _lsElOff[1]
+            : "I can't reach online technical sources right now, but I can still help using what I know locally.",
+          'DETERMINISTIC'
+        );
+        return;
+      }
+      callback(_researchSnippet.trim(), 'DETERMINISTIC');
+      return;
+    }
+
+    if (modelStatus.state === 'FAILED' || modelStatus.state !== 'READY') {
+      // Model not ready — use graceful deterministic response, never a raw error string.
+      var detFallbackLm = compose(understood, context);
+      callback(detFallbackLm, 'DETERMINISTIC');
+      return;
+    }
 
     localModel.generate(raw, genOpts, function (err, text) {
       if (err || !text || text.trim().length === 0) {
-        // Model inference failed — surface as ERROR with diagnostic message
-        var inferErr = err ? (err.message || String(err)) : 'EMPTY_RESPONSE';
-        var inferMsg = 'LOCAL MODEL ERROR: Inference failed [' + inferErr + ']. Cannot generate response.';
-        callback(inferMsg, 'ERROR');
+        // Generation failed — graceful deterministic fallback, not raw error string.
+        var detFallbackGen = compose(understood, context);
+        callback(detFallbackGen, 'DETERMINISTIC');
         return;
       }
       callback(text.trim(), 'LOCAL_MODEL');

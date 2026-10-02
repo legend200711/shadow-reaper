@@ -34,10 +34,29 @@ SR_ENV     = "production"
 # Development override — uncomment for local dev only:
 # SR_ENV = "development"
 
-# ── Workers AI — INTENTIONALLY DISABLED ──────────────────────────────────────
-# Shadow Reaper does not use Cloudflare AI. Never enable this.
-# [ai]
-# binding = "AI"   ← DISABLED BY DESIGN
+# ── Workers AI — Hosted Shadow Inference ──────────────────────────────────────
+# Enables /api/v1/inference to run hosted model inference via Workers AI.
+# This is the remote execution backend for ShadowReaper — NOT a separate AI.
+# Uncomment and deploy to enable hosted inference:
+#
+#   npx wrangler deploy --config cloudflare/wrangler-cloud.toml
+#
+# Once the AI binding is bound, health endpoint returns inference:true and
+# SRInferenceRuntime will use hosted inference when local WebGPU/CPU fails.
+#
+# To enable:
+#   1. Uncomment the [ai] block below
+#   2. Deploy: npx wrangler deploy --config cloudflare/wrangler-cloud.toml
+#   3. Verify: npm run cloud:health   (look for "inference":true)
+#
+# Optional: override model via secret
+#   wrangler secret put SR_INFERENCE_MODEL   ← e.g. @cf/meta/llama-3-8b-instruct
+
+[ai]
+binding = "AI"
+
+# Optional: pin a specific inference model (default: @cf/meta/llama-3-8b-instruct)
+# Set via: wrangler secret put SR_INFERENCE_MODEL
 
 # ── Secrets (set via CLI — NEVER put values in this file) ─────────────────────
 # wrangler secret put FIREBASE_SERVICE_ACCOUNT

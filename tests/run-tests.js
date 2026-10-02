@@ -57,6 +57,10 @@ var SUITES = [
   { name: 'language-comprehension', file: 'language-comprehension.test.js' },
   { name: 'cloud-api',             file: 'cloud-api.test.js' },
   { name: 'cloud-live-verify',     file: 'cloud-live-verify.js' },
+  { name: 'internet-router',       file: 'internet-router.test.js' },
+  { name: 'inference-runtime',     file: 'inference-runtime.test.js' },
+  { name: 'hosted-inference',      file: 'hosted-inference.test.js' },
+  { name: 'pipeline-live',         file: 'pipeline-live-test.js' },
 ];
 
 var TESTS_DIR = __dirname;

@@ -115,6 +115,16 @@
     RESPONSE_SOURCE:         'UNKNOWN',
     NEGATION_DETECTED:       false,
     INTENT:                  'UNKNOWN',
+    // Internet routing diagnostics (SR-CLOUD-INTERNET-1)
+    INTERNET_ROUTE:          'NONE',   // LOCAL / WEATHER / ELECTRONICS_RESEARCH / INTERNET_RESEARCH
+    INTERNET_FETCH:          'NO',     // YES / NO
+    INTERNET_SOURCE:         null,     // e.g. 'Open-Meteo', 'DuckDuckGo', etc.
+    INTERNET_ENDPOINT:       null,     // Cloudflare endpoint path called
+    INTERNET_DURATION_MS:    null,     // ms for the internet fetch
+    INTERNET_CACHED:         'NO',     // YES / NO
+    INTERNET_SUCCESS:        null,     // 'YES' / 'NO' / null if not attempted
+    INTERNET_RESULT_TRUSTED: null,     // true/false/null
+    RESPONSE_THROUGH_PIPELINE: 'YES', // internet results always go through pipeline
   };
 
   // ─── Dependency check ────────────────────────────────────────────────────────
@@ -310,6 +320,16 @@
       RESPONSE_SOURCE:       'UNKNOWN',
       NEGATION_DETECTED:     false,
       INTENT:                'UNKNOWN',
+      // Internet routing diagnostics (SR-CLOUD-INTERNET-1)
+      INTERNET_ROUTE:            'NONE',
+      INTERNET_FETCH:            'NO',
+      INTERNET_SOURCE:           null,
+      INTERNET_ENDPOINT:         null,
+      INTERNET_DURATION_MS:      null,
+      INTERNET_CACHED:           'NO',
+      INTERNET_SUCCESS:          null,
+      INTERNET_RESULT_TRUSTED:   null,
+      RESPONSE_THROUGH_PIPELINE: 'YES',
     };
 
     // ── LANGUAGE FOUNDATION ANALYSIS ──────────────────────────────────────────
@@ -632,14 +652,17 @@
     }  // end _continueWithResearch
 
     // ── DISPATCH through Research Router ──────────────────────────────────────
+    // Build: SR-CLOUD-INTERNET-1 — internet routing diagnostics added
     var researchRouter = global.SRResearchRouter;
     if (!researchRouter) {
       // Router not loaded — proceed with no research snippet
+      _lastDiag.INTERNET_ROUTE = 'LOCAL';
       _continueWithResearch(null);
       return;
     }
 
     var routeClass = researchRouter.classify(message);
+    _lastDiag.INTERNET_ROUTE = routeClass.route || 'LOCAL';
 
     // Short-circuit: NOT_ALLOWED (political exclusion)
     if (routeClass.route === researchRouter.ROUTE.NOT_ALLOWED) {
@@ -677,19 +700,92 @@
     // Routes that don't need external data — proceed immediately
     if (routeClass.route === researchRouter.ROUTE.LOCAL_KNOWLEDGE ||
         routeClass.route === researchRouter.ROUTE.NOT_NEEDED) {
+      _lastDiag.INTERNET_ROUTE = 'LOCAL';
       _continueWithResearch(null);
       return;
     }
 
-    // Routes that need external data (WEATHER, INTERNET_RESEARCH)
-    // Skip if local knowledge is already available
+    // Routes that need external data (WEATHER, ELECTRONICS_RESEARCH, INTERNET_RESEARCH)
+    // Skip if local knowledge is already available (local always wins)
     if (knowledgeSnippet) {
+      _lastDiag.INTERNET_ROUTE = 'LOCAL';
       _continueWithResearch(null);
       return;
     }
+
+    var _internetStart = Date.now();
 
     researchRouter.dispatch(message, null, function (routeResult) {
+      _lastDiag.INTERNET_DURATION_MS = Date.now() - _internetStart;
+      _lastDiag.INTERNET_FETCH       = (routeResult && (
+        routeResult.route === researchRouter.ROUTE.WEATHER ||
+        routeResult.route === researchRouter.ROUTE.ELECTRONICS_RESEARCH ||
+        routeResult.route === researchRouter.ROUTE.INTERNET_RESEARCH
+      )) ? 'YES' : 'NO';
+      _lastDiag.INTERNET_SUCCESS         = routeResult ? (routeResult.ok ? 'YES' : 'NO') : 'NO';
+      _lastDiag.INTERNET_RESULT_TRUSTED  = routeResult ? routeResult.trusted : null;
+
+      // ── Populate source/endpoint diagnostics ────────────────────────────────
+      if (routeResult) {
+        if (routeResult.route === researchRouter.ROUTE.WEATHER) {
+          _lastDiag.INTERNET_SOURCE   = 'Open-Meteo';
+          _lastDiag.INTERNET_ENDPOINT = '/api/v1/weather';
+          _lastDiag.INTERNET_CACHED   = (routeResult.data && routeResult.data.cached) ? 'YES' : 'NO';
+        } else if (routeResult.route === researchRouter.ROUTE.ELECTRONICS_RESEARCH) {
+          _lastDiag.INTERNET_SOURCE   = 'DuckDuckGo Instant Answers';
+          _lastDiag.INTERNET_ENDPOINT = '/api/v1/research/electronics';
+        } else if (routeResult.route === researchRouter.ROUTE.INTERNET_RESEARCH) {
+          _lastDiag.INTERNET_SOURCE   = 'SRWebResearch';
+          _lastDiag.INTERNET_ENDPOINT = '/api/v1/research';
+        }
+      }
+
       var snippet = null;
+
+      // ── Offline / failure handling ────────────────────────────────────────────
+      // When internet fetch fails, we do NOT return raw error messages as answers.
+      // Instead we pass null snippet and let the existing pipeline handle it
+      // normally (local knowledge, adaptive, model).
+      // Shadow adds a polite caveat only if it truly has nothing to say.
+      //
+      // Exception: WEATHER failures get a gentle offline message because Shadow
+      // genuinely cannot answer "what's the weather" without live data.
+      if (routeResult && !routeResult.ok) {
+        if (routeResult.route === researchRouter.ROUTE.WEATHER) {
+          // Weather with no internet — graceful offline response
+          var wxOfflineResp;
+          if (routeResult.reason === 'offline' || routeResult.offline) {
+            wxOfflineResp = "I can't reach live weather right now — no internet connection.";
+          } else if (routeResult.reason === 'location_needed') {
+            wxOfflineResp = null;  // Let pipeline handle "what city?" naturally
+          } else {
+            wxOfflineResp = "I can't reach live weather data right now. Try again in a moment.";
+          }
+          if (wxOfflineResp) {
+            _lastResponseSource = 'DETERMINISTIC';
+            global.SRConversation.addTurn('assistant', wxOfflineResp, null, null);
+            if (p) { p.saveTurn('user', message); p.saveTurn('assistant', wxOfflineResp); }
+            callback(wxOfflineResp);
+            return;
+          }
+        } else if (routeResult.route === researchRouter.ROUTE.ELECTRONICS_RESEARCH) {
+          // Electronics lookup failed — Shadow falls back to local knowledge
+          // and adds a note that it couldn't reach online sources
+          if (routeResult.reason === 'offline' || routeResult.offline) {
+            // Inject a fallback note as the research snippet so Shadow knows
+            var offlineNote = '[ELECTRONICS RESEARCH — OFFLINE]\n' +
+              'Could not reach online technical sources. Using local knowledge only.\n' +
+              '(Tell the user: "I can\'t reach online technical sources right now, ' +
+              'but I can still help using what I know locally.")';
+            _continueWithResearch(offlineNote);
+            return;
+          }
+          // Other failure — continue with no snippet (Shadow uses local knowledge)
+          _continueWithResearch(null);
+          return;
+        }
+      }
+
       if (routeResult && routeResult.ok) {
         snippet = researchRouter.formatForContext(routeResult) || null;
       }
@@ -753,6 +849,29 @@
           });
         }
         console.log('[ShadowReaper V2] Capability state:', global.SRCapabilityState.getSnapshot().uiStatus);
+      }
+
+      // Initialize Hybrid Inference Runtime (non-blocking — probes in background)
+      // This starts runtime detection: WebGPU → CPU → Shadow API → Emergency Fallback
+      if (global.SRInferenceRuntime) {
+        // Wire inference runtime state changes to capability state
+        if (global.SRCapabilityState) {
+          global.SRInferenceRuntime.onStateChange(function () {
+            if (global.SRCapabilityState) global.SRCapabilityState.refresh();
+          });
+        }
+        // Begin capability probing (non-blocking)
+        global.SRInferenceRuntime.initialize().then(function () {
+          var rtStatus = global.SRInferenceRuntime.getStatus();
+          console.log('[ShadowReaper V2] Inference runtime ready.',
+            'Active:', rtStatus.activeRuntime,
+            '| AI state:', rtStatus.aiState);
+        }).catch(function (err) {
+          console.warn('[ShadowReaper V2] Inference runtime initialization error:', err && err.message);
+        });
+        console.log('[ShadowReaper V2] Inference runtime: probing started.');
+      } else {
+        console.warn('[ShadowReaper V2] SRInferenceRuntime not loaded — hybrid inference unavailable.');
       }
 
       // Load Founder controls (non-blocking)
@@ -1001,6 +1120,16 @@
         LOCAL_MODEL_READY:        !!(global.SRLocalModel && modelStatus.state === 'READY'),
         VOICE_READY:              !!(global.SRVoice && voiceStatus.state !== 'UNAVAILABLE'),
         TRANSLATION_READY:        !!global.SRTranslation,
+        // Hybrid inference runtime readiness
+        INFERENCE_RUNTIME_LOADED: !!global.SRInferenceRuntime,
+        AI_READY:                 !!(global.SRInferenceRuntime && global.SRInferenceRuntime.getStatus().isAIReady),
+        DEGRADED_TEMPLATE_ONLY:   !!(global.SRInferenceRuntime && global.SRInferenceRuntime.getStatus().isDegraded),
+        ACTIVE_INFERENCE_RUNTIME: global.SRInferenceRuntime ? global.SRInferenceRuntime.getStatus().activeRuntime : null,
+        // Internet capability readiness (SR-CLOUD-INTERNET-1)
+        WEATHER_READY:            !!(global.SRWeather && global.SRWeather.isReady()),
+        INTERNET_ROUTING_READY:   !!global.SRResearchRouter,
+        CLOUD_API_CONFIGURED:     !!(global.SRCloudAPI && global.SRCloudAPI.isConfigured && global.SRCloudAPI.isConfigured()),
+        CLOUD_API_ONLINE:         !!(global.SRCloudAPI && global.SRCloudAPI.isOnline && global.SRCloudAPI.isOnline()),
 
         // Session
         turnCount:          _initialized ? global.SRConversation.getTurnCount() : 0,
@@ -1069,8 +1198,14 @@
           modelState:      modelStatus.state,
           modelId:         modelStatus.modelId,
           deterministic:   _lastResponseSource === 'DETERMINISTIC',
-          generative:      _lastResponseSource === 'LOCAL_MODEL',
+          generative:      (_lastResponseSource === 'LOCAL_MODEL' ||
+                            _lastResponseSource === 'CPU_MODEL'   ||
+                            _lastResponseSource === 'SHADOW_API'),
           conversationContextTurns: _initialized ? global.SRConversation.getTurnCount() : 0,
+          // Inference runtime summary
+          inferenceRuntime: global.SRInferenceRuntime
+            ? global.SRInferenceRuntime.getDiagnostics()
+            : null,
         },
 
         // Offline capability state — truthful local/model/network dimensions

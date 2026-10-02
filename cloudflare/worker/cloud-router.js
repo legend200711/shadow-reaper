@@ -40,6 +40,13 @@ import { getSettings, putSettings } from './routes/cloud-settings.js';
 import { getAdaptiveProfile, putAdaptiveProfile } from './routes/cloud-adaptive-profile.js';
 import { handleSync }               from './routes/cloud-sync.js';
 
+// ── Internet capability routes (Build: SR-CLOUD-INTERNET-1) ──────────────────
+import { handleWeather }            from './routes/cloud-weather.js';
+import { handleElectronicsResearch } from './routes/cloud-electronics.js';
+
+// ── Inference route (Build: SR-CLOUD-INFERENCE-STUB-1) ───────────────────────
+import { handleInference }          from './routes/cloud-inference.js';
+
 // ─── Request ID ───────────────────────────────────────────────────────────────
 
 function _genRequestId() {
@@ -75,6 +82,18 @@ function _matchPath(pattern, path) {
 const ROUTES = [
   // Health (public)
   { method: 'GET',    pattern: '/api/v1/health',                  public: true,  handler: (b, ctx) => handleHealth(ctx) },
+
+  // ── Inference (Build: SR-CLOUD-INFERENCE-STUB-1) ─────────────────────────
+  // Public: anonymous access allowed (stub returns 503 until backend deployed)
+  // Rate limited at router level to prevent abuse.
+  { method: 'POST',   pattern: '/api/v1/inference',               public: true,  handler: (b, ctx) => handleInference(b, ctx) },
+
+  // ── Internet capabilities (Build: SR-CLOUD-INTERNET-1) ───────────────────
+  // Weather: public (no private data) — rate limited at edge
+  { method: 'GET',    pattern: '/api/v1/weather',                 public: true,  handler: (b, ctx, _p, req) => handleWeather(new URL(req.url), ctx) },
+
+  // Electronics research: requires auth (prevents abuse)
+  { method: 'POST',   pattern: '/api/v1/research/electronics',    handler: (b, ctx) => handleElectronicsResearch(b, ctx) },
 
   // Memory
   { method: 'GET',    pattern: '/api/v1/memory',                  handler: (b, ctx) => listMemory(ctx) },
@@ -244,7 +263,7 @@ async function dispatch(request, env, workerCtx) {
   const handlerCtx = { requestId, uid, adminClient, env };
   let result;
   try {
-    result = await matchedRoute.handler(body, handlerCtx, matchedParams);
+    result = await matchedRoute.handler(body, handlerCtx, matchedParams, request);
   } catch (e) {
     logRequest({ requestId, method, path, status: 500, latencyMs: Date.now() - startMs, event: 'handler_error' });
     return { status: 500, body: buildError('INTERNAL_ERROR', requestId), requestId };

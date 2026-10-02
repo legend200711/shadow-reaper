@@ -34,11 +34,21 @@ const TIERS = {
   ADAPTIVE:    { max: 10,  windowMs: 60_000 },
   SYNC:        { max: 10,  windowMs: 60_000 },
   HEALTH:      { max: 120, windowMs: 60_000 },
+  // Internet capability tiers (SR-CLOUD-INTERNET-1)
+  WEATHER:     { max: 30,  windowMs: 60_000 },   // 30 weather lookups/min (aggressive cache expected)
+  ELECTRONICS: { max: 10,  windowMs: 60_000 },   // 10 research calls/min (expensive external fetch)
+  // Hosted inference tier (SR-CLOUD-INFERENCE-2)
+  // 20 inference calls/min — supports real conversation without abuse risk.
+  // Cloudflare Workers AI has its own rate limits; this is a client-side guard.
+  INFERENCE:   { max: 20,  windowMs: 60_000 },
   DEFAULT:     { max: 30,  windowMs: 60_000 },
 };
 
 function _tierForRequest(method, path) {
   if (path === '/api/v1/health') return 'HEALTH';
+  if (path === '/api/v1/weather') return 'WEATHER';
+  if (path.startsWith('/api/v1/research/')) return 'ELECTRONICS';
+  if (path === '/api/v1/inference') return 'INFERENCE';
   if (method === 'GET') return 'READ';
   if (path.startsWith('/api/v1/memory'))           return 'MEMORY';
   if (path.startsWith('/api/v1/conversations'))    return 'CONVERSATION';
