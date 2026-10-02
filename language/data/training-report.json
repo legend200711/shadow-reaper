@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-02T15:23:07.979Z",
+  "generatedAt": "2026-10-02T16:54:22.533Z",
   "command": "npm run train-language",
   "sourceVocab": "language/data/vocab-index.json",
   "sourceLemmas": "language/data/lemma-index.json",
@@ -26,8 +26,11 @@
   "morphTests": 35,
   "morphPassed": 35,
   "morphFailed": 0,
-  "ambiguousWordsIndexed": 16,
-  "idiomPatterns": 59,
+  "ambiguousWordsIndexed": 31,
+  "totalSensesIndexed": 98,
+  "idiomPatterns": 123,
+  "relationshipEdges": 265,
+  "relationshipNodes": 205,
   "filesPresent": [
     "language/tokenizer/tokenizer.js",
     "language/morphology/morphology.js",

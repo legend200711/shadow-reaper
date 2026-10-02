@@ -415,6 +415,103 @@
     _request('POST', '/api/v1/sync', opts, cb, false);
   }
 
+  // ─── Weather API ─────────────────────────────────────────────────────────────
+  // Build: SR-CLOUD-INTERNET-1
+  //
+  // Fetches live weather from the Cloudflare Worker, which proxies Open-Meteo.
+  // Open-Meteo is free / no API key — credentials never leave the Worker.
+  //
+  // opts: { location?, lat?, lon?, units? }
+  // units: 'imperial' (default) or 'metric'
+  //
+  // Result goes through ShadowReaper pipeline — NOT displayed raw.
+  // Cache-Control headers from the Worker reduce unnecessary re-fetches.
+
+  var weather = {
+    query: function (opts, cb) {
+      if (typeof opts === 'function') { cb = opts; opts = {}; }
+      opts = opts || {};
+      cb   = cb   || function () {};
+
+      if (!_configured) {
+        cb({ ok: false, error: { code: 'NOT_CONFIGURED', message: 'Cloud API not configured.' } });
+        return;
+      }
+
+      if (!_online) {
+        cb({ ok: false, error: { code: 'OFFLINE', message: 'Network unavailable.' } });
+        return;
+      }
+
+      // Build query string
+      var qs = '';
+      if (opts.location) qs += '?location=' + encodeURIComponent(opts.location);
+      else if (opts.lat !== undefined && opts.lon !== undefined) {
+        qs += '?lat=' + encodeURIComponent(opts.lat) + '&lon=' + encodeURIComponent(opts.lon);
+      }
+      if (opts.units) qs += (qs ? '&' : '?') + 'units=' + encodeURIComponent(opts.units);
+
+      // Weather is public — no auth header needed (but include it if available)
+      _getToken().then(function (token) {
+        var headers = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+
+        var url = _workerUrl + '/api/v1/weather' + qs;
+        var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        var fetchOpts  = { method: 'GET', headers: headers };
+        var timeoutId;
+        var didAbort = false;
+        if (controller) {
+          fetchOpts.signal = controller.signal;
+          timeoutId = setTimeout(function () { didAbort = true; controller.abort(); }, 10000);
+        }
+
+        fetch(url, fetchOpts)
+          .then(function (resp) {
+            if (timeoutId) clearTimeout(timeoutId);
+            return resp.json().then(function (data) { cb(data); });
+          })
+          .catch(function (err) {
+            if (timeoutId) clearTimeout(timeoutId);
+            cb({ ok: false, error: { code: 'NETWORK_ERROR', message: err.message || 'Network error.' } });
+          });
+      });
+    },
+  };
+
+  // ─── Electronics Research API ────────────────────────────────────────────────
+  // Build: SR-CLOUD-INTERNET-1
+  //
+  // Sends a narrowly-scoped electronics research query to the Cloudflare Worker.
+  // The Worker validates the query, fetches DuckDuckGo Instant Answers,
+  // sanitizes content, and returns structured untrusted reference data.
+  //
+  // Result is ALWAYS labelled trusted: false.
+  // It flows into ShadowReaper pipeline as untrusted context — never raw output.
+
+  var research = {
+    electronics: function (query, cb) {
+      cb = cb || function () {};
+
+      if (!_configured) {
+        cb({ ok: false, error: { code: 'NOT_CONFIGURED', message: 'Cloud API not configured.' } });
+        return;
+      }
+
+      if (!_online) {
+        cb({ ok: false, error: { code: 'OFFLINE', message: 'Network unavailable.' } });
+        return;
+      }
+
+      if (!query || typeof query !== 'string' || !query.trim()) {
+        cb({ ok: false, error: { code: 'INVALID_REQUEST', message: 'query is required.' } });
+        return;
+      }
+
+      _request('POST', '/api/v1/research/electronics', { query: query.trim(), maxResults: 3 }, cb, false);
+    },
+  };
+
   // ─── Health check ────────────────────────────────────────────────────────────
 
   function health(cb) {
@@ -451,6 +548,10 @@
     adaptiveProfile:adaptiveProfile,
     sync:           sync,
     health:         health,
+
+    // Internet capability APIs (SR-CLOUD-INTERNET-1)
+    weather:        weather,
+    research:       research,
 
     // Offline queue management
     getQueueLength: getQueueLength,

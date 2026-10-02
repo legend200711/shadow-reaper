@@ -2,7 +2,7 @@
  * shadow-reaper-v2/language/relationships/relationships.js
  * Shadow Reaper — Language Relationship Graph
  *
- * Build: SR-LANG-RELATIONSHIPS-1
+ * Build: SR-LANG-RELATIONSHIPS-2
  *
  * Exposes: window.SRRelationships
  *
@@ -40,7 +40,7 @@
 (function (global) {
   'use strict';
 
-  var BUILD_ID = 'SR-LANG-RELATIONSHIPS-1';
+  var BUILD_ID = 'SR-LANG-RELATIONSHIPS-2';
 
   // ─── Relationship type constants ──────────────────────────────────────────
   var REL = {
@@ -256,6 +256,144 @@
     { from:'update it',   rel: REL.INTENT_RELATED, to:'CHANGE_REQUEST',   confidence: 0.9 },
     { from:'make that',   rel: REL.INTENT_RELATED, to:'CHANGE_REQUEST',   confidence: 0.85 },
     { from:'set it to',   rel: REL.INTENT_RELATED, to:'CHANGE_REQUEST',   confidence: 0.9 },
+
+    // ── Animal / nature taxonomy (§17) ────────────────────────────────────────
+    { from:'dog',         rel: REL.IS_A,       to:'animal',              confidence: 0.99 },
+    { from:'dog',         rel: REL.IS_A,       to:'mammal',              confidence: 0.98 },
+    { from:'dog',         rel: REL.IS_A,       to:'pet',                 confidence: 0.9 },
+    { from:'cat',         rel: REL.IS_A,       to:'animal',              confidence: 0.99 },
+    { from:'cat',         rel: REL.IS_A,       to:'mammal',              confidence: 0.98 },
+    { from:'cat',         rel: REL.IS_A,       to:'pet',                 confidence: 0.9 },
+    { from:'bird',        rel: REL.IS_A,       to:'animal',              confidence: 0.99 },
+    { from:'fish',        rel: REL.IS_A,       to:'animal',              confidence: 0.99 },
+    { from:'horse',       rel: REL.IS_A,       to:'animal',              confidence: 0.99 },
+    { from:'horse',       rel: REL.IS_A,       to:'mammal',              confidence: 0.98 },
+    { from:'mammal',      rel: REL.IS_A,       to:'animal',              confidence: 0.99 },
+    { from:'animal',      rel: REL.IS_A,       to:'living thing',        confidence: 0.99 },
+    { from:'plant',       rel: REL.IS_A,       to:'living thing',        confidence: 0.95 },
+    { from:'tree',        rel: REL.IS_A,       to:'plant',               confidence: 0.99 },
+    { from:'flower',      rel: REL.IS_A,       to:'plant',               confidence: 0.95 },
+
+    // ── Weather taxonomy (§17) ────────────────────────────────────────────────
+    { from:'rain',        rel: REL.IS_A,       to:'weather',             confidence: 0.95 },
+    { from:'rain',        rel: REL.IS_A,       to:'precipitation',       confidence: 0.98 },
+    { from:'snow',        rel: REL.IS_A,       to:'weather',             confidence: 0.95 },
+    { from:'snow',        rel: REL.IS_A,       to:'precipitation',       confidence: 0.98 },
+    { from:'wind',        rel: REL.IS_A,       to:'weather',             confidence: 0.9 },
+    { from:'storm',       rel: REL.IS_A,       to:'weather',             confidence: 0.95 },
+    { from:'thunder',     rel: REL.RELATED_TO, to:'storm',               confidence: 0.9 },
+    { from:'lightning',   rel: REL.RELATED_TO, to:'storm',               confidence: 0.9 },
+    { from:'fog',         rel: REL.IS_A,       to:'weather',             confidence: 0.9 },
+    { from:'hail',        rel: REL.IS_A,       to:'precipitation',       confidence: 0.9 },
+    { from:'humidity',    rel: REL.IS_A,       to:'weather',             confidence: 0.85 },
+    { from:'temperature', rel: REL.RELATED_TO, to:'weather',             confidence: 0.8 },
+    { from:'climate',     rel: REL.RELATED_TO, to:'weather',             confidence: 0.85 },
+
+    // ── Computer hardware taxonomy (§17) ─────────────────────────────────────
+    { from:'cpu',         rel: REL.IS_A,       to:'processor',           confidence: 0.99 },
+    { from:'cpu',         rel: REL.IS_A,       to:'computer component',  confidence: 0.99 },
+    { from:'processor',   rel: REL.IS_A,       to:'computer component',  confidence: 0.99 },
+    { from:'gpu',         rel: REL.IS_A,       to:'computer component',  confidence: 0.99 },
+    { from:'ram',         rel: REL.IS_A,       to:'computer component',  confidence: 0.99 },
+    { from:'ram',         rel: REL.IS_A,       to:'memory',              confidence: 0.95 },
+    { from:'hard drive',  rel: REL.IS_A,       to:'storage',             confidence: 0.98 },
+    { from:'ssd',         rel: REL.IS_A,       to:'storage',             confidence: 0.98 },
+    { from:'motherboard', rel: REL.IS_A,       to:'computer component',  confidence: 0.98 },
+    { from:'keyboard',    rel: REL.IS_A,       to:'input device',        confidence: 0.98 },
+    { from:'mouse',       rel: REL.IS_A,       to:'input device',        confidence: 0.98 },
+    { from:'monitor',     rel: REL.IS_A,       to:'output device',       confidence: 0.98 },
+    { from:'computer',    rel: REL.IS_A,       to:'device',              confidence: 0.95 },
+    { from:'laptop',      rel: REL.IS_A,       to:'computer',            confidence: 0.98 },
+    { from:'phone',       rel: REL.IS_A,       to:'device',              confidence: 0.95 },
+    { from:'tablet',      rel: REL.IS_A,       to:'device',              confidence: 0.95 },
+    { from:'router',      rel: REL.IS_A,       to:'network device',      confidence: 0.95 },
+
+    // ── Programming / software taxonomy ──────────────────────────────────────
+    { from:'function',    rel: REL.IS_A,       to:'code construct',      confidence: 0.9 },
+    { from:'variable',    rel: REL.IS_A,       to:'code construct',      confidence: 0.9 },
+    { from:'class',       rel: REL.IS_A,       to:'code construct',      confidence: 0.9 },
+    { from:'loop',        rel: REL.IS_A,       to:'code construct',      confidence: 0.9 },
+    { from:'array',       rel: REL.IS_A,       to:'data structure',      confidence: 0.95 },
+    { from:'string',      rel: REL.IS_A,       to:'data type',           confidence: 0.9 },
+    { from:'integer',     rel: REL.IS_A,       to:'data type',           confidence: 0.95 },
+    { from:'boolean',     rel: REL.IS_A,       to:'data type',           confidence: 0.95 },
+    { from:'framework',   rel: REL.IS_A,       to:'software tool',       confidence: 0.9 },
+    { from:'library',     rel: REL.IS_A,       to:'software tool',       confidence: 0.9 },
+    { from:'react',       rel: REL.IS_A,       to:'framework',           confidence: 0.95 },
+    { from:'vue',         rel: REL.IS_A,       to:'framework',           confidence: 0.95 },
+    { from:'node',        rel: REL.IS_A,       to:'runtime',             confidence: 0.9 },
+
+    // ── Vehicle taxonomy ──────────────────────────────────────────────────────
+    { from:'car',         rel: REL.IS_A,       to:'vehicle',             confidence: 0.99 },
+    { from:'truck',       rel: REL.IS_A,       to:'vehicle',             confidence: 0.99 },
+    { from:'bus',         rel: REL.IS_A,       to:'vehicle',             confidence: 0.99 },
+    { from:'motorcycle',  rel: REL.IS_A,       to:'vehicle',             confidence: 0.99 },
+    { from:'plane',       rel: REL.IS_A,       to:'vehicle',             confidence: 0.99 },
+    { from:'boat',        rel: REL.IS_A,       to:'vehicle',             confidence: 0.99 },
+    { from:'bicycle',     rel: REL.IS_A,       to:'vehicle',             confidence: 0.99 },
+    { from:'vehicle',     rel: REL.CAN_HAVE_PROBLEM, to:'engine',        confidence: 0.9 },
+    { from:'vehicle',     rel: REL.CAN_HAVE_PROBLEM, to:'battery',       confidence: 0.85 },
+
+    // ── Time units (§23) ─────────────────────────────────────────────────────
+    { from:'second',      rel: REL.IS_A,       to:'time unit',           confidence: 0.99 },
+    { from:'minute',      rel: REL.IS_A,       to:'time unit',           confidence: 0.99 },
+    { from:'hour',        rel: REL.IS_A,       to:'time unit',           confidence: 0.99 },
+    { from:'day',         rel: REL.IS_A,       to:'time unit',           confidence: 0.99 },
+    { from:'week',        rel: REL.IS_A,       to:'time unit',           confidence: 0.99 },
+    { from:'month',       rel: REL.IS_A,       to:'time unit',           confidence: 0.99 },
+    { from:'year',        rel: REL.IS_A,       to:'time unit',           confidence: 0.99 },
+
+    // ── Measurement / science units (§23) ────────────────────────────────────
+    { from:'volt',        rel: REL.IS_A,       to:'electrical unit',     confidence: 0.99 },
+    { from:'amp',         rel: REL.IS_A,       to:'electrical unit',     confidence: 0.99 },
+    { from:'watt',        rel: REL.IS_A,       to:'power unit',          confidence: 0.99 },
+    { from:'byte',        rel: REL.IS_A,       to:'storage unit',        confidence: 0.99 },
+    { from:'gigabyte',    rel: REL.IS_A,       to:'storage unit',        confidence: 0.99 },
+    { from:'megabyte',    rel: REL.IS_A,       to:'storage unit',        confidence: 0.99 },
+    { from:'hertz',       rel: REL.IS_A,       to:'frequency unit',      confidence: 0.99 },
+    { from:'gigahertz',   rel: REL.IS_A,       to:'frequency unit',      confidence: 0.99 },
+    { from:'celsius',     rel: REL.IS_A,       to:'temperature unit',    confidence: 0.99 },
+    { from:'fahrenheit',  rel: REL.IS_A,       to:'temperature unit',    confidence: 0.99 },
+
+    // ── Figurative device/vehicle "die" (§12) ─────────────────────────────────
+    { from:'die',         rel: REL.RELATED_TO, to:'cease_functioning',   confidence: 0.7 },
+    { from:'died',        rel: REL.RELATED_TO, to:'cease_functioning',   confidence: 0.7 },
+    { from:'gave out',    rel: REL.SYNONYM_OF, to:'ceased_functioning',  confidence: 0.85, symmetric: true },
+
+    // ── Computer overheating (§12) ────────────────────────────────────────────
+    { from:'hot',         rel: REL.RELATED_TO, to:'temperature',         confidence: 0.9 },
+    { from:'overheating', rel: REL.RELATED_TO, to:'temperature',         confidence: 0.98 },
+    { from:'overheating', rel: REL.RELATED_TO, to:'computer',            confidence: 0.85 },
+    { from:'running',     rel: REL.RELATED_TO, to:'operating',           confidence: 0.75 },
+
+    // ── Crash contexts ────────────────────────────────────────────────────────
+    { from:'crash',       rel: REL.RELATED_TO, to:'error',               confidence: 0.8 },
+    { from:'freeze',      rel: REL.RELATED_TO, to:'crash',               confidence: 0.8 },
+    { from:'overheating', rel: REL.CAUSES,     to:'crash',               confidence: 0.75 },
+
+    // ── Antonyms (§18) ────────────────────────────────────────────────────────
+    { from:'happy',       rel: REL.ANTONYM_OF, to:'sad',                 confidence: 0.95, symmetric: true },
+    { from:'fast',        rel: REL.ANTONYM_OF, to:'slow',                confidence: 0.95, symmetric: true },
+    { from:'big',         rel: REL.ANTONYM_OF, to:'small',               confidence: 0.95, symmetric: true },
+    { from:'hot',         rel: REL.ANTONYM_OF, to:'cold',                confidence: 0.95, symmetric: true },
+    { from:'old',         rel: REL.ANTONYM_OF, to:'new',                 confidence: 0.9,  symmetric: true },
+    { from:'easy',        rel: REL.ANTONYM_OF, to:'hard',                confidence: 0.9,  symmetric: true },
+    { from:'open',        rel: REL.ANTONYM_OF, to:'closed',              confidence: 0.9,  symmetric: true },
+    { from:'start',       rel: REL.ANTONYM_OF, to:'stop',                confidence: 0.9,  symmetric: true },
+    { from:'love',        rel: REL.ANTONYM_OF, to:'hate',                confidence: 0.85, symmetric: true },
+    { from:'success',     rel: REL.ANTONYM_OF, to:'failure',             confidence: 0.9,  symmetric: true },
+    { from:'forget',      rel: REL.ANTONYM_OF, to:'remember',            confidence: 0.95, symmetric: true },
+
+    // ── Patch / fix relationships ─────────────────────────────────────────────
+    { from:'patch',       rel: REL.RELATED_TO, to:'bug',                 confidence: 0.85 },
+    { from:'reboot',      rel: REL.SYNONYM_OF, to:'restart',             confidence: 0.95, symmetric: true },
+    { from:'wifi',        rel: REL.IS_A,       to:'network',             confidence: 0.95 },
+    { from:'wifi',        rel: REL.RELATED_TO, to:'internet',            confidence: 0.9 },
+    { from:'password',    rel: REL.RELATED_TO, to:'security',            confidence: 0.9 },
+    { from:'encryption',  rel: REL.IS_A,       to:'security',            confidence: 0.95 },
+    { from:'firewall',    rel: REL.IS_A,       to:'security',            confidence: 0.95 },
+    { from:'backup',      rel: REL.RELATED_TO, to:'recovery',            confidence: 0.85 },
+    { from:'restore',     rel: REL.RELATED_TO, to:'backup',              confidence: 0.85 },
   ];
 
   // ─── Build adjacency index ─────────────────────────────────────────────────

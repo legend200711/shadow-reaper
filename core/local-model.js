@@ -47,6 +47,7 @@
     INFERENCE_FAILED:               'INFERENCE_FAILED',
     WEBGPU_UNAVAILABLE:             'WEBGPU_UNAVAILABLE',
     GPU_ADAPTER_FAILED:             'GPU_ADAPTER_FAILED',
+    UNKNOWN_LOAD_ERROR:             'UNKNOWN_LOAD_ERROR',
   };
 
   // ─── Configuration ───────────────────────────────────────────────────────────
@@ -98,6 +99,7 @@
     modelExistsInRegistry:    null,
 
     // Engine
+    engineApi:                null,  // 'CreateMLCEngine' | 'new MLCEngine + reload' | 'UNKNOWN'
     engineCreated:            null,
 
     // Load sequence
@@ -321,6 +323,7 @@
     // Reset diagnostic trace for new attempt
     _diag.modelIdRequested      = FIXED_MODEL_ID;
     _diag.modelIdActuallyLoaded = null;
+    _diag.engineApi             = null;
     _diag.engineCreated         = null;
     _diag.reloadStarted         = null;
     _diag.reloadReturned        = null;
@@ -359,29 +362,21 @@
       return mod;
     })
 
-    // ── STEP 4: Create engine ────────────────────────────────────────────────
+    // ── STEP 4: Create engine & load ────────────────────────────────────────
     .then(function (mod) {
-      var EngineClass = mod.MLCEngine;
-      if (!EngineClass) {
-        throw new Error('MLCEngine class not found in WebLLM module.');
-      }
-      var engine;
-      try {
-        engine = new EngineClass();
-        _diag.engineCreated = true;
-        console.log('[SRLocalModel] MLCEngine instance created.');
-      } catch (e) {
-        _diag.engineCreated = false;
-        _diag.errorCode = ERROR_CODES.ENGINE_CREATE_FAILED;
-        _recordError(e, 'CREATE_ENGINE');
-        throw e;
-      }
+      // Detect which API is available.
+      // WebLLM ≥ 0.2.x exposes CreateMLCEngine (factory function that also loads).
+      // Older builds expose MLCEngine class + engine.reload().
+      // diag-probe.html surface confirmed CreateMLCEngine is the working path.
+      _diag.engineApi = typeof mod.CreateMLCEngine === 'function'
+        ? 'CreateMLCEngine'
+        : (typeof mod.MLCEngine === 'function' ? 'new MLCEngine + reload' : 'UNKNOWN');
+      console.log('[SRLocalModel] Engine API detected:', _diag.engineApi);
 
-      // Progress callback — fires during model download / initialization
-      engine.setInitProgressCallback(function (report) {
-        var pct = Math.round((report.progress || 0) * 100);
-        _loadPct = pct;
+      var progressCb = function (report) {
+        var pct  = Math.round((report.progress || 0) * 100);
         var text = report.text || '';
+        _loadPct = pct;
         _diag.lastDownloadProgress = pct + '% — ' + text;
 
         if (pct > 0 && !_diag.downloadStarted) {
@@ -389,22 +384,83 @@
           console.log('[SRLocalModel] Download started.');
         }
 
-        // Detect cache vs network download
-        if (text.toLowerCase().includes('cache')) {
+        var lc = text.toLowerCase();
+        if (lc.includes('cache')) {
           _diag.modelCacheStatus = 'CACHED';
-        } else if (text.toLowerCase().includes('fetch') || text.toLowerCase().includes('download')) {
+        } else if (lc.includes('fetch') || lc.includes('download')) {
           _diag.modelCacheStatus = 'DOWNLOADING';
         }
 
         _setState(MODEL_STATE.LOADING, pct, null);
         console.log('[SRLocalModel] Progress:', pct + '%', text);
-      });
+      };
+
+      // ── CreateMLCEngine (preferred / newer API) ──────────────────────────
+      if (typeof mod.CreateMLCEngine === 'function') {
+        _diag.reloadStarted = true;
+        console.log('[SRLocalModel] CreateMLCEngine() starting for:', FIXED_MODEL_ID);
+        return mod.CreateMLCEngine(FIXED_MODEL_ID, {
+          initProgressCallback: progressCb,
+        }).then(function (engine) {
+          _diag.engineCreated  = true;
+          _diag.reloadReturned = true;
+          _diag.downloadCompleted  = true;
+          _diag.modelIdActuallyLoaded = FIXED_MODEL_ID;
+          _engine = engine;
+          console.log('[SRLocalModel] CreateMLCEngine() resolved. Entering VERIFYING.');
+          _setState(MODEL_STATE.VERIFYING, 100, null);
+          _diag.pipelineCheckStarted = true;
+          _diag.pipelineState = 'CHECK_SKIPPED_RELY_ON_VERIFY';
+          return _verifyModel(engine);
+        }).catch(function (e) {
+          _diag.engineCreated = (_diag.engineCreated === true); // preserve if already set
+          _recordError(e, 'CREATE_MLC_ENGINE');
+          if (!_diag.errorCode) {
+            var lc2 = (e && e.message ? e.message : '').toLowerCase();
+            if (e && e.name === 'AbortError' || lc2.includes('abort')) {
+              _diag.errorCode = ERROR_CODES.MODEL_LOAD_ABORTED_OR_EMPTY;
+            } else {
+              _diag.errorCode = ERROR_CODES.ENGINE_CREATE_FAILED;
+            }
+          }
+          throw e;
+        });
+      }
+
+      // ── Fallback: new MLCEngine() + reload() (older API) ─────────────────
+      var EngineClass = mod.MLCEngine;
+      if (!EngineClass) {
+        throw new Error('No engine creation API found in WebLLM module (no CreateMLCEngine, no MLCEngine).');
+      }
+      var engine;
+      try {
+        engine = new EngineClass();
+        _diag.engineCreated = true;
+        console.log('[SRLocalModel] MLCEngine instance created (legacy API).');
+      } catch (e) {
+        _diag.engineCreated = false;
+        _diag.errorCode = ERROR_CODES.ENGINE_CREATE_FAILED;
+        _recordError(e, 'CREATE_ENGINE');
+        throw e;
+      }
+
+      if (typeof engine.setInitProgressCallback === 'function') {
+        engine.setInitProgressCallback(progressCb);
+      }
 
       return engine;
     })
 
-    // ── STEP 5: Start reload ─────────────────────────────────────────────────
+    // ── STEP 5: Start reload (legacy MLCEngine API only) ─────────────────────
+    // NOTE: When CreateMLCEngine is used (STEP 4), this step is skipped because
+    // the STEP 4 promise chain fully handles verify and resolves into STEP 8.
+    // This .then() only fires for the legacy path where STEP 4 returns the
+    // raw engine object rather than a fully-resolved chain.
     .then(function (engine) {
+      // If we went through the CreateMLCEngine path, engine is undefined here
+      // (the promise chain terminates inside STEP 4). Skip.
+      if (engine === undefined) return;
+
       _diag.reloadStarted = true;
       console.log('[SRLocalModel] reload() starting for:', FIXED_MODEL_ID);
 
@@ -475,27 +531,36 @@
       _engine = null;
       _loadingPromise = null;
 
-      if (!_diag.lastErrorName) {
-        _recordError(err, _diag.lastFailedOperation || 'LOAD_SEQUENCE');
-      }
+      // Always record the original exception — do not skip if name was already set,
+      // because that set happened on a different (earlier) error in the sequence.
+      // We want the *final* exception that killed the load to be preserved.
+      _recordError(err, _diag.lastFailedOperation || 'LOAD_SEQUENCE');
+
       if (!_diag.errorCode) {
         // Classify from the error message
         var msg = err && err.message ? err.message : '';
         var lc  = msg.toLowerCase();
-        if (lc.includes('model_load_aborted_or_empty') || lc.includes('abort')) {
+        if (lc.includes('model_load_aborted_or_empty') || lc.includes('abort') ||
+            (err && err.name === 'AbortError')) {
           _diag.errorCode = ERROR_CODES.MODEL_LOAD_ABORTED_OR_EMPTY;
         } else if (lc.includes('not loaded') || lc.includes('modelnotloaded')) {
           _diag.errorCode = ERROR_CODES.MODEL_NOT_LOADED;
         } else if (lc.includes('import') || _diag.webllmImportStatus === 'FAILED') {
           _diag.errorCode = ERROR_CODES.IMPORT_FAILED;
         } else {
-          _diag.errorCode = 'UNKNOWN_LOAD_ERROR';
+          _diag.errorCode = ERROR_CODES.UNKNOWN_LOAD_ERROR;
         }
       }
 
       var errMsg = err && err.message ? err.message : String(err);
       _setState(MODEL_STATE.FAILED, _loadPct, errMsg);
-      console.error('[SRLocalModel] Load FAILED. Code:', _diag.errorCode, 'Message:', errMsg);
+      console.error('[SRLocalModel] Load FAILED.',
+        '\n  Code:      ', _diag.errorCode,
+        '\n  Name:      ', _diag.lastErrorName,
+        '\n  Message:   ', _diag.lastErrorMessage,
+        '\n  Operation: ', _diag.lastFailedOperation,
+        '\n  Stack:     ', _diag.lastErrorStack ? _diag.lastErrorStack.split('\n').slice(0,3).join(' | ') : 'n/a'
+      );
       throw err;
     });
 
@@ -781,6 +846,68 @@
     _setState(MODEL_STATE.UNINITIALIZED, 0, null);
   }
 
+  // ─── generateWithMessages ────────────────────────────────────────────────────
+  //
+  // Called by SRInferenceRuntime when it needs to pass a pre-built messages
+  // array directly to the WebLLM engine (avoiding a redundant context rebuild).
+  // Skips _buildMessages() — the messages array is already fully prepared.
+  //
+  // callback(err, text)
+
+  function generateWithMessages(messages, opts, callback) {
+    if (typeof opts === 'function') { callback = opts; opts = {}; }
+    callback = callback || function () {};
+    opts = opts || {};
+
+    if (_state !== MODEL_STATE.READY || !_engine) {
+      var notReadyErr = new Error('Local model is not ready. State: ' + _state);
+      notReadyErr.name = 'ModelNotReadyError';
+      notReadyErr.errorCode = 'MODEL_NOT_READY';
+      _diag.lastInferenceError = notReadyErr.message;
+      callback(notReadyErr, null);
+      return;
+    }
+
+    _engine.chat.completions.create({
+      messages:    messages,
+      max_tokens:  opts.maxTokens !== undefined ? opts.maxTokens : MAX_GEN_TOKENS,
+      temperature: opts.temperature !== undefined ? opts.temperature : 0.7,
+    })
+    .then(function (result) {
+      var text = _extractText(result);
+      _diag.responseSource = 'LOCAL_MODEL';
+      callback(null, text ? text.trim() : '');
+    })
+    .catch(function (err) {
+      var name = err && err.name    ? err.name    : 'UnknownError';
+      var msg  = err && err.message ? err.message : String(err);
+      var lc   = msg.toLowerCase();
+
+      _diag.lastInferenceError = msg;
+      console.error('[SRLocalModel] generateWithMessages() error:', name, msg);
+
+      if (name === 'ModelNotLoadedError' ||
+          lc.includes('not loaded') ||
+          lc.includes('modelnotloaded') ||
+          lc.includes('engine not initialized')) {
+        _diag.modelNotLoadedError = true;
+        _diag.errorCode = ERROR_CODES.MODEL_NOT_LOADED;
+        _recordError(err, 'INFERENCE');
+        _setState(MODEL_STATE.FAILED, _loadPct, msg);
+        _engine = null;
+      }
+
+      callback(err, null);
+    });
+  }
+
+  // ─── Internal engine accessor (for SRInferenceRuntime) ──────────────────────
+  // Allows the runtime to check engine readiness without duplicating state.
+
+  function _getEngine() {
+    return _state === MODEL_STATE.READY ? _engine : null;
+  }
+
   // ─── Export ──────────────────────────────────────────────────────────────────
 
   global.SRLocalModel = {
@@ -793,12 +920,17 @@
     DEFAULT_MODEL:  FIXED_MODEL_ID,
     CAPABLE_MODEL:  FIXED_MODEL_ID,
 
-    loadModel:      loadModel,
-    generate:       generate,
-    onStateChange:  onStateChange,
-    getStatus:      getStatus,
-    getDiagnostics: getDiagnostics,
-    destroy:        destroy,
+    loadModel:              loadModel,
+    generate:               generate,
+    generateWithMessages:   generateWithMessages,
+    onStateChange:          onStateChange,
+    getStatus:              getStatus,
+    getDiagnostics:         getDiagnostics,
+    destroy:                destroy,
+    _getEngine:             _getEngine,
+    // Exposed for SRInferenceRuntime — builds prepared messages array from
+    // raw user message + context opts without running inference.
+    _buildMessages:         _buildMessages,
   };
 
 })(typeof window !== 'undefined' ? window : global);

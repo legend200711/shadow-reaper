@@ -47,7 +47,7 @@
 
 (function (global) {
 
-  var BUILD_ID = 'SR-COMPREHENSION-1';
+  var BUILD_ID = 'SR-COMPREHENSION-2';
 
   // ─── Dependency accessors ─────────────────────────────────────────────────
   function _mor()   { return global.SRMorphology;    }
@@ -147,6 +147,80 @@
     { phrase:'fed up',           label:'exasperated',        domain:'emotion' },
     { phrase:'freaking out',     label:'panicking',          domain:'emotion' },
     { phrase:'losing it',        label:'losing_composure',   domain:'emotion' },
+
+    // Figurative — device / vehicle failure (§12: "My car died")
+    { phrase:'car died',         label:'vehicle_ceased_functioning',  domain:'figurative' },
+    { phrase:'phone died',       label:'device_ceased_functioning',   domain:'figurative' },
+    { phrase:'laptop died',      label:'device_ceased_functioning',   domain:'figurative' },
+    { phrase:'battery died',     label:'device_power_depleted',       domain:'figurative' },
+    { phrase:'engine died',      label:'engine_ceased_functioning',   domain:'figurative' },
+    { phrase:'died on me',       label:'device_ceased_functioning',   domain:'figurative' },
+    { phrase:'gave up on me',    label:'ceased_functioning',          domain:'figurative' },
+    { phrase:'konked out',       label:'ceased_functioning',          domain:'figurative' },
+    { phrase:'stopped working',  label:'ceased_functioning',          domain:'state' },
+    { phrase:'stopped responding',label:'ceased_responding',          domain:'state' },
+    { phrase:'not responding',   label:'unresponsive',                domain:'state' },
+    { phrase:'gone dead',        label:'ceased_functioning',          domain:'figurative' },
+    { phrase:'completely dead',  label:'ceased_functioning',          domain:'figurative' },
+
+    // Figurative — device temperature (§12: "computer running hot")
+    { phrase:'running hot',      label:'operating_at_high_temp',      domain:'figurative' },
+    { phrase:'running cool',     label:'operating_at_normal_temp',    domain:'figurative' },
+    { phrase:'running slow',     label:'operating_below_normal_speed',domain:'figurative' },
+    { phrase:'running fast',     label:'operating_at_high_speed',     domain:'figurative' },
+    { phrase:'slowing down',     label:'performance_degradation',     domain:'state' },
+    { phrase:'heating up',       label:'temperature_rising',          domain:'state' },
+    { phrase:'overheating',      label:'excess_heat',                 domain:'state' },
+    { phrase:'thermal throttling', label:'cpu_reducing_speed_due_to_heat', domain:'tech_state' },
+
+    // Figurative — relationship / communication
+    { phrase:'reach out',        label:'contact_or_communicate',      domain:'communication' },
+    { phrase:'get in touch',     label:'contact_or_communicate',      domain:'communication' },
+    { phrase:'touch base',       label:'brief_check_in',              domain:'communication' },
+    { phrase:'keep in mind',     label:'remember_for_later',          domain:'cognitive' },
+    { phrase:'bear in mind',     label:'remember_for_later',          domain:'cognitive' },
+    { phrase:'wrap up',          label:'finish_or_conclude',          domain:'action' },
+    { phrase:'wrap around',      label:'encircle_or_understand',      domain:'action' },
+    { phrase:'come across',      label:'encounter_or_find',           domain:'action' },
+    { phrase:'carry on',         label:'continue',                    domain:'action' },
+    { phrase:'catch up',         label:'reach_parity_or_reconnect',   domain:'action' },
+    { phrase:'show up',          label:'arrive_or_appear',            domain:'action' },
+    { phrase:'end up',           label:'eventually_result_in',        domain:'action' },
+    { phrase:'pull off',         label:'accomplish_something_difficult', domain:'action' },
+    { phrase:'pull through',     label:'survive_or_recover',          domain:'action' },
+    { phrase:'mess up',          label:'make_mistake',                domain:'action' },
+    { phrase:'messed up',        label:'made_mistake_or_broken',      domain:'action' },
+    { phrase:'screw up',         label:'make_mistake',                domain:'action' },
+    { phrase:'screwed up',       label:'made_mistake_or_broken',      domain:'action' },
+
+    // Figurative — time / effort
+    { phrase:'run out of time',  label:'no_time_remaining',           domain:'time' },
+    { phrase:'run out of',       label:'exhausted_supply_of',         domain:'state' },
+    { phrase:'ran out of',       label:'exhausted_supply_of',         domain:'state' },
+    { phrase:'out of the blue',  label:'unexpectedly',                domain:'figurative' },
+    { phrase:'under the weather', label:'feeling_unwell',             domain:'figurative' },
+    { phrase:'bite off more than you can chew', label:'take_on_too_much', domain:'figurative' },
+    { phrase:'back to square one', label:'restart_from_beginning',    domain:'figurative' },
+    { phrase:'hit the ground running', label:'start_quickly_and_effectively', domain:'figurative' },
+    { phrase:'the ball is in your court', label:'responsibility_is_yours', domain:'figurative' },
+    { phrase:'cut corners',      label:'take_shortcuts',              domain:'figurative' },
+    { phrase:'up and running',   label:'operational',                 domain:'state' },
+    { phrase:'get up and running', label:'become_operational',        domain:'state' },
+
+    // Tech-specific phrases
+    { phrase:'spinning up',      label:'starting_up',                 domain:'tech_action' },
+    { phrase:'spinning down',    label:'shutting_down',               domain:'tech_action' },
+    { phrase:'booting up',       label:'starting_operating_system',   domain:'tech_action' },
+    { phrase:'powering on',      label:'starting_device',             domain:'tech_action' },
+    { phrase:'powering off',     label:'stopping_device',             domain:'tech_action' },
+    { phrase:'wiping out',       label:'deleting_all_data',           domain:'tech_action' },
+    { phrase:'wiped out',        label:'all_data_deleted',            domain:'tech_action' },
+    { phrase:'freeing up',       label:'releasing_resources',         domain:'tech_action' },
+    { phrase:'cleaned up',       label:'resources_freed',             domain:'tech_action' },
+    { phrase:'locking up',       label:'freezing_or_becoming_locked', domain:'tech_action' },
+    { phrase:'locked up',        label:'frozen_or_locked',            domain:'tech_action' },
+    { phrase:'hanging on',       label:'freezing_or_waiting',         domain:'tech_action' },
+    { phrase:'frozen up',        label:'stopped_responding',          domain:'tech_action' },
   ];
 
   // Build idiom index by first word for O(1) lookup

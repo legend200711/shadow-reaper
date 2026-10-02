@@ -1,9 +1,21 @@
-# Cloudflare Setup — Shadow Reaper Standalone
+# Cloudflare Setup — Shadow Reaper Cloud API
 
-## Status: ⏳ AWAITING CONFIGURATION
+## Status: ✅ LIVE — DEPLOYED AND OPERATIONAL
 
-Shadow Reaper Standalone will eventually use its own dedicated Cloudflare resources.
-No Cloudflare resources have been created yet.
+Shadow Reaper Cloud API (`sr-cloud-api`) is deployed to Cloudflare Workers.
+Workers AI binding is active — hosted inference is LIVE.
+
+**Production endpoint:** `https://sr-cloud-api.nthntjrn.workers.dev`
+
+| Component | Status |
+|-----------|--------|
+| Worker deployed | ✅ LIVE |
+| Firebase auth | ✅ CONNECTED |
+| Firestore sync | ✅ CONNECTED |
+| Workers AI binding (env.AI) | ✅ BOUND |
+| Hosted inference `/api/v1/inference` | ✅ LIVE — REAL GENERATION |
+| Default model | @cf/meta/llama-3-8b-instruct (fallback: @cf/mistral/mistral-7b-instruct-v0.1) |
+| Health endpoint | ✅ Returns `inference: true` |
 
 ---
 

@@ -2,7 +2,7 @@
  * shadow-reaper-v2/language/indexes/sense-index.js
  * Shadow Reaper — Word Sense Index
  *
- * Build: SR-SENSE-INDEX-1
+ * Build: SR-SENSE-INDEX-2
  *
  * Exposes: window.SRSenseIndex
  *
@@ -45,7 +45,7 @@
 
 (function (global) {
 
-  var BUILD_ID = 'SR-SENSE-INDEX-1';
+  var BUILD_ID = 'SR-SENSE-INDEX-2';
 
   // ─── Sense definitions ────────────────────────────────────────────────────
   // Only words with genuinely distinct meanings that affect interpretation.
@@ -357,6 +357,270 @@
           contextKeys:['student','person','idea','mind','intelligent','smart','clever','gifted','sharp'],
           antiKeys:['light','lamp','sun','room'],
           weight: 0.4 },
+      ]
+    },
+
+    // ── die / died / dying ─────────────────────────────────────────────────────
+    // Spec §12: "My car died." → car stopped operating, not biological death.
+    'die': {
+      senses: [
+        { id:'die:biological', label:'to cease living (biological death)', pos:'verb', domain:'life',
+          contextKeys:['dead','death','kill','killed','alive','live','life','passed','funeral','person','animal','pet','plant','flowers'],
+          antiKeys:['car','phone','laptop','battery','computer','engine','device','machine','server'],
+          weight: 0.55 },
+        { id:'die:device', label:'to stop working (machine or device ceased functioning)', pos:'verb', domain:'tech',
+          contextKeys:['car','phone','laptop','battery','computer','engine','device','machine','server','truck','motorcycle','charger'],
+          antiKeys:['person','funeral','alive','human'],
+          weight: 0.35 },
+        { id:'die:game', label:'a cube used in games (singular of dice)', pos:'noun', domain:'game',
+          contextKeys:['roll','game','dice','cube','six','number','board','play','chance'],
+          antiKeys:['car','dead','person','alive'],
+          weight: 0.1 },
+      ]
+    },
+
+    // ── dead ──────────────────────────────────────────────────────────────────
+    'dead': {
+      senses: [
+        { id:'dead:biological', label:'no longer living (biological)', pos:'adj', domain:'life',
+          contextKeys:['body','funeral','person','animal','buried','grave','died','killed','life'],
+          antiKeys:['battery','phone','link','zone','quiet','silent','end'],
+          weight: 0.5 },
+        { id:'dead:device', label:'no power / not functioning (battery or device)', pos:'adj', domain:'tech',
+          contextKeys:['battery','phone','laptop','charger','device','power','plug','charge'],
+          antiKeys:['funeral','body','grave','person'],
+          weight: 0.3 },
+        { id:'dead:zone', label:'an area without signal or activity', pos:'adj', domain:'general',
+          contextKeys:['zone','area','signal','coverage','quiet','silent','end'],
+          antiKeys:['body','funeral','battery'],
+          weight: 0.2 },
+      ]
+    },
+
+    // ── hot ───────────────────────────────────────────────────────────────────
+    // Spec §12: "My computer is running hot." → elevated temperature, not spicy/attractive.
+    'hot': {
+      senses: [
+        { id:'hot:temperature', label:'high temperature (physical heat)', pos:'adj', domain:'physical',
+          contextKeys:['temperature','fire','sun','summer','weather','burn','heat','warm','degrees','oven','stove','fever'],
+          antiKeys:['computer','cpu','gpu','laptop','processor','chip','fan','thermal','performance'],
+          weight: 0.5 },
+        { id:'hot:device', label:'running at high temperature (device overheating)', pos:'adj', domain:'tech',
+          contextKeys:['computer','cpu','gpu','laptop','processor','chip','fan','thermal','overheating','performance','running'],
+          antiKeys:['sun','weather','food','spicy','fire'],
+          weight: 0.3 },
+        { id:'hot:popular', label:'very popular or trending', pos:'adj', domain:'social',
+          contextKeys:['trend','popular','viral','topic','song','movie','market','stock','product'],
+          antiKeys:['computer','temperature','weather'],
+          weight: 0.15 },
+        { id:'hot:spicy', label:'spicy or pungent (food)', pos:'adj', domain:'food',
+          contextKeys:['food','spicy','pepper','sauce','curry','flavor','taste','eat'],
+          antiKeys:['computer','temperature','popular'],
+          weight: 0.05 },
+      ]
+    },
+
+    // ── crash ──────────────────────────────────────────────────────────────────
+    'crash': {
+      senses: [
+        { id:'crash:tech', label:'a software or system failure / crash', pos:'verb', domain:'tech',
+          contextKeys:['computer','app','software','program','browser','system','os','server','error','freeze','blue screen'],
+          antiKeys:['car','plane','vehicle','accident','physical'],
+          weight: 0.5 },
+        { id:'crash:physical', label:'a vehicle or physical collision', pos:'noun', domain:'physical',
+          contextKeys:['car','plane','vehicle','truck','accident','collision','highway','road','driver'],
+          antiKeys:['computer','software','app','system'],
+          weight: 0.4 },
+        { id:'crash:sleep', label:'to sleep suddenly out of exhaustion (informal)', pos:'verb', domain:'informal',
+          contextKeys:['sleep','tired','exhausted','couch','bed','rest','nap'],
+          antiKeys:['car','computer','stock'],
+          weight: 0.1 },
+      ]
+    },
+
+    // ── fire ──────────────────────────────────────────────────────────────────
+    'fire': {
+      senses: [
+        { id:'fire:flame', label:'combustion producing heat and light', pos:'noun', domain:'physical',
+          contextKeys:['flame','smoke','burn','hot','wood','camp','forest','alarm','extinguisher','firefighter'],
+          antiKeys:['job','employee','boss','dismiss','hire','work'],
+          weight: 0.55 },
+        { id:'fire:dismiss', label:'to dismiss an employee from a job', pos:'verb', domain:'employment',
+          contextKeys:['job','employee','boss','dismiss','hire','work','fired','terminated','layoff'],
+          antiKeys:['flame','smoke','wood','camp','burn'],
+          weight: 0.35 },
+        { id:'fire:shoot', label:'to discharge a weapon', pos:'verb', domain:'action',
+          contextKeys:['gun','weapon','shoot','bullet','shot','trigger','rifle'],
+          antiKeys:['job','flame','wood'],
+          weight: 0.1 },
+      ]
+    },
+
+    // ── memory ────────────────────────────────────────────────────────────────
+    'memory': {
+      senses: [
+        { id:'memory:human', label:'the ability to recall past experiences', pos:'noun', domain:'cognitive',
+          contextKeys:['remember','recall','forget','past','brain','mind','experience','childhood','nostalgic'],
+          antiKeys:['ram','gb','mb','storage','computer','disk','cache'],
+          weight: 0.55 },
+        { id:'memory:computer', label:'computer memory (RAM or storage)', pos:'noun', domain:'tech',
+          contextKeys:['ram','gb','mb','storage','computer','disk','cache','upgrade','install','chip','memory leak'],
+          antiKeys:['remember','brain','childhood','past','nostalgic'],
+          weight: 0.45 },
+      ]
+    },
+
+    // ── fly ───────────────────────────────────────────────────────────────────
+    'fly': {
+      senses: [
+        { id:'fly:travel', label:'to travel by aircraft', pos:'verb', domain:'travel',
+          contextKeys:['plane','aircraft','airport','flight','ticket','airline','pilot','travel','trip','destination'],
+          antiKeys:['time','hours','pass','quickly','insect','bug'],
+          weight: 0.45 },
+        { id:'fly:time', label:'time passing quickly (figurative: time flies)', pos:'verb', domain:'figurative',
+          contextKeys:['time','fast','quickly','hours','day','week','passed','how','went'],
+          antiKeys:['plane','airport','ticket','airline'],
+          weight: 0.35 },
+        { id:'fly:insect', label:'a small flying insect', pos:'noun', domain:'nature',
+          contextKeys:['insect','bug','swat','pest','food','kitchen','trap'],
+          antiKeys:['plane','time','airport'],
+          weight: 0.2 },
+      ]
+    },
+
+    // ── feed ──────────────────────────────────────────────────────────────────
+    'feed': {
+      senses: [
+        { id:'feed:food', label:'to give food to a person or animal', pos:'verb', domain:'food',
+          contextKeys:['food','eat','hungry','animal','baby','pet','meal','nutrient'],
+          antiKeys:['data','rss','stream','news','social','algorithm'],
+          weight: 0.55 },
+        { id:'feed:data', label:'a stream of data or social media content', pos:'noun', domain:'tech',
+          contextKeys:['rss','news','social','stream','data','twitter','instagram','algorithm','update','content'],
+          antiKeys:['food','eat','hungry','animal'],
+          weight: 0.45 },
+      ]
+    },
+
+    // ── free ──────────────────────────────────────────────────────────────────
+    'free': {
+      senses: [
+        { id:'free:cost', label:'costing nothing (at no charge)', pos:'adj', domain:'commerce',
+          contextKeys:['cost','price','charge','money','pay','download','trial','offer','get'],
+          antiKeys:['freedom','release','liberate','prison','slave'],
+          weight: 0.55 },
+        { id:'free:liberty', label:'not confined or restricted (freedom)', pos:'adj', domain:'social',
+          contextKeys:['freedom','liberty','release','liberate','prison','country','rights','democracy'],
+          antiKeys:['cost','price','pay','download'],
+          weight: 0.35 },
+        { id:'free:release', label:'to release or unshackle', pos:'verb', domain:'action',
+          contextKeys:['release','let','go','hostage','prisoner','unlock','open'],
+          antiKeys:['cost','price'],
+          weight: 0.1 },
+      ]
+    },
+
+    // ── index ─────────────────────────────────────────────────────────────────
+    'index': {
+      senses: [
+        { id:'index:book', label:'an index at the back of a book', pos:'noun', domain:'publishing',
+          contextKeys:['book','page','chapter','reference','topic','search','find','glossary'],
+          antiKeys:['database','sql','search engine','stock','market','array'],
+          weight: 0.35 },
+        { id:'index:database', label:'a database index for fast lookup', pos:'noun', domain:'tech',
+          contextKeys:['database','sql','query','lookup','fast','optimize','table','column','search'],
+          antiKeys:['book','chapter','glossary'],
+          weight: 0.4 },
+        { id:'index:market', label:'a financial market index (e.g., S&P 500)', pos:'noun', domain:'finance',
+          contextKeys:['stock','market','financial','sp500','dow','nasdaq','fund','portfolio','investment'],
+          antiKeys:['book','database','sql'],
+          weight: 0.15 },
+        { id:'index:finger', label:'the index (pointer) finger', pos:'noun', domain:'anatomy',
+          contextKeys:['finger','hand','point','gesture'],
+          antiKeys:['book','database','stock'],
+          weight: 0.1 },
+      ]
+    },
+
+    // ── log ───────────────────────────────────────────────────────────────────
+    'log': {
+      senses: [
+        { id:'log:tech', label:'a record of events (system log)', pos:'noun', domain:'tech',
+          contextKeys:['error','server','system','debug','file','record','entry','console','print','event'],
+          antiKeys:['wood','cabin','tree','fire','fireplace'],
+          weight: 0.55 },
+        { id:'log:wood', label:'a piece of cut timber or wood', pos:'noun', domain:'physical',
+          contextKeys:['wood','cabin','tree','cut','fire','fireplace','forest','axe','saw'],
+          antiKeys:['error','server','debug','console'],
+          weight: 0.35 },
+        { id:'log:math', label:'logarithm (mathematical function)', pos:'noun', domain:'math',
+          contextKeys:['logarithm','base','math','exponent','calculation','number'],
+          antiKeys:['wood','error','server'],
+          weight: 0.1 },
+      ]
+    },
+
+    // ── window ────────────────────────────────────────────────────────────────
+    'window': {
+      senses: [
+        { id:'window:tech', label:'a UI window in a program or browser', pos:'noun', domain:'tech',
+          contextKeys:['browser','program','application','dialog','popup','close','open','tab','screen','resize','minimize'],
+          antiKeys:['glass','house','building','curtain','blind','view'],
+          weight: 0.55 },
+        { id:'window:physical', label:'a glass pane in a wall or vehicle', pos:'noun', domain:'physical',
+          contextKeys:['glass','house','building','curtain','blind','view','open','close','wind','rain','outside'],
+          antiKeys:['browser','program','dialog','popup','tab','screen'],
+          weight: 0.45 },
+      ]
+    },
+
+    // ── bug ───────────────────────────────────────────────────────────────────
+    'bug': {
+      senses: [
+        { id:'bug:tech', label:'a software error or defect', pos:'noun', domain:'tech',
+          contextKeys:['code','software','error','fix','debug','program','crash','test','report','issue','github'],
+          antiKeys:['insect','ant','spider','garden','bite','spray'],
+          weight: 0.65 },
+        { id:'bug:insect', label:'a small insect or creature', pos:'noun', domain:'nature',
+          contextKeys:['insect','ant','spider','garden','bite','spray','pest','outdoor','crawl'],
+          antiKeys:['code','software','debug','program'],
+          weight: 0.25 },
+        { id:'bug:spy', label:'a hidden listening or tracking device', pos:'noun', domain:'surveillance',
+          contextKeys:['spy','surveillance','hidden','listen','track','phone','wire','tap'],
+          antiKeys:['code','insect','garden'],
+          weight: 0.1 },
+      ]
+    },
+
+    // ── stream ────────────────────────────────────────────────────────────────
+    'stream': {
+      senses: [
+        { id:'stream:tech', label:'streaming media or data flow', pos:'noun', domain:'tech',
+          contextKeys:['video','audio','live','twitch','youtube','netflix','buffer','bandwidth','watch','online'],
+          antiKeys:['river','water','fish','nature','flowing'],
+          weight: 0.6 },
+        { id:'stream:nature', label:'a small natural body of flowing water', pos:'noun', domain:'nature',
+          contextKeys:['river','water','fish','nature','flowing','bank','swim','wildlife','creek','brook'],
+          antiKeys:['video','live','twitch','youtube','buffer'],
+          weight: 0.4 },
+      ]
+    },
+
+    // ── terminal ──────────────────────────────────────────────────────────────
+    'terminal': {
+      senses: [
+        { id:'terminal:tech', label:'a command-line interface or console', pos:'noun', domain:'tech',
+          contextKeys:['command','cli','shell','bash','console','run','script','linux','mac','windows','prompt'],
+          antiKeys:['airport','illness','fatal','death','hospital'],
+          weight: 0.55 },
+        { id:'terminal:transport', label:'an airport or bus terminal', pos:'noun', domain:'transport',
+          contextKeys:['airport','bus','train','station','departure','arrival','gate','travel'],
+          antiKeys:['command','cli','shell','bash','script'],
+          weight: 0.35 },
+        { id:'terminal:medical', label:'terminal as in fatal illness', pos:'adj', domain:'medical',
+          contextKeys:['illness','cancer','diagnosis','fatal','death','hospital','prognosis'],
+          antiKeys:['command','airport','bus','transport'],
+          weight: 0.1 },
       ]
     },
 

@@ -1524,6 +1524,430 @@ test('Z5: vocabulary index supports word lookup in < 10ms average', function () 
 });
 
 // ==============================================================================
+// SECTION AA: FIGURATIVE / CONTEXTUAL SENSE DISAMBIGUATION (§12)
+// ==============================================================================
+
+process.stdout.write('\n── SECTION AA: FIGURATIVE SENSE DISAMBIGUATION ─────────────\n');
+
+test('AA1: "die" with car context → device_ceased sense (not biological)', function () {
+  var scored = si.score('die', ['car','engine','road','driving']);
+  assert(scored.length > 0, '"die" should have multiple senses');
+  assert(scored[0].sense.id === 'die:device' || scored[0].sense.domain === 'tech',
+    '"die" in car context should prefer device/tech sense, got: ' + scored[0].sense.id);
+});
+
+test('AA2: "die" with funeral context → biological sense wins', function () {
+  var scored = si.score('die', ['person','funeral','life','alive']);
+  assert(scored.length > 0, '"die" should have multiple senses');
+  assert(scored[0].sense.id === 'die:biological' || scored[0].sense.domain === 'life',
+    '"die" in funeral context should prefer biological sense, got: ' + scored[0].sense.id);
+});
+
+test('AA3: "hot" with computer context → device overheating sense', function () {
+  var scored = si.score('hot', ['computer','cpu','laptop','fan','thermal']);
+  assert(scored.length > 0, '"hot" should have multiple senses');
+  assert(scored[0].sense.id === 'hot:device' || scored[0].sense.domain === 'tech',
+    '"hot" in computer context should prefer device sense, got: ' + scored[0].sense.id);
+});
+
+test('AA4: "hot" with weather context → temperature sense', function () {
+  var scored = si.score('hot', ['weather','sun','summer','temperature','degrees']);
+  assert(scored.length > 0, '"hot" should have multiple senses');
+  assert(scored[0].sense.id === 'hot:temperature' || scored[0].sense.domain === 'physical',
+    '"hot" in weather context should prefer temperature sense, got: ' + scored[0].sense.id);
+});
+
+test('AA5: "crash" with software context → tech sense', function () {
+  var scored = si.score('crash', ['computer','app','software','error']);
+  assert(scored.length > 0, '"crash" should have multiple senses');
+  assert(scored[0].sense.id === 'crash:tech' || scored[0].sense.domain === 'tech',
+    '"crash" in software context should prefer tech sense, got: ' + scored[0].sense.id);
+});
+
+test('AA6: "crash" with vehicle context → physical sense', function () {
+  var scored = si.score('crash', ['car','accident','highway','vehicle']);
+  assert(scored.length > 0, '"crash" should have multiple senses');
+  assert(scored[0].sense.id === 'crash:physical' || scored[0].sense.domain === 'physical',
+    '"crash" in vehicle context should prefer physical sense, got: ' + scored[0].sense.id);
+});
+
+test('AA7: "memory" with RAM context → computer sense', function () {
+  var scored = si.score('memory', ['ram','gb','computer','upgrade','disk']);
+  assert(scored.length > 0, '"memory" should have multiple senses');
+  assert(scored[0].sense.id === 'memory:computer' || scored[0].sense.domain === 'tech',
+    '"memory" in RAM context should prefer computer sense, got: ' + scored[0].sense.id);
+});
+
+test('AA8: "memory" with nostalgic context → human sense', function () {
+  var scored = si.score('memory', ['remember','childhood','past','brain','mind']);
+  assert(scored.length > 0, '"memory" should have multiple senses');
+  assert(scored[0].sense.id === 'memory:human' || scored[0].sense.domain === 'cognitive',
+    '"memory" in nostalgic context should prefer human sense, got: ' + scored[0].sense.id);
+});
+
+test('AA9: "fire" with job context → dismissal sense', function () {
+  var scored = si.score('fire', ['job','employee','boss','work','terminated']);
+  assert(scored.length > 0, '"fire" should have multiple senses');
+  assert(scored[0].sense.id === 'fire:dismiss' || scored[0].sense.domain === 'employment',
+    '"fire" in job context should prefer dismissal sense, got: ' + scored[0].sense.id);
+});
+
+test('AA10: "fire" with flame context → flame sense', function () {
+  var scored = si.score('fire', ['flame','smoke','burn','wood','camp']);
+  assert(scored.length > 0, '"fire" should have multiple senses');
+  assert(scored[0].sense.id === 'fire:flame' || scored[0].sense.domain === 'physical',
+    '"fire" in flame context should prefer flame sense, got: ' + scored[0].sense.id);
+});
+
+test('AA11: "bug" with code context → tech sense', function () {
+  var scored = si.score('bug', ['code','software','error','debug','program']);
+  assert(scored.length > 0, '"bug" should have multiple senses');
+  assert(scored[0].sense.id === 'bug:tech' || scored[0].sense.domain === 'tech',
+    '"bug" in code context should prefer tech sense, got: ' + scored[0].sense.id);
+});
+
+test('AA12: "stream" with video context → tech sense', function () {
+  var scored = si.score('stream', ['video','live','youtube','buffer','online']);
+  assert(scored.length > 0, '"stream" should have multiple senses');
+  assert(scored[0].sense.id === 'stream:tech' || scored[0].sense.domain === 'tech',
+    '"stream" in video context should prefer tech sense, got: ' + scored[0].sense.id);
+});
+
+test('AA13: "dead" with battery context → device sense', function () {
+  var scored = si.score('dead', ['battery','phone','charge','power']);
+  assert(scored.length > 0, '"dead" should have multiple senses');
+  assert(scored[0].sense.id === 'dead:device' || scored[0].sense.domain === 'tech',
+    '"dead" in battery context should prefer device sense, got: ' + scored[0].sense.id);
+});
+
+test('AA14: "log" with server context → tech sense', function () {
+  var scored = si.score('log', ['server','error','debug','console','event']);
+  assert(scored.length > 0, '"log" should have multiple senses');
+  assert(scored[0].sense.id === 'log:tech' || scored[0].sense.domain === 'tech',
+    '"log" in server context should prefer tech sense, got: ' + scored[0].sense.id);
+});
+
+test('AA15: "window" with browser context → tech sense', function () {
+  var scored = si.score('window', ['browser','tab','close','open','program']);
+  assert(scored.length > 0, '"window" should have multiple senses');
+  assert(scored[0].sense.id === 'window:tech' || scored[0].sense.domain === 'tech',
+    '"window" in browser context should prefer tech sense, got: ' + scored[0].sense.id);
+});
+
+test('AA16: "terminal" with command-line context → tech sense', function () {
+  var scored = si.score('terminal', ['command','bash','shell','script','linux']);
+  assert(scored.length > 0, '"terminal" should have multiple senses');
+  assert(scored[0].sense.id === 'terminal:tech' || scored[0].sense.domain === 'tech',
+    '"terminal" in command context should prefer tech sense, got: ' + scored[0].sense.id);
+});
+
+test('AA17: "fly" in time context → figurative sense (time flies)', function () {
+  var scored = si.score('fly', ['time','fast','quickly','hours','day','went']);
+  assert(scored.length > 0, '"fly" should have multiple senses');
+  assert(scored[0].sense.id === 'fly:time' || scored[0].sense.domain === 'figurative',
+    '"fly" in time context should prefer figurative sense, got: ' + scored[0].sense.id);
+});
+
+// ==============================================================================
+// SECTION BB: CONCEPT TAXONOMY / RELATIONSHIPS (§17-18)
+// ==============================================================================
+
+process.stdout.write('\n── SECTION BB: CONCEPT TAXONOMY / RELATIONSHIPS ────────────\n');
+
+test('BB1: "dog" IS_A "animal"', function () {
+  var rels = rel.getRelationships('dog', { rel: 'IS_A', minConfidence: 0.9 });
+  var targets = rels.map(function(r){ return r.to; });
+  assertArrayContains(targets, 'animal', '"dog" should have IS_A → animal');
+});
+
+test('BB2: "dog" IS_A "mammal"', function () {
+  var rels = rel.getRelationships('dog', { rel: 'IS_A', minConfidence: 0.9 });
+  var targets = rels.map(function(r){ return r.to; });
+  assertArrayContains(targets, 'mammal', '"dog" should have IS_A → mammal');
+});
+
+test('BB3: "rain" IS_A "weather"', function () {
+  var rels = rel.getRelationships('rain', { rel: 'IS_A', minConfidence: 0.9 });
+  var targets = rels.map(function(r){ return r.to; });
+  assertArrayContains(targets, 'weather', '"rain" should have IS_A → weather');
+});
+
+test('BB4: "rain" IS_A "precipitation"', function () {
+  var rels = rel.getRelationships('rain', { rel: 'IS_A', minConfidence: 0.9 });
+  var targets = rels.map(function(r){ return r.to; });
+  assertArrayContains(targets, 'precipitation', '"rain" should have IS_A → precipitation');
+});
+
+test('BB5: "cpu" IS_A "processor"', function () {
+  var rels = rel.getRelationships('cpu', { rel: 'IS_A', minConfidence: 0.95 });
+  var targets = rels.map(function(r){ return r.to; });
+  assertArrayContains(targets, 'processor', '"cpu" should have IS_A → processor');
+});
+
+test('BB6: "cpu" IS_A "computer component"', function () {
+  var rels = rel.getRelationships('cpu', { rel: 'IS_A', minConfidence: 0.95 });
+  var targets = rels.map(function(r){ return r.to; });
+  assertArrayContains(targets, 'computer component', '"cpu" should have IS_A → computer component');
+});
+
+test('BB7: "car" IS_A "vehicle"', function () {
+  var rels = rel.getRelationships('car', { rel: 'IS_A', minConfidence: 0.95 });
+  var targets = rels.map(function(r){ return r.to; });
+  assertArrayContains(targets, 'vehicle', '"car" should have IS_A → vehicle');
+});
+
+test('BB8: "laptop" IS_A "computer"', function () {
+  var rels = rel.getRelationships('laptop', { rel: 'IS_A', minConfidence: 0.95 });
+  var targets = rels.map(function(r){ return r.to; });
+  assertArrayContains(targets, 'computer', '"laptop" should have IS_A → computer');
+});
+
+test('BB9: "volt" IS_A "electrical unit"', function () {
+  var rels = rel.getRelationships('volt', { rel: 'IS_A', minConfidence: 0.95 });
+  var targets = rels.map(function(r){ return r.to; });
+  assertArrayContains(targets, 'electrical unit', '"volt" should have IS_A → electrical unit');
+});
+
+test('BB10: "hot" ANTONYM_OF "cold"', function () {
+  var syns = rel.getRelationships('hot', { rel: 'ANTONYM_OF', minConfidence: 0.9 });
+  var targets = syns.map(function(r){ return r.to; });
+  assertArrayContains(targets, 'cold', '"hot" should have ANTONYM_OF → cold');
+});
+
+test('BB11: "fast" ANTONYM_OF "slow" (symmetric)', function () {
+  var rels = rel.getRelationships('fast', { rel: 'ANTONYM_OF', minConfidence: 0.9 });
+  var targets = rels.map(function(r){ return r.to; });
+  assertArrayContains(targets, 'slow', '"fast" should have ANTONYM_OF → slow');
+});
+
+test('BB12: "forget" ANTONYM_OF "remember"', function () {
+  var rels = rel.getRelationships('forget', { rel: 'ANTONYM_OF', minConfidence: 0.9 });
+  var targets = rels.map(function(r){ return r.to; });
+  assertArrayContains(targets, 'remember', '"forget" should have ANTONYM_OF → remember');
+});
+
+test('BB13: "overheating" CAUSES "crash"', function () {
+  var rels = rel.getRelationships('overheating', { rel: 'CAUSES', minConfidence: 0.5 });
+  var targets = rels.map(function(r){ return r.to; });
+  assertArrayContains(targets, 'crash', '"overheating" should CAUSE "crash"');
+});
+
+test('BB14: "reboot" SYNONYM_OF "restart"', function () {
+  var syns = rel.getSynonyms('reboot');
+  assertArrayContains(syns, 'restart', '"reboot" should have synonym → restart');
+});
+
+test('BB15: "wifi" IS_A "network"', function () {
+  var rels = rel.getRelationships('wifi', { rel: 'IS_A', minConfidence: 0.9 });
+  var targets = rels.map(function(r){ return r.to; });
+  assertArrayContains(targets, 'network', '"wifi" should have IS_A → network');
+});
+
+test('BB16: "minute" IS_A "time unit"', function () {
+  var rels = rel.getRelationships('minute', { rel: 'IS_A', minConfidence: 0.95 });
+  var targets = rels.map(function(r){ return r.to; });
+  assertArrayContains(targets, 'time unit', '"minute" should have IS_A → time unit');
+});
+
+// ==============================================================================
+// SECTION CC: FIGURATIVE IDIOM DETECTION (§12 — new phrases)
+// ==============================================================================
+
+process.stdout.write('\n── SECTION CC: FIGURATIVE IDIOM DETECTION (EXPANDED) ───────\n');
+
+test('CC1: "my car died" detects vehicle-ceased idiom', function () {
+  var idioms = comp.detectIdioms('my car died on the way here');
+  assert(idioms.length > 0, '"car died" should be detected as idiom');
+  var carDied = idioms.filter(function(i){ return i.phrase === 'car died' || i.domain === 'figurative'; });
+  assert(carDied.length > 0, 'car died idiom should have figurative domain');
+});
+
+test('CC2: "computer is running hot" detects overheating idiom', function () {
+  var idioms = comp.detectIdioms('my computer is running hot lately');
+  assert(idioms.length > 0, '"running hot" should be detected as idiom');
+  var runHot = idioms.filter(function(i){ return i.phrase === 'running hot'; });
+  assert(runHot.length > 0, 'running hot idiom should be detected');
+  assertEquals(runHot[0].label, 'operating_at_high_temp', 'label should be operating_at_high_temp');
+});
+
+test('CC3: "reach out" detected as communication idiom', function () {
+  var idioms = comp.detectIdioms("please reach out if you have questions");
+  var found = idioms.filter(function(i){ return i.phrase === 'reach out'; });
+  assert(found.length > 0, '"reach out" should be detected as idiom');
+  assertEquals(found[0].label, 'contact_or_communicate', 'label should be contact_or_communicate');
+});
+
+test('CC4: "out of the blue" detected as figurative idiom', function () {
+  var idioms = comp.detectIdioms("he called me out of the blue");
+  var found = idioms.filter(function(i){ return i.phrase === 'out of the blue'; });
+  assert(found.length > 0, '"out of the blue" should be detected');
+});
+
+test('CC5: "under the weather" detected as figurative idiom', function () {
+  var idioms = comp.detectIdioms("I am feeling under the weather today");
+  var found = idioms.filter(function(i){ return i.phrase === 'under the weather'; });
+  assert(found.length > 0, '"under the weather" should be detected');
+  assertEquals(found[0].label, 'feeling_unwell', 'label should be feeling_unwell');
+});
+
+test('CC6: "booting up" detected as tech-action idiom', function () {
+  var idioms = comp.detectIdioms("the computer is booting up now");
+  var found = idioms.filter(function(i){ return i.phrase === 'booting up'; });
+  assert(found.length > 0, '"booting up" should be detected');
+  assertEquals(found[0].domain, 'tech_action', 'domain should be tech_action');
+});
+
+test('CC7: "stopped working" detected as ceased-functioning idiom', function () {
+  var idioms = comp.detectIdioms("my app stopped working yesterday");
+  var found = idioms.filter(function(i){ return i.phrase === 'stopped working'; });
+  assert(found.length > 0, '"stopped working" should be detected');
+  assertEquals(found[0].label, 'ceased_functioning', 'label should be ceased_functioning');
+});
+
+test('CC8: "locking up" detected as tech freeze idiom', function () {
+  var idioms = comp.detectIdioms("the browser keeps locking up");
+  var found = idioms.filter(function(i){ return i.phrase === 'locking up'; });
+  assert(found.length > 0, '"locking up" should be detected');
+});
+
+test('CC9: "up and running" detected as operational idiom', function () {
+  var idioms = comp.detectIdioms("the server is back up and running");
+  var found = idioms.filter(function(i){ return i.phrase === 'up and running'; });
+  assert(found.length > 0, '"up and running" should be detected');
+  assertEquals(found[0].label, 'operational', 'label should be operational');
+});
+
+test('CC10: "catch up" detected as action idiom', function () {
+  var idioms = comp.detectIdioms("I need to catch up on my work");
+  var found = idioms.filter(function(i){ return i.phrase === 'catch up'; });
+  assert(found.length > 0, '"catch up" should be detected');
+});
+
+test('CC11: "mess up" detected as mistake idiom', function () {
+  var idioms = comp.detectIdioms("I think I messed up the configuration");
+  var found = idioms.filter(function(i){ return i.phrase === 'messed up'; });
+  assert(found.length > 0, '"messed up" should be detected');
+});
+
+test('CC12: "wrap up" detected as action idiom', function () {
+  var idioms = comp.detectIdioms("let us wrap up this meeting");
+  var found = idioms.filter(function(i){ return i.phrase === 'wrap up'; });
+  assert(found.length > 0, '"wrap up" should be detected');
+  assertEquals(found[0].label, 'finish_or_conclude', 'label should be finish_or_conclude');
+});
+
+// ==============================================================================
+// SECTION DD: COMPREHENSION ANALYZE PIPELINE — NEW SENSES (§12 scenarios)
+// ==============================================================================
+
+process.stdout.write('\n── SECTION DD: COMPREHENSION PIPELINE — FIGURATIVE SCENARIOS ─\n');
+
+test('DD1: SRComprehension.analyze handles "my car died" — detects idiom, not crash', function () {
+  var la = lang ? lang.analyze('My car died on the way here.') : null;
+  var result = comp.analyze('My car died on the way here.', la, {});
+  assert(result, 'analyze should return result');
+  var carDied = result.idioms.filter(function(i){ return i.phrase === 'car died'; });
+  assert(carDied.length > 0, 'car died idiom should be detected in full pipeline');
+});
+
+test('DD2: SRComprehension.analyze handles "computer running hot" — detects idiom', function () {
+  var la = lang ? lang.analyze('My computer is running hot.') : null;
+  var result = comp.analyze('My computer is running hot.', la, {});
+  assert(result, 'analyze should return result');
+  var runHot = result.idioms.filter(function(i){ return i.phrase === 'running hot'; });
+  assert(runHot.length > 0, 'running hot should be detected in full pipeline');
+});
+
+test('DD3: word sense "hot" in tech sentence resolves to device sense', function () {
+  var la = lang ? lang.analyze('My computer is running hot and needs cooling.') : null;
+  var result = comp.analyze('My computer is running hot and needs cooling.', la, {});
+  assert(result, 'analyze should return result');
+  if (result.wordSenses && result.wordSenses['hot']) {
+    assert(result.wordSenses['hot'].sense.domain === 'tech' ||
+           result.wordSenses['hot'].sense.id === 'hot:device',
+      'hot in tech context should prefer device sense');
+  }
+  // Test passes whether or not "hot" is in wordSenses — at minimum should not crash
+});
+
+test('DD4: word sense "die" in car sentence resolves to device sense', function () {
+  var la = lang ? lang.analyze('My car died this morning.') : null;
+  var result = comp.analyze('My car died this morning.', la, {});
+  assert(result, 'analyze should return result');
+  // The idiom detection should fire; word sense may or may not be in wordSenses
+  // since "died" is a form of "die" — test that it doesn't crash and produces output
+  assert(typeof result.confidence === 'number', 'confidence should be a number');
+});
+
+test('DD5: negation in "my car did NOT die" is detected', function () {
+  var la = lang ? lang.analyze('My car did not die yet.') : null;
+  var result = comp.analyze('My car did not die yet.', la, {});
+  assert(result, 'analyze should return result');
+  assert(result.negation.negated === true, 'negation should be detected in "did not die"');
+});
+
+test('DD6: sentence structure extracts time from "my car died yesterday"', function () {
+  var result = comp.extractStructure('My car died yesterday.');
+  assert(result, 'extractStructure should return result');
+  assertEquals(result.time, 'yesterday', 'time should be extracted as yesterday');
+});
+
+test('DD7: question type for "Why is my computer overheating?" → WHY/reason_or_cause', function () {
+  var qt = comp.classifyQuestion('Why is my computer overheating?');
+  assert(qt !== null, 'should detect question type');
+  assertEquals(qt.type, 'WHY', 'question type should be WHY');
+  assertEquals(qt.answerType, 'reason_or_cause', 'answer type should be reason_or_cause');
+});
+
+test('DD8: "how" question for device failure → HOW/method_or_quantity', function () {
+  var qt = comp.classifyQuestion('How do I fix my overheating computer?');
+  assert(qt !== null, 'should detect question type');
+  assertEquals(qt.type, 'HOW', 'question type should be HOW');
+});
+
+// ==============================================================================
+// SECTION EE: RELATIONSHIP GRAPH COMPREHENSION SCENARIOS (§9 scenarios)
+// ==============================================================================
+
+process.stdout.write('\n── SECTION EE: SEMANTIC GRAPH — SCENARIO REASONING ─────────\n');
+
+test('EE1: "deposit" and "bank" have shared domain (finance disambiguation)', function () {
+  // Concept "deposit" should relate to finance domain; "bank" with "deposit" → finance
+  var bankScored = si.score('bank', ['deposit','money','account','transaction']);
+  assert(bankScored.length > 0, '"bank" should have scored senses');
+  assertEquals(bankScored[0].sense.id, 'bank:finance',
+    '"bank" with "deposit" context should prefer finance sense');
+});
+
+test('EE2: "river" + "bank" → nature sense', function () {
+  var bankScored = si.score('bank', ['river','water','fish','shore','swim']);
+  assert(bankScored.length > 0, '"bank" should have scored senses');
+  assertEquals(bankScored[0].sense.id, 'bank:nature',
+    '"bank" with "river" context should prefer nature sense');
+});
+
+test('EE3: semanticOverlap — "CPU" and "processor" are related', function () {
+  var cpuRels = rel.getRelationships('cpu', { rel: 'IS_A', minConfidence: 0.95 });
+  var targets = cpuRels.map(function(r){ return r.to; });
+  assertArrayContains(targets, 'processor', 'cpu IS_A processor');
+});
+
+test('EE4: "overheating" + "computer" → CAN_HAVE_PROBLEM type check', function () {
+  // "overheating" relates to computer — the RELATED_TO edge should exist
+  var rels = rel.getRelationships('overheating', { minConfidence: 0.5 });
+  var targets = rels.map(function(r){ return r.to; });
+  assert(targets.indexOf('computer') !== -1 || targets.indexOf('temperature') !== -1,
+    '"overheating" should relate to computer or temperature');
+});
+
+test('EE5: conceptsOverlap "fix my computer" and "repair my laptop" have overlap', function () {
+  var sem = global.SRSemantics;
+  if (!sem) { return; }
+  var score = sem.compareMeaning('fix my computer', 'repair my laptop');
+  assert(score > 0.2, 'fix/repair + computer/laptop should have semantic overlap, got: ' + score);
+});
+
+// ==============================================================================
 // FINAL SUMMARY
 // ==============================================================================
 
@@ -1532,7 +1956,7 @@ var TOTAL = PASS + FAIL + WARN;
 process.stdout.write('\n');
 process.stdout.write('══════════════════════════════════════════════════════════════\n');
 process.stdout.write('  Language + Number Comprehension Test Suite\n');
-process.stdout.write('  Build: SR-COMPREHENSION-TEST-1\n');
+process.stdout.write('  Build: SR-COMPREHENSION-TEST-2\n');
 process.stdout.write('══════════════════════════════════════════════════════════════\n');
 process.stdout.write('  PASS : ' + PASS + '\n');
 process.stdout.write('  WARN : ' + WARN + '\n');

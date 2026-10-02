@@ -4,42 +4,75 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SR V2 — Stage 3B Live Diagnostic Probe</title>
+  <!--
+    COOP/COEP headers are required by SharedArrayBuffer (WebLLM threading).
+    Python http.server does NOT send them. If you see "SharedArrayBuffer is
+    not defined" in the log, run:
+      npx serve . --cors
+    or use a server that sends COOP/COEP headers.
+    The probe page itself will still render and show diagnostics regardless.
+  -->
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: monospace; background: #0d0d0f; color: #e0e0e0; padding: 16px; font-size: 13px; }
-    h1 { color: #9977ee; margin-bottom: 12px; font-size: 15px; }
+    h1 { color: #9977ee; margin-bottom: 6px; font-size: 15px; }
+    .subtitle { color: #666; font-size: 11px; margin-bottom: 14px; }
     h2 { color: #ffcc44; margin: 16px 0 6px; font-size: 13px; border-bottom: 1px solid #222; padding-bottom: 4px; }
     .row { display: flex; gap: 8px; margin: 3px 0; }
-    .label { color: #888; min-width: 280px; }
-    .val { color: #e0e0e0; }
-    .val.ok  { color: #4caf7d; }
-    .val.err { color: #e05050; }
+    .label { color: #888; min-width: 300px; flex-shrink: 0; }
+    .val { color: #e0e0e0; word-break: break-all; }
+    .val.ok   { color: #4caf7d; }
+    .val.err  { color: #e05050; }
     .val.warn { color: #ffcc44; }
     .val.dim  { color: #555; }
-    pre { background: #111; border: 1px solid #222; padding: 10px; margin: 8px 0; overflow-x: auto; font-size: 11px; max-height: 200px; overflow-y: auto; }
-    button { background: #1a1a2a; border: 1px solid #4438aa; color: #c8c0ff; padding: 8px 18px; cursor: pointer; font-family: monospace; font-size: 13px; margin: 4px; }
+    pre { background: #111; border: 1px solid #222; padding: 10px; margin: 8px 0;
+          overflow-x: auto; font-size: 11px; max-height: 200px; overflow-y: auto; white-space: pre-wrap; }
+    button { background: #1a1a2a; border: 1px solid #4438aa; color: #c8c0ff;
+             padding: 8px 18px; cursor: pointer; font-family: monospace; font-size: 13px; margin: 4px; }
     button:hover { background: #22223a; }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
-    #log { background: #080810; border: 1px solid #222; padding: 8px; margin-top: 12px; height: 240px; overflow-y: auto; font-size: 11px; }
-    .log-line { margin: 1px 0; }
+    #log { background: #080810; border: 1px solid #333; padding: 8px; margin-top: 8px;
+           height: 280px; overflow-y: auto; font-size: 11px; }
+    .log-line { margin: 1px 0; white-space: pre-wrap; word-break: break-all; }
     .log-ok   { color: #4caf7d; }
     .log-err  { color: #e05050; }
     .log-warn { color: #ffcc44; }
     .log-info { color: #c8c0ff; }
-    .section { margin-bottom: 20px; }
+    .section  { margin-bottom: 20px; }
     #registryList { max-height: 180px; overflow-y: auto; }
+    #initErr { background: #1a0000; border: 1px solid #e05050; color: #e05050;
+               padding: 8px 12px; margin: 8px 0; display: none; font-size: 12px; }
   </style>
 </head>
 <body>
   <h1>Shadow Reaper V2 — Stage 3B Live Diagnostic Probe</h1>
+  <div class="subtitle">
+    Server: <span id="rServerBase">—</span> &nbsp;|&nbsp;
+    Secure context: <span id="rIsSecure">—</span> &nbsp;|&nbsp;
+    COOP/COEP headers: <span id="rCOOP">—</span>
+  </div>
+
+  <!-- Top-level initialization error banner — shown if module script crashes before log is ready -->
+  <div id="initErr"></div>
 
   <div class="section">
     <h2>BROWSER ENVIRONMENT</h2>
     <div class="row"><span class="label">Browser</span><span class="val" id="rBrowser">—</span></div>
-    <div class="row"><span class="label">Secure Context</span><span class="val" id="rSecure">—</span></div>
-    <div class="row"><span class="label">navigator.gpu Available</span><span class="val" id="rGpuApi">—</span></div>
-    <div class="row"><span class="label">WebGPU Adapter Available</span><span class="val" id="rAdapter">—</span></div>
-    <div class="row"><span class="label">GPU Device Obtained</span><span class="val" id="rDevice">—</span></div>
+    <div class="row"><span class="label">Secure Context (window.isSecureContext)</span><span class="val" id="rSecure">—</span></div>
+    <div class="row"><span class="label">navigator.gpu Available (WebGPU API)</span><span class="val" id="rGpuApi">—</span></div>
+    <div class="row"><span class="label">WEBGPU_ADAPTER (requestAdapter())</span><span class="val" id="rAdapter">—</span></div>
+    <div class="row"><span class="label">WEBGPU_DEVICE (requestDevice())</span><span class="val" id="rDevice">—</span></div>
+    <div class="row"><span class="label">SharedArrayBuffer available</span><span class="val" id="rSAB">—</span></div>
+    <div class="row"><span class="label">crossOriginIsolated</span><span class="val" id="rCOI">—</span></div>
+  </div>
+
+  <div class="section">
+    <h2>ENGINE API &amp; MODEL IDENTITY</h2>
+    <div class="row"><span class="label">ENGINE_API (CreateMLCEngine vs reload)</span><span class="val" id="rEngineAPI">—</span></div>
+    <div class="row"><span class="label">MODEL_ID (requested)</span><span class="val" id="rModelReq">SmolLM2-360M-Instruct-q4f16_1-MLC</span></div>
+    <div class="row"><span class="label">MODEL_RUNTIME</span><span class="val" id="rModelRuntime">WebLLM / @mlc-ai/web-llm via esm.run CDN</span></div>
+    <div class="row"><span class="label">WASM_STATUS</span><span class="val" id="rWASM">Managed internally by WebLLM</span></div>
+    <div class="row"><span class="label">WORKER_STATUS</span><span class="val" id="rWorkerStatus">Managed internally by WebLLM</span></div>
   </div>
 
   <div class="section">
@@ -47,8 +80,8 @@
     <div class="row"><span class="label">CDN URL</span><span class="val" id="rCDN">https://esm.run/@mlc-ai/web-llm</span></div>
     <div class="row"><span class="label">Import Status</span><span class="val" id="rImport">—</span></div>
     <div class="row"><span class="label">WebLLM Version</span><span class="val" id="rVersion">—</span></div>
-    <div class="row"><span class="label">MLCEngine exists</span><span class="val" id="rMLCEngine">—</span></div>
-    <div class="row"><span class="label">CreateMLCEngine exists</span><span class="val" id="rCreateMLCEngine">—</span></div>
+    <div class="row"><span class="label">MLCEngine class exists</span><span class="val" id="rMLCEngine">—</span></div>
+    <div class="row"><span class="label">CreateMLCEngine function exists</span><span class="val" id="rCreateMLCEngine">—</span></div>
     <div class="row"><span class="label">prebuiltAppConfig accessible</span><span class="val" id="rRegistry">—</span></div>
     <div class="row"><span class="label">Registry model count</span><span class="val" id="rRegistryCount">—</span></div>
     <div class="row"><span class="label">SmolLM2-360M in registry</span><span class="val" id="rSmolInReg">—</span></div>
@@ -58,15 +91,14 @@
 
   <div class="section">
     <h2>MODEL LOAD SEQUENCE</h2>
-    <div class="row"><span class="label">Model ID Requested</span><span class="val" id="rModelReq">—</span></div>
-    <div class="row"><span class="label">Engine Created</span><span class="val" id="rEngineCreated">—</span></div>
-    <div class="row"><span class="label">Reload Started</span><span class="val" id="rReloadStart">—</span></div>
-    <div class="row"><span class="label">Download Started</span><span class="val" id="rDlStart">—</span></div>
-    <div class="row"><span class="label">Last Download Progress</span><span class="val" id="rDlProg">—</span></div>
-    <div class="row"><span class="label">Download Completed</span><span class="val" id="rDlDone">—</span></div>
-    <div class="row"><span class="label">Reload Returned</span><span class="val" id="rReloadRet">—</span></div>
-    <div class="row"><span class="label">Pipeline / Loaded Model State</span><span class="val" id="rPipeline">—</span></div>
     <div class="row"><span class="label">Model ID Actually Loaded</span><span class="val" id="rModelLoaded">—</span></div>
+    <div class="row"><span class="label">Engine Created</span><span class="val" id="rEngineCreated">—</span></div>
+    <div class="row"><span class="label">MODEL_LOAD_STARTED (reload/CreateMLCEngine called)</span><span class="val" id="rReloadStart">—</span></div>
+    <div class="row"><span class="label">MODEL_DOWNLOAD_STARTED</span><span class="val" id="rDlStart">—</span></div>
+    <div class="row"><span class="label">MODEL_DOWNLOAD_PROGRESS (last)</span><span class="val" id="rDlProg">—</span></div>
+    <div class="row"><span class="label">MODEL_DOWNLOAD_COMPLETED</span><span class="val" id="rDlDone">—</span></div>
+    <div class="row"><span class="label">Reload Returned / Engine Resolved</span><span class="val" id="rReloadRet">—</span></div>
+    <div class="row"><span class="label">MODEL_PIPELINE_COUNT / Pipeline State</span><span class="val" id="rPipeline">—</span></div>
     <div class="row"><span class="label">Model Cache Status</span><span class="val" id="rCache">—</span></div>
   </div>
 
@@ -79,13 +111,13 @@
   </div>
 
   <div class="section">
-    <h2>MODEL STATE &amp; ERRORS</h2>
-    <div class="row"><span class="label">Final Model State</span><span class="val" id="rModelState">—</span></div>
+    <h2>FINAL MODEL STATE &amp; ERRORS</h2>
+    <div class="row"><span class="label">FINAL_MODEL_STATE</span><span class="val" id="rModelState">—</span></div>
     <div class="row"><span class="label">First Failed Operation</span><span class="val" id="rFailOp">—</span></div>
     <div class="row"><span class="label">Error Code</span><span class="val" id="rErrCode">—</span></div>
-    <div class="row"><span class="label">Error Name</span><span class="val" id="rErrName">—</span></div>
-    <div class="row"><span class="label">Error Message</span><span class="val" id="rErrMsg">—</span></div>
-    <div class="row"><span class="label">Error Stack (first line)</span><span class="val" id="rErrStack">—</span></div>
+    <div class="row"><span class="label">ORIGINAL_ERROR_NAME</span><span class="val" id="rErrName">—</span></div>
+    <div class="row"><span class="label">ORIGINAL_ERROR_MESSAGE</span><span class="val" id="rErrMsg">—</span></div>
+    <div class="row"><span class="label">ORIGINAL_ERROR_STACK (first 2 lines)</span><span class="val" id="rErrStack">—</span></div>
     <div class="row"><span class="label">AbortError Detected</span><span class="val" id="rAbort">—</span></div>
     <div class="row"><span class="label">ModelNotLoadedError</span><span class="val" id="rMNLE">—</span></div>
   </div>
@@ -101,567 +133,1101 @@
     <div class="row"><span class="label">"My project is called Blue Wolf." — source</span><span class="val" id="rInf4src">—</span></div>
     <div class="row"><span class="label">"What project did I just tell you about?" — source</span><span class="val" id="rInf5src">—</span></div>
     <div class="row"><span class="label">"What project did I just tell you about?" — response</span><span class="val" id="rInf5resp">—</span></div>
-    <div class="row"><span class="label">Workers AI calls</span><span class="val ok" id="rWorkers">0</span></div>
+    <div class="row"><span class="label">Workers AI / hosted AI calls</span><span class="val ok" id="rWorkers">0 — local only</span></div>
   </div>
 
-  <div style="margin: 10px 0;">
-    <button id="btnProbe">▶ Run Full Probe (Import + GPU + Registry)</button>
-    <button id="btnLoad" disabled>▶ Load Model</button>
+  <!-- ── Hybrid Inference Runtime Diagnostics ── -->
+  <div class="section">
+    <h2>HYBRID INFERENCE RUNTIME</h2>
+    <div class="row"><span class="label">SELECTED_RUNTIME</span><span class="val" id="hrSelectedRuntime">—</span></div>
+    <div class="row"><span class="label">FINAL_AI_STATE</span><span class="val" id="hrFinalAIState">—</span></div>
+    <div class="row"><span class="label">RUNTIME_STATE</span><span class="val" id="hrRuntimeState">—</span></div>
+  </div>
+
+  <div class="section">
+    <h2>WEBGPU CAPABILITY (detailed)</h2>
+    <div class="row"><span class="label">WEBGPU_API_AVAILABLE (navigator.gpu)</span><span class="val" id="hrWgpuApi">—</span></div>
+    <div class="row"><span class="label">WEBGPU_ADAPTER_AVAILABLE (requestAdapter)</span><span class="val" id="hrWgpuAdapter">—</span></div>
+    <div class="row"><span class="label">WEBGPU_DEVICE_AVAILABLE (requestDevice)</span><span class="val" id="hrWgpuDevice">—</span></div>
+    <div class="row"><span class="label">WEBGPU_MODEL_LOADED</span><span class="val" id="hrWgpuModel">—</span></div>
+    <div class="row"><span class="label">WEBGPU_INFERENCE_VERIFIED</span><span class="val" id="hrWgpuVerified">—</span></div>
+    <div class="row"><span class="label">WEBGPU_READY</span><span class="val" id="hrWgpuReady">—</span></div>
+    <div class="row"><span class="label">WEBGPU_FAIL_REASON</span><span class="val" id="hrWgpuFailReason">—</span></div>
+  </div>
+
+  <div class="section">
+    <h2>CPU LOCAL INFERENCE (Transformers.js)</h2>
+    <div class="row"><span class="label">CPU_RUNTIME_AVAILABLE (import OK)</span><span class="val" id="hrCpuRuntime">—</span></div>
+    <div class="row"><span class="label">CPU_TRANSFORMERS_VERSION</span><span class="val" id="hrCpuTxVer">—</span></div>
+    <div class="row"><span class="label">CPU_REQUESTED_MODEL (configured primary)</span><span class="val" id="hrCpuRequestedModel">—</span></div>
+    <div class="row"><span class="label">CPU_MODEL_ID (actually attempted)</span><span class="val" id="hrCpuModelId">—</span></div>
+    <div class="row"><span class="label">CPU_MODEL_LOADED</span><span class="val" id="hrCpuModel">—</span></div>
+    <div class="row"><span class="label">CPU_INFERENCE_VERIFIED</span><span class="val" id="hrCpuVerified">—</span></div>
+    <div class="row"><span class="label">CPU_READY</span><span class="val" id="hrCpuReady">—</span></div>
+    <div class="row"><span class="label">CPU_FAIL_REASON</span><span class="val" id="hrCpuFailReason">—</span></div>
+  </div>
+
+  <div class="section">
+    <h2>CPU RUNTIME ENVIRONMENT</h2>
+    <div class="row"><span class="label">crossOriginIsolated</span><span class="val" id="hrCpuCOI">—</span></div>
+    <div class="row"><span class="label">SharedArrayBuffer available</span><span class="val" id="hrCpuSAB">—</span></div>
+    <div class="row"><span class="label">WASM threads enabled (COI + SAB)</span><span class="val" id="hrCpuWasmThreads">—</span></div>
+    <div class="row"><span class="label">WASM SIMD available</span><span class="val" id="hrCpuWasmSimd">—</span></div>
+    <div class="row"><span class="label">Browser architecture</span><span class="val" id="hrCpuBrowserArch">—</span></div>
+    <div class="row"><span class="label">performance.memory.usedJSHeapSize</span><span class="val" id="hrCpuHeapUsed">—</span></div>
+    <div class="row"><span class="label">performance.memory.jsHeapSizeLimit</span><span class="val" id="hrCpuHeapLimit">—</span></div>
+  </div>
+
+  <div class="section">
+    <h2>CPU PRIMARY MODEL LOAD (SmolLM2)</h2>
+    <div class="row"><span class="label">CPU_PRIMARY_MODEL_LOAD_STARTED</span><span class="val" id="hrCpuPrimaryStarted">—</span></div>
+    <div class="row"><span class="label">CPU_PRIMARY_MODEL_LOAD_ERROR_NAME</span><span class="val" id="hrCpuPrimaryErrName">—</span></div>
+    <div class="row"><span class="label">CPU_PRIMARY_MODEL_LOAD_ERROR_MESSAGE</span><span class="val" id="hrCpuPrimaryErrMsg">—</span></div>
+    <div class="row"><span class="label">CPU_PRIMARY_MODEL_LOAD_ERROR_STACK</span></div>
+    <pre id="hrCpuPrimaryErrStack" style="max-height:180px;overflow-y:auto;font-size:11px;">—</pre>
+  </div>
+
+  <div class="section">
+    <h2>CPU VERIFICATION STAGE PIPELINE</h2>
+    <div class="row"><span class="label">CPU_STAGE_TOKENIZER_READY</span><span class="val" id="hrCpuStageTokReady">—</span></div>
+    <div class="row"><span class="label">CPU_STAGE_MODEL_READY</span><span class="val" id="hrCpuStageModelReady">—</span></div>
+    <div class="row"><span class="label">CPU_STAGE_TOKENIZATION_STARTED</span><span class="val" id="hrCpuStageTokStart">—</span></div>
+    <div class="row"><span class="label">CPU_STAGE_TOKENIZATION_COMPLETED</span><span class="val" id="hrCpuStageTokDone">—</span></div>
+    <div class="row"><span class="label">CPU_STAGE_CHAT_TEMPLATE_STARTED</span><span class="val" id="hrCpuStageChatStart">—</span></div>
+    <div class="row"><span class="label">CPU_STAGE_CHAT_TEMPLATE_COMPLETED</span><span class="val" id="hrCpuStageChatDone">—</span></div>
+    <div class="row"><span class="label">CPU_STAGE_GENERATION_STARTED</span><span class="val" id="hrCpuStageGenStart">—</span></div>
+    <div class="row"><span class="label">CPU_STAGE_GENERATION_COMPLETED</span><span class="val" id="hrCpuStageGenDone">—</span></div>
+    <div class="row"><span class="label">CPU_STAGE_DECODE_STARTED</span><span class="val" id="hrCpuStageDecStart">—</span></div>
+    <div class="row"><span class="label">CPU_STAGE_DECODE_COMPLETED</span><span class="val" id="hrCpuStageDecDone">—</span></div>
+  </div>
+
+  <div class="section">
+    <h2>CPU TOKENIZER TEST (independent)</h2>
+    <div class="row"><span class="label">CPU_TOK_TEST_IDS (token IDs for "Hello")</span><span class="val" id="hrCpuTokIds">—</span></div>
+    <div class="row"><span class="label">CPU_TOK_TEST_LEN</span><span class="val" id="hrCpuTokLen">—</span></div>
+    <div class="row"><span class="label">CPU_TOK_TEST_DECODED</span><span class="val" id="hrCpuTokDecoded">—</span></div>
+    <div class="row"><span class="label">CPU_TOK_TEST_ERROR</span><span class="val" id="hrCpuTokErr">—</span></div>
+  </div>
+
+  <div class="section">
+    <h2>CPU SINGLE-THREAD CONTROL TEST</h2>
+    <div class="row"><span class="label">CPU_SINGLE_THREAD_ATTEMPTED</span><span class="val" id="hrCpuSingleAttempted">—</span></div>
+    <div class="row"><span class="label">CPU_SINGLE_THREAD_NUM_THREADS_SET</span><span class="val" id="hrCpuSingleNumThreads">—</span></div>
+    <div class="row"><span class="label">CPU_SINGLE_THREAD_RESULT (alt model verified)</span><span class="val" id="hrCpuSingleVerified">—</span></div>
+    <div class="row"><span class="label">CPU_SINGLE_THREAD_REASON</span><span class="val" id="hrCpuSingleReason">—</span></div>
+  </div>
+
+  <div class="section">
+    <h2>CPU PLAIN TEXT vs CHAT TEMPLATE</h2>
+    <div class="row"><span class="label">CPU_PLAIN_TEXT_PASS (pipe("Hello",..)) no chat template</span><span class="val" id="hrCpuPlainPass">—</span></div>
+    <div class="row"><span class="label">CPU_PLAIN_TEXT_OUTPUT</span><span class="val" id="hrCpuPlainText">—</span></div>
+    <div class="row"><span class="label">CPU_PLAIN_TEXT_ERROR</span><span class="val" id="hrCpuPlainErr">—</span></div>
+    <div class="row"><span class="label">CPU_PLAIN_VS_CHAT_DIFF</span><span class="val" id="hrCpuPlainVsChat">—</span></div>
+  </div>
+
+  <div class="section">
+    <h2>CPU VERIFICATION DEEP DIAGNOSTICS (chat path)</h2>
+    <div class="row"><span class="label">CPU_VERIFY_PROMPT</span><span class="val" id="hrCpuVerifyPrompt">—</span></div>
+    <div class="row"><span class="label">CPU_RAW_RESULT_TYPE</span><span class="val" id="hrCpuRawType">—</span></div>
+    <div class="row"><span class="label">CPU_RAW_RESULT_JSON (first 400 chars)</span><span class="val" id="hrCpuRawJson">—</span></div>
+    <div class="row"><span class="label">CPU_EXTRACTED_TEXT</span><span class="val" id="hrCpuExtracted">—</span></div>
+    <div class="row"><span class="label">CPU_EXTRACTED_TEXT_LENGTH</span><span class="val" id="hrCpuExtractedLen">—</span></div>
+    <div class="row"><span class="label">CPU_GENERATION_ERROR_NAME</span><span class="val" id="hrCpuErrName">—</span></div>
+    <div class="row"><span class="label">CPU_GENERATION_ERROR_MESSAGE</span><span class="val" id="hrCpuErrMsg">—</span></div>
+    <div class="row"><span class="label">CPU_GENERATION_ERROR_STACK (full)</span></div>
+    <pre id="hrCpuErrStack" style="max-height:260px;overflow-y:auto;font-size:11px;color:#e05050;">—</pre>
+  </div>
+
+  <div class="section">
+    <h2>SHADOW API INFERENCE</h2>
+    <div class="row"><span class="label">SHADOW_API_CONFIGURED (worker URL set)</span><span class="val" id="hrApiConfigured">—</span></div>
+    <div class="row"><span class="label">SHADOW_API_REACHABLE (health check)</span><span class="val" id="hrApiReachable">—</span></div>
+    <div class="row"><span class="label">SHADOW_API_INFERENCE_DEPLOYED</span><span class="val" id="hrApiDeployed">—</span></div>
+    <div class="row"><span class="label">SHADOW_API_INFERENCE_VERIFIED</span><span class="val" id="hrApiVerified">—</span></div>
+    <div class="row"><span class="label">SHADOW_API_READY</span><span class="val" id="hrApiReady">—</span></div>
+    <div class="row"><span class="label">SHADOW_API_FAIL_REASON</span><span class="val" id="hrApiFailReason">—</span></div>
+  </div>
+
+  <div style="margin: 12px 0;">
+    <button id="btnProbe">▶ Run Full Probe (GPU + Import + Registry)</button>
+    <button id="btnHybrid">▶ Probe Hybrid Runtime</button>
+    <button id="btnLoad" disabled>▶ Load WebLLM Model</button>
     <button id="btnInference" disabled>▶ Run Inference Tests</button>
     <button id="btnCopy">📋 Copy Results JSON</button>
   </div>
 
   <h2>LOG</h2>
-  <div id="log"></div>
+  <div id="log"><div class="log-line log-info">  Probe initialized. Click "Run Full Probe" to start.</div></div>
 
+  <!-- ── Global error traps — run BEFORE the module so all crashes are visible ── -->
+  <script>
+    // Catch any synchronous error at window level — including module parse errors.
+    // This writes directly to the DOM before the module's own log is ready.
+    window.onerror = function (msg, src, line, col, err) {
+      var banner = document.getElementById('initErr');
+      if (banner) {
+        banner.style.display = 'block';
+        banner.textContent = '✗ UNCAUGHT ERROR: ' + msg +
+          (src ? ' [' + src.split('/').pop() + ':' + line + ']' : '') +
+          (err && err.stack ? '\n' + err.stack.split('\n').slice(0,3).join('\n') : '');
+      }
+      // Also try to append to log if it exists
+      var log = document.getElementById('log');
+      if (log) {
+        var d = document.createElement('div');
+        d.className = 'log-line log-err';
+        d.textContent = '✗ WINDOW ERROR: ' + msg;
+        log.appendChild(d);
+      }
+      return false; // don't suppress
+    };
+
+    window.onunhandledrejection = function (event) {
+      var reason = event.reason;
+      var msg = reason instanceof Error
+        ? (reason.name + ': ' + reason.message)
+        : String(reason);
+      var stack = reason instanceof Error && reason.stack
+        ? reason.stack.split('\n').slice(0,3).join('\n') : '';
+
+      var banner = document.getElementById('initErr');
+      if (banner) {
+        banner.style.display = 'block';
+        banner.textContent = '✗ UNHANDLED REJECTION: ' + msg + (stack ? '\n' + stack : '');
+      }
+      var log = document.getElementById('log');
+      if (log) {
+        var d = document.createElement('div');
+        d.className = 'log-line log-err';
+        d.textContent = '✗ UNHANDLED REJECTION: ' + msg;
+        log.appendChild(d);
+      }
+    };
+
+    // ── Show immediate env info (pre-module, always runs) ────────────────────
+    (function () {
+      var h = location.hostname;
+      var isLocal = (h === 'localhost' || h === '127.0.0.1' || /^192\.168\./.test(h) ||
+                     /^10\./.test(h) || location.protocol === 'file:');
+      var base = document.getElementById('rServerBase');
+      if (base) base.textContent = location.origin + (isLocal ? ' (local dev)' : ' (GitHub Pages)');
+      var sec = document.getElementById('rIsSecure');
+      if (sec) {
+        sec.textContent = window.isSecureContext ? 'YES' : 'NO — WebGPU may be unavailable';
+        sec.className = 'val ' + (window.isSecureContext ? 'ok' : 'warn');
+      }
+      // Check COOP/COEP (crossOriginIsolated required for SharedArrayBuffer)
+      var coop = document.getElementById('rCOOP');
+      if (coop) {
+        coop.textContent = window.crossOriginIsolated
+          ? 'YES (crossOriginIsolated=true)'
+          : 'NO — SharedArrayBuffer may be unavailable. Run with COOP/COEP headers.';
+        coop.className = 'val ' + (window.crossOriginIsolated ? 'ok' : 'warn');
+      }
+      var coi = document.getElementById('rCOI');
+      if (coi) {
+        coi.textContent = String(window.crossOriginIsolated);
+        coi.className = 'val ' + (window.crossOriginIsolated ? 'ok' : 'warn');
+      }
+      var sab = document.getElementById('rSAB');
+      if (sab) {
+        var hasSAB = (typeof SharedArrayBuffer !== 'undefined');
+        sab.textContent = hasSAB ? 'YES' : 'NO (COOP/COEP headers missing — WebLLM threading may fail)';
+        sab.className = 'val ' + (hasSAB ? 'ok' : 'warn');
+      }
+    })();
+  </script>
+
+  <!-- ── Main probe module ─────────────────────────────────────────────────── -->
   <script type="module">
-    // ── Logging ─────────────────────────────────────────────────────────────────
-    const logEl = document.getElementById('log');
-    function log(msg, cls) {
-      const d = document.createElement('div');
-      d.className = 'log-line ' + (cls || 'log-info');
-      d.textContent = '[' + new Date().toISOString().substring(11,23) + '] ' + msg;
-      logEl.appendChild(d);
-      logEl.scrollTop = logEl.scrollHeight;
-    }
-    function logOk(m)   { log('✓ ' + m, 'log-ok');   }
-    function logErr(m)  { log('✗ ' + m, 'log-err');  }
-    function logWarn(m) { log('⚠ ' + m, 'log-warn'); }
-    function logInfo(m) { log('  ' + m, 'log-info'); }
+    // ── Top-level try/catch for the entire module body ────────────────────────
+    // type="module" scripts fail silently on uncaught errors unless we wrap.
+    // All async operations use try/catch internally; this outer catch handles
+    // synchronous init errors (getElementById typos, etc.)
+    try {
+      // ── Logging ─────────────────────────────────────────────────────────────
+      const logEl = document.getElementById('log');
+      function log(msg, cls) {
+        const d = document.createElement('div');
+        d.className = 'log-line ' + (cls || 'log-info');
+        d.textContent = '[' + new Date().toISOString().substring(11,23) + '] ' + msg;
+        logEl.appendChild(d);
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+      function logOk(m)   { log('✓ ' + m, 'log-ok');   }
+      function logErr(m)  { log('✗ ' + m, 'log-err');  }
+      function logWarn(m) { log('⚠ ' + m, 'log-warn'); }
+      function logInfo(m) { log('  ' + m, 'log-info'); }
 
-    function set(id, val, cls) {
-      const el = document.getElementById(id);
-      if (!el) return;
-      el.textContent = (val === null || val === undefined) ? '—' : String(val);
-      if (cls) el.className = 'val ' + cls;
-    }
+      function set(id, val, cls) {
+        const el = document.getElementById(id);
+        if (!el) { logWarn('set(): element not found: ' + id); return; }
+        el.textContent = (val === null || val === undefined) ? '—' : String(val);
+        if (cls) el.className = 'val ' + cls;
+      }
 
-    // ── State ───────────────────────────────────────────────────────────────────
-    const WEBLLM_CDN = 'https://esm.run/@mlc-ai/web-llm';
-    let _mod    = null;
-    let _engine = null;
-    let _results = {};
+      // ── State ───────────────────────────────────────────────────────────────
+      const WEBLLM_CDN = 'https://esm.run/@mlc-ai/web-llm';
+      const TARGET_MODEL = 'SmolLM2-360M-Instruct-q4f16_1-MLC';
+      let _mod     = null;
+      let _engine  = null;
+      let _results = {};
 
-    // ── Step 1: Browser / GPU probe ─────────────────────────────────────────────
-    async function probeBrowser() {
-      log('=== BROWSER / GPU PROBE ===', 'log-warn');
+      logInfo('Module initialized. Env: ' + location.origin +
+              ' | secureContext=' + window.isSecureContext +
+              ' | crossOriginIsolated=' + window.crossOriginIsolated);
 
-      set('rBrowser', navigator.userAgent.substring(0, 80));
-      _results.browser = navigator.userAgent.substring(0, 80);
+      // ── Step 1: Browser / GPU probe ─────────────────────────────────────────
+      async function probeBrowser() {
+        log('=== BROWSER / GPU PROBE ===', 'log-warn');
 
-      const secure = window.isSecureContext;
-      set('rSecure', secure, secure ? 'ok' : 'err');
-      _results.secureContext = secure;
-      secure ? logOk('Secure context') : logWarn('NOT secure context — WebGPU may be unavailable');
+        const ua = navigator.userAgent.substring(0, 100);
+        set('rBrowser', ua);
+        _results.browser = ua;
 
-      const gpuApi = !!(navigator.gpu);
-      set('rGpuApi', gpuApi, gpuApi ? 'ok' : 'err');
-      _results.webgpuAvailable = gpuApi;
-      gpuApi ? logOk('navigator.gpu present') : logErr('navigator.gpu MISSING — WebGPU not available');
+        const secure = window.isSecureContext;
+        set('rSecure', secure, secure ? 'ok' : 'warn');
+        _results.secureContext = secure;
+        secure ? logOk('Secure context') : logWarn('NOT secure context — WebGPU unavailable');
 
-      if (gpuApi) {
-        try {
-          const adapter = await navigator.gpu.requestAdapter();
-          const hasAdapter = !!adapter;
-          set('rAdapter', hasAdapter, hasAdapter ? 'ok' : 'err');
-          _results.gpuAdapterAvailable = hasAdapter;
-          hasAdapter ? logOk('GPU adapter obtained: ' + (adapter.name || 'unnamed')) : logErr('GPU adapter NULL — no compatible GPU');
+        const gpuApi = !!(navigator.gpu);
+        set('rGpuApi', gpuApi ? 'YES' : 'NO', gpuApi ? 'ok' : 'err');
+        _results.webgpuAvailable = gpuApi;
+        gpuApi ? logOk('navigator.gpu present (WebGPU API exists)') : logErr('navigator.gpu MISSING — WebGPU not available. WebLLM cannot run.');
 
-          if (hasAdapter) {
-            try {
-              const device = await adapter.requestDevice();
-              const hasDev = !!device;
-              set('rDevice', hasDev, hasDev ? 'ok' : 'err');
-              _results.gpuDeviceObtained = hasDev;
-              hasDev ? logOk('GPU device obtained') : logErr('GPU device NULL');
-              if (device) device.destroy();
-            } catch (de) {
-              set('rDevice', 'ERROR: ' + de.message, 'err');
-              _results.gpuDeviceObtained = false;
-              logErr('GPU device error: ' + de.message);
+        if (gpuApi) {
+          try {
+            const adapter = await navigator.gpu.requestAdapter();
+            const hasAdapter = !!adapter;
+            set('rAdapter', hasAdapter ? 'YES — ' + (adapter.name || 'unnamed adapter') : 'NO (null adapter)', hasAdapter ? 'ok' : 'err');
+            _results.gpuAdapterAvailable = hasAdapter;
+            if (hasAdapter) {
+              logOk('GPU adapter obtained: ' + (adapter.name || 'unnamed'));
+              // Report adapter info
+              try {
+                const info = await adapter.requestAdapterInfo();
+                logInfo('Adapter info: vendor=' + (info.vendor||'?') + ' device=' + (info.device||'?') + ' arch=' + (info.architecture||'?'));
+                _results.gpuAdapterInfo = { vendor: info.vendor, device: info.device, arch: info.architecture };
+              } catch (_) {}
+
+              try {
+                const device = await adapter.requestDevice();
+                const hasDev = !!device;
+                set('rDevice', hasDev ? 'YES' : 'NO', hasDev ? 'ok' : 'err');
+                _results.gpuDeviceObtained = hasDev;
+                hasDev ? logOk('GPU device obtained — WebGPU functional') : logErr('GPU device NULL');
+                if (device) device.destroy();
+              } catch (de) {
+                set('rDevice', 'ERROR: ' + de.message, 'err');
+                _results.gpuDeviceObtained = false;
+                logErr('GPU device error: ' + de.message);
+              }
+            } else {
+              logErr('GPU adapter NULL — no compatible GPU / driver missing');
+              set('rDevice', 'N/A (no adapter)', 'dim');
             }
+          } catch (ae) {
+            set('rAdapter', 'ERROR: ' + ae.message, 'err');
+            set('rDevice', 'N/A (adapter error)', 'dim');
+            _results.gpuAdapterAvailable = false;
+            logErr('requestAdapter() error: ' + ae.name + ': ' + ae.message);
           }
-        } catch (ae) {
-          set('rAdapter', 'ERROR: ' + ae.message, 'err');
+        } else {
+          set('rAdapter', 'N/A (no navigator.gpu)', 'err');
+          set('rDevice',  'N/A (no navigator.gpu)', 'err');
           _results.gpuAdapterAvailable = false;
-          logErr('requestAdapter() error: ' + ae.message);
-        }
-      } else {
-        set('rAdapter', 'N/A (no navigator.gpu)', 'dim');
-        set('rDevice',  'N/A (no navigator.gpu)', 'dim');
-        _results.gpuAdapterAvailable = false;
-        _results.gpuDeviceObtained   = false;
-      }
-    }
-
-    // ── Step 2: WebLLM import ────────────────────────────────────────────────────
-    async function probeWebLLM() {
-      log('=== WEBLLM IMPORT ===', 'log-warn');
-      logInfo('Importing from: ' + WEBLLM_CDN);
-      try {
-        _mod = await import(WEBLLM_CDN);
-        logOk('WebLLM import OK');
-        set('rImport', 'OK', 'ok');
-        _results.webllmImport = 'OK';
-
-        // Version
-        const ver = _mod.version || _mod.VERSION ||
-                    (_mod.MLCEngine && _mod.MLCEngine.version) ||
-                    (_mod.prebuiltAppConfig && _mod.prebuiltAppConfig.version) ||
-                    'NOT_EXPOSED';
-        set('rVersion', ver);
-        _results.webllmVersion = ver;
-        logInfo('Version: ' + ver);
-
-        // API surface
-        const hasMLCEngine       = !!(typeof _mod.MLCEngine === 'function');
-        const hasCreateMLCEngine = !!(typeof _mod.CreateMLCEngine === 'function');
-        set('rMLCEngine',       hasMLCEngine       ? 'YES (function)' : 'NO', hasMLCEngine       ? 'ok' : 'warn');
-        set('rCreateMLCEngine', hasCreateMLCEngine ? 'YES (function)' : 'NO', hasCreateMLCEngine ? 'ok' : 'warn');
-        _results.mlcEngineClass    = hasMLCEngine;
-        _results.createMLCEngine   = hasCreateMLCEngine;
-        logInfo('MLCEngine class: ' + hasMLCEngine + ' | CreateMLCEngine fn: ' + hasCreateMLCEngine);
-
-        // Exported keys for debugging
-        const keys = Object.keys(_mod);
-        logInfo('Exported keys: ' + keys.join(', '));
-        _results.exportedKeys = keys;
-
-        // Registry
-        await probeRegistry();
-
-      } catch (err) {
-        logErr('WebLLM import FAILED: ' + err.message);
-        set('rImport', 'FAILED: ' + err.message, 'err');
-        _results.webllmImport = 'FAILED';
-        _results.importError  = err.message;
-        _results.firstFailedOperation = 'IMPORT_WEBLLM';
-      }
-    }
-
-    // ── Step 3: Registry probe ───────────────────────────────────────────────────
-    async function probeRegistry() {
-      log('=== REGISTRY PROBE ===', 'log-warn');
-      let registry = null;
-
-      if (_mod.prebuiltAppConfig && Array.isArray(_mod.prebuiltAppConfig.model_list)) {
-        registry = _mod.prebuiltAppConfig.model_list;
-        logOk('prebuiltAppConfig.model_list found, ' + registry.length + ' entries');
-      } else if (Array.isArray(_mod.prebuiltList)) {
-        registry = _mod.prebuiltList;
-        logOk('prebuiltList found, ' + registry.length + ' entries');
-      } else if (Array.isArray(_mod.modelList)) {
-        registry = _mod.modelList;
-        logOk('modelList found, ' + registry.length + ' entries');
-      } else {
-        logWarn('No model registry accessible from module');
-        set('rRegistry', 'NOT ACCESSIBLE', 'warn');
-        _results.registryAccessible = false;
-        _results.registryCount = 0;
-        return;
-      }
-
-      set('rRegistry', 'YES', 'ok');
-      set('rRegistryCount', registry.length);
-      _results.registryAccessible = true;
-      _results.registryCount = registry.length;
-
-      // Extract IDs
-      const ids = registry.map(function(e) {
-        return typeof e === 'string' ? e : (e.model_id || e.id || JSON.stringify(e).substring(0,60));
-      });
-      _results.registryIds = ids;
-
-      // Check for our target model
-      const TARGET = 'SmolLM2-360M-Instruct-q4f16_1-MLC';
-      const LLAMA   = 'Llama-3.2-1B-Instruct-q4f16_1-MLC';
-
-      const smolExact = ids.includes(TARGET);
-      const llamaExact = ids.includes(LLAMA);
-
-      // Also check case-insensitive or partial match for SmolLM2
-      const smolPartial = ids.filter(id => id.toLowerCase().includes('smollm2') || id.toLowerCase().includes('smol'));
-      const llamaPartial = ids.filter(id => id.toLowerCase().includes('llama-3.2-1b'));
-
-      set('rSmolInReg', smolExact ? 'YES — ' + TARGET : ('NO (exact match failed). Partial: ' + (smolPartial.join(', ') || 'none')), smolExact ? 'ok' : 'err');
-      set('rLlamaInReg', llamaExact ? 'YES — ' + LLAMA : ('NO. Partial: ' + (llamaPartial.join(', ') || 'none')), llamaExact ? 'ok' : 'warn');
-
-      _results.smolModelInRegistry   = smolExact;
-      _results.llamaModelInRegistry  = llamaExact;
-      _results.smolPartialMatches    = smolPartial;
-      _results.llamaPartialMatches   = llamaPartial;
-
-      if (smolExact) {
-        logOk('SmolLM2-360M confirmed in registry: ' + TARGET);
-      } else {
-        logErr('SmolLM2-360M NOT FOUND in registry with exact ID: ' + TARGET);
-        logWarn('SmolLM2 partial matches: ' + (smolPartial.join(', ') || 'NONE'));
-      }
-
-      // Show all IDs in registry list
-      const div = document.getElementById('registryList');
-      const pre = document.createElement('pre');
-      pre.textContent = ids.join('\n');
-      div.appendChild(pre);
-      logInfo('All registry IDs listed in UI');
-    }
-
-    // ── Step 4: Load model ────────────────────────────────────────────────────────
-    async function loadModel() {
-      if (!_mod) { logErr('WebLLM not imported yet. Run probe first.'); return; }
-      log('=== MODEL LOAD ===', 'log-warn');
-
-      const TARGET = 'SmolLM2-360M-Instruct-q4f16_1-MLC';
-
-      // Determine which model ID to actually use
-      // If exact ID not in registry, attempt to find a correct SmolLM2 ID
-      let modelToLoad = TARGET;
-      if (_results.registryAccessible && !_results.smolModelInRegistry) {
-        if (_results.smolPartialMatches && _results.smolPartialMatches.length > 0) {
-          // Pick the first partial match — log it clearly
-          modelToLoad = _results.smolPartialMatches[0];
-          logWarn('Exact ID not in registry. Using closest match: ' + modelToLoad);
-          _results.modelIdSubstituted = TARGET + ' → ' + modelToLoad;
-        } else {
-          logErr('No SmolLM2 model found in registry at all. Cannot proceed with SmolLM2.');
-          // Try Llama instead if available
-          if (_results.llamaPartialMatches && _results.llamaPartialMatches.length > 0) {
-            modelToLoad = _results.llamaPartialMatches[0];
-            logWarn('Falling back to Llama partial match: ' + modelToLoad);
-            _results.modelIdSubstituted = TARGET + ' → ' + modelToLoad;
-          } else if (_results.registryIds && _results.registryIds.length > 0) {
-            // Last resort: use first available model
-            modelToLoad = _results.registryIds[0];
-            logWarn('Last resort: using first available registry model: ' + modelToLoad);
-            _results.modelIdSubstituted = TARGET + ' → ' + modelToLoad;
-          }
+          _results.gpuDeviceObtained   = false;
+          logErr('WebGPU unavailable — model cannot load. Check: browser support, secure context, flags.');
         }
       }
 
-      set('rModelReq', modelToLoad);
-      _results.modelIdRequested = modelToLoad;
-      logInfo('Attempting to load: ' + modelToLoad);
+      // ── Step 2: WebLLM import ────────────────────────────────────────────────
+      async function probeWebLLM() {
+        log('=== WEBLLM IMPORT ===', 'log-warn');
+        logInfo('Importing from: ' + WEBLLM_CDN);
+        logInfo('Note: import() may take 5–30s on first load (CDN fetch).');
 
-      // Determine correct engine creation API
-      let engineFactory = null;
-      let engineFactoryName = null;
-
-      if (typeof _mod.CreateMLCEngine === 'function') {
-        engineFactory = _mod.CreateMLCEngine;
-        engineFactoryName = 'CreateMLCEngine';
-      } else if (typeof _mod.MLCEngine === 'function') {
-        engineFactory = null; // Will use new _mod.MLCEngine()
-        engineFactoryName = 'new MLCEngine()';
-      } else {
-        logErr('No engine creation API found in WebLLM module.');
-        _results.firstFailedOperation = 'ENGINE_CREATE';
-        _results.modelState = 'FAILED';
-        set('rModelState', 'FAILED', 'err');
-        return;
-      }
-
-      logInfo('Using engine API: ' + engineFactoryName);
-      _results.engineApi = engineFactoryName;
-
-      let lastProgress = null;
-      let downloadStarted = false;
-      let downloadCompleted = false;
-
-      const progressCb = (report) => {
-        const pct = Math.round((report.progress || 0) * 100);
-        const text = report.text || '';
-        lastProgress = pct + '% — ' + text;
-        set('rDlProg', lastProgress);
-        _results.lastDownloadProgress = lastProgress;
-
-        if (pct > 0 && !downloadStarted) {
-          downloadStarted = true;
-          set('rDlStart', 'YES', 'ok');
-          _results.downloadStarted = true;
-          logOk('Download started: ' + pct + '%');
-        }
-        if (pct >= 100 && text.toLowerCase().includes('finish') || text.toLowerCase().includes('done') || text.toLowerCase().includes('loading') && pct === 100) {
-          if (!downloadCompleted) {
-            downloadCompleted = true;
-            set('rDlDone', 'YES', 'ok');
-            _results.downloadCompleted = true;
-            logOk('Download/init at 100%');
-          }
-        }
-        logInfo('Progress ' + pct + '%: ' + text.substring(0, 80));
-      };
-
-      try {
-        // Create engine
-        set('rEngineCreated', 'CREATING…', 'warn');
-        let engine;
-
-        if (typeof _mod.CreateMLCEngine === 'function') {
-          // Newer API: CreateMLCEngine(modelId, { initProgressCallback })
-          logInfo('Using CreateMLCEngine(modelId, opts) API…');
-          set('rReloadStart', 'N/A — CreateMLCEngine handles load');
-          engine = await _mod.CreateMLCEngine(modelToLoad, {
-            initProgressCallback: progressCb,
-          });
-          set('rEngineCreated', 'YES (via CreateMLCEngine)', 'ok');
-          set('rReloadStart', 'YES (implicit in CreateMLCEngine)', 'ok');
-          set('rReloadRet', 'YES (CreateMLCEngine resolved)', 'ok');
-          _results.engineCreated = true;
-          _results.reloadStarted = true;
-          _results.reloadReturned = true;
-          logOk('CreateMLCEngine() resolved');
-          downloadCompleted = true;
-          set('rDlDone', 'YES', 'ok');
-          _results.downloadCompleted = true;
-        } else {
-          // Older API: new MLCEngine(), then engine.reload(modelId)
-          logInfo('Using new MLCEngine() + reload() API…');
-          engine = new _mod.MLCEngine();
-          set('rEngineCreated', 'YES (new MLCEngine)', 'ok');
-          _results.engineCreated = true;
-          logOk('MLCEngine instance created');
-
-          if (typeof engine.setInitProgressCallback === 'function') {
-            engine.setInitProgressCallback(progressCb);
-          }
-
-          set('rReloadStart', 'YES', 'ok');
-          _results.reloadStarted = true;
-          logInfo('Calling engine.reload(' + modelToLoad + ')…');
-          await engine.reload(modelToLoad);
-          set('rReloadRet', 'YES', 'ok');
-          _results.reloadReturned = true;
-          logOk('engine.reload() returned');
-          downloadCompleted = true;
-          set('rDlDone', 'YES', 'ok');
-          _results.downloadCompleted = true;
-        }
-
-        _engine = engine;
-        _results.modelIdActuallyLoaded = modelToLoad;
-        set('rModelLoaded', modelToLoad, 'ok');
-
-        // Pipeline check
-        let pipelineOk = false;
-        let pipelineDesc = '';
         try {
-          if (engine.getPipeline && engine.getPipeline()) {
-            pipelineOk = true;
-            pipelineDesc = 'PIPELINE_PRESENT';
-          } else if (typeof engine.runtimeStatsText === 'function') {
-            engine.runtimeStatsText();
-            pipelineOk = true;
-            pipelineDesc = 'RUNTIME_STATS_OK';
-          } else {
-            pipelineOk = true;
-            pipelineDesc = 'CHECK_SKIPPED_RELY_ON_VERIFY';
+          _mod = await import(WEBLLM_CDN);
+          logOk('WebLLM import OK');
+          set('rImport', 'OK', 'ok');
+          _results.webllmImport = 'OK';
+
+          // Version
+          const ver = _mod.version || _mod.VERSION ||
+                      (_mod.MLCEngine && _mod.MLCEngine.version) ||
+                      (_mod.prebuiltAppConfig && _mod.prebuiltAppConfig.version) ||
+                      'NOT_EXPOSED';
+          set('rVersion', ver);
+          _results.webllmVersion = ver;
+          logInfo('WebLLM version: ' + ver);
+
+          // API surface
+          const hasMLCEngine       = (typeof _mod.MLCEngine === 'function');
+          const hasCreateMLCEngine = (typeof _mod.CreateMLCEngine === 'function');
+          set('rMLCEngine',       hasMLCEngine       ? 'YES (function)' : 'NO', hasMLCEngine ? 'ok' : 'warn');
+          set('rCreateMLCEngine', hasCreateMLCEngine ? 'YES (function)' : 'NO', hasCreateMLCEngine ? 'ok' : 'warn');
+          _results.mlcEngineClass  = hasMLCEngine;
+          _results.createMLCEngine = hasCreateMLCEngine;
+
+          // Determine which API will be used
+          const api = hasCreateMLCEngine ? 'CreateMLCEngine (preferred)' : (hasMLCEngine ? 'new MLCEngine + reload (legacy)' : 'NONE FOUND');
+          set('rEngineAPI', api, hasCreateMLCEngine || hasMLCEngine ? 'ok' : 'err');
+          set('rModelRuntime', 'WebLLM ' + ver + ' via ' + (hasCreateMLCEngine ? 'CreateMLCEngine' : 'MLCEngine+reload'));
+          _results.engineAPI = api;
+          logInfo('Engine API to use: ' + api);
+
+          // Exported keys
+          const keys = Object.keys(_mod);
+          logInfo('Exported keys (' + keys.length + '): ' + keys.slice(0, 20).join(', ') + (keys.length > 20 ? '…' : ''));
+          _results.exportedKeys = keys;
+
+          // Registry
+          await probeRegistry();
+
+        } catch (err) {
+          const name = err.name || 'Error';
+          const msg  = err.message || String(err);
+          logErr('WebLLM import FAILED: ' + name + ': ' + msg);
+          if (msg.includes('CORS') || msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+            logWarn('Possible cause: CORS / network error fetching esm.run CDN. Check internet connection.');
           }
-        } catch (pe) {
-          pipelineOk = false;
-          pipelineDesc = 'FAILED: ' + pe.name + ': ' + pe.message;
-          if (pe.name === 'AbortError') _results.abortError = true;
-        }
+          if (!window.isSecureContext) {
+            logWarn('Possible cause: dynamic import() may be blocked on non-secure origins in some browsers.');
+          }
+          set('rImport', 'FAILED: ' + msg.substring(0, 80), 'err');
+          set('rEngineAPI', 'UNKNOWN — import failed', 'err');
+          _results.webllmImport = 'FAILED';
+          _results.importError  = msg;
+          _results.importErrorName = name;
+          _results.firstFailedOperation = 'IMPORT_WEBLLM';
 
-        set('rPipeline', pipelineDesc, pipelineOk ? 'ok' : 'err');
-        _results.pipelineState = pipelineDesc;
-
-        if (!pipelineOk) {
-          _results.firstFailedOperation = 'PIPELINE_CHECK';
-          _results.errorCode = 'MODEL_LOAD_ABORTED_OR_EMPTY';
+          // Surface full stack
+          set('rErrName',  name, 'err');
+          set('rErrMsg',   msg.substring(0, 200), 'err');
+          set('rErrStack', err.stack ? err.stack.split('\n').slice(0,2).join(' | ').substring(0,200) : '—', 'err');
+          set('rErrCode',  'IMPORT_FAILED', 'err');
+          set('rModelState', 'FAILED — import error', 'err');
+          _results.errorName  = name;
+          _results.errorMsg   = msg;
+          _results.errorCode  = 'IMPORT_FAILED';
           _results.modelState = 'FAILED';
-          set('rModelState', 'FAILED — pipeline check failed', 'err');
-          logErr('Pipeline check FAILED: ' + pipelineDesc);
+        }
+      }
+
+      // ── Step 3: Registry probe ───────────────────────────────────────────────
+      async function probeRegistry() {
+        log('=== REGISTRY PROBE ===', 'log-warn');
+        let registry = null;
+
+        if (_mod.prebuiltAppConfig && Array.isArray(_mod.prebuiltAppConfig.model_list)) {
+          registry = _mod.prebuiltAppConfig.model_list;
+          logOk('prebuiltAppConfig.model_list: ' + registry.length + ' entries');
+        } else if (Array.isArray(_mod.prebuiltList)) {
+          registry = _mod.prebuiltList;
+          logOk('prebuiltList: ' + registry.length + ' entries');
+        } else if (Array.isArray(_mod.modelList)) {
+          registry = _mod.modelList;
+          logOk('modelList: ' + registry.length + ' entries');
+        } else {
+          logWarn('No model registry found in module exports');
+          set('rRegistry', 'NOT ACCESSIBLE', 'warn');
+          _results.registryAccessible = false;
           return;
         }
 
-        logOk('Pipeline check passed: ' + pipelineDesc);
+        set('rRegistry', 'YES', 'ok');
+        set('rRegistryCount', registry.length);
+        _results.registryAccessible = true;
+        _results.registryCount = registry.length;
 
-        // Verify inference
-        await runVerify(engine, modelToLoad);
+        const ids = registry.map(e =>
+          typeof e === 'string' ? e : (e.model_id || e.id || JSON.stringify(e).substring(0,60))
+        );
+        _results.registryIds = ids;
 
-      } catch (err) {
-        const name = err.name || 'UnknownError';
-        const msg  = err.message || String(err);
-        const stk  = err.stack ? err.stack.split('\n')[0] : '—';
+        const smolExact   = ids.includes(TARGET_MODEL);
+        const llamaExact  = ids.includes('Llama-3.2-1B-Instruct-q4f16_1-MLC');
+        const smolPartial = ids.filter(id => id.toLowerCase().includes('smollm2') || id.toLowerCase().includes('smol'));
+        const llamaPartial = ids.filter(id => id.toLowerCase().includes('llama-3.2-1b'));
 
-        _results.firstFailedOperation = _results.firstFailedOperation || 'LOAD_SEQUENCE';
-        _results.errorCode   = _results.errorCode   || (msg.includes('abort') || name === 'AbortError' ? 'MODEL_LOAD_ABORTED_OR_EMPTY' : 'LOAD_FAILED');
-        _results.errorName   = name;
-        _results.errorMsg    = msg;
-        _results.abortError  = name === 'AbortError' || msg.toLowerCase().includes('abort');
-        _results.modelNotLoadedError = name === 'ModelNotLoadedError' || msg.toLowerCase().includes('not loaded');
-        _results.modelState  = 'FAILED';
+        set('rSmolInReg',
+          smolExact ? 'YES — ' + TARGET_MODEL
+                    : 'NO (exact not found). Partial matches: ' + (smolPartial.join(', ') || 'none'),
+          smolExact ? 'ok' : 'err'
+        );
+        set('rLlamaInReg',
+          llamaExact ? 'YES' : 'NO. Partial: ' + (llamaPartial.join(', ') || 'none'),
+          llamaExact ? 'ok' : 'warn'
+        );
 
-        set('rModelState', 'FAILED', 'err');
-        set('rFailOp',   _results.firstFailedOperation, 'err');
-        set('rErrCode',  _results.errorCode, 'err');
-        set('rErrName',  name, 'err');
-        set('rErrMsg',   msg.substring(0, 120), 'err');
-        set('rErrStack', stk.substring(0, 100), 'err');
-        set('rAbort',    String(_results.abortError), _results.abortError ? 'err' : 'ok');
-        set('rMNLE',     String(_results.modelNotLoadedError), _results.modelNotLoadedError ? 'err' : 'ok');
+        _results.smolModelInRegistry  = smolExact;
+        _results.llamaModelInRegistry = llamaExact;
+        _results.smolPartialMatches   = smolPartial;
 
-        logErr('Load FAILED: ' + name + ': ' + msg);
+        smolExact
+          ? logOk('SmolLM2-360M confirmed in registry: ' + TARGET_MODEL)
+          : logErr('SmolLM2-360M NOT found with exact ID. Partial: ' + (smolPartial.join(', ') || 'NONE'));
+
+        const div = document.getElementById('registryList');
+        const pre = document.createElement('pre');
+        pre.textContent = 'All registry IDs:\n' + ids.join('\n');
+        div.appendChild(pre);
       }
-    }
 
-    // ── Verify inference ─────────────────────────────────────────────────────────
-    async function runVerify(engine, modelId) {
-      log('=== VERIFY INFERENCE ===', 'log-warn');
-      set('rVerifyStart', 'YES', 'ok');
-      _results.verifyStarted = true;
+      // ── Step 4: Load model ───────────────────────────────────────────────────
+      async function loadModel() {
+        if (!_mod) { logErr('WebLLM not imported. Run probe first.'); return; }
+        log('=== MODEL LOAD ===', 'log-warn');
 
-      const PROMPT = 'Reply with exactly: sky blue';
-      set('rVerifyPrompt', PROMPT);
+        // Determine actual model ID to load
+        let modelToLoad = TARGET_MODEL;
+        if (_results.registryAccessible && !_results.smolModelInRegistry) {
+          if (_results.smolPartialMatches && _results.smolPartialMatches.length > 0) {
+            modelToLoad = _results.smolPartialMatches[0];
+            logWarn('Exact ID not in registry. Using: ' + modelToLoad);
+            _results.modelIdSubstituted = TARGET_MODEL + ' → ' + modelToLoad;
+          } else if (_results.registryIds && _results.registryIds.length > 0) {
+            modelToLoad = _results.registryIds[0];
+            logWarn('No SmolLM2 found. Last resort: ' + modelToLoad);
+            _results.modelIdSubstituted = TARGET_MODEL + ' → ' + modelToLoad;
+          }
+        }
 
-      try {
-        const result = await engine.chat.completions.create({
-          messages: [
-            { role: 'system', content: 'You are a test assistant. Be extremely brief and literal.' },
-            { role: 'user',   content: PROMPT },
-          ],
-          max_tokens: 20,
-          temperature: 0.0,
+        set('rModelReq', modelToLoad);
+        _results.modelIdRequested = modelToLoad;
+        logInfo('Loading model: ' + modelToLoad);
+
+        const hasCreateMLCEngine = (typeof _mod.CreateMLCEngine === 'function');
+        const hasMLCEngine       = (typeof _mod.MLCEngine === 'function');
+        const api = hasCreateMLCEngine ? 'CreateMLCEngine' : (hasMLCEngine ? 'new MLCEngine + reload' : null);
+
+        if (!api) {
+          logErr('No engine API found. Cannot load.');
+          set('rModelState', 'FAILED — no engine API', 'err');
+          _results.modelState = 'FAILED';
+          return;
+        }
+
+        set('rEngineAPI', api, 'ok');
+        logInfo('Using engine API: ' + api);
+
+        let downloadStarted = false;
+
+        const progressCb = (report) => {
+          const pct  = Math.round((report.progress || 0) * 100);
+          const text = report.text || '';
+          const desc = pct + '% — ' + text.substring(0, 80);
+          set('rDlProg', desc);
+          _results.lastDownloadProgress = desc;
+
+          if (pct > 0 && !downloadStarted) {
+            downloadStarted = true;
+            set('rDlStart', 'YES', 'ok');
+            _results.downloadStarted = true;
+            logOk('MODEL_DOWNLOAD_STARTED: ' + pct + '%');
+          }
+
+          const lc = text.toLowerCase();
+          let cacheStatus = null;
+          if (lc.includes('cache')) { cacheStatus = 'CACHED'; }
+          else if (lc.includes('fetch') || lc.includes('download')) { cacheStatus = 'DOWNLOADING'; }
+          if (cacheStatus) {
+            set('rCache', cacheStatus, cacheStatus === 'CACHED' ? 'ok' : 'warn');
+            _results.cacheStatus = cacheStatus;
+          }
+          logInfo('Progress ' + pct + '%: ' + text.substring(0, 80));
+        };
+
+        try {
+          set('rReloadStart', 'YES — calling ' + api, 'warn');
+          _results.reloadStarted = true;
+          logInfo('MODEL_LOAD_STARTED');
+
+          let engine;
+
+          if (hasCreateMLCEngine) {
+            // ── Preferred: CreateMLCEngine ──────────────────────────────────
+            set('rEngineCreated', 'CREATING via CreateMLCEngine…', 'warn');
+            engine = await _mod.CreateMLCEngine(modelToLoad, { initProgressCallback: progressCb });
+            set('rEngineCreated', 'YES (CreateMLCEngine)', 'ok');
+            set('rReloadRet', 'YES (CreateMLCEngine resolved)', 'ok');
+            _results.engineCreated  = true;
+            _results.reloadReturned = true;
+            logOk('CreateMLCEngine() resolved');
+          } else {
+            // ── Legacy: new MLCEngine + reload ──────────────────────────────
+            set('rEngineCreated', 'CREATING via new MLCEngine…', 'warn');
+            engine = new _mod.MLCEngine();
+            set('rEngineCreated', 'YES (new MLCEngine)', 'ok');
+            _results.engineCreated = true;
+            logOk('MLCEngine instance created (legacy path)');
+
+            if (typeof engine.setInitProgressCallback === 'function') {
+              engine.setInitProgressCallback(progressCb);
+            }
+            await engine.reload(modelToLoad);
+            set('rReloadRet', 'YES (reload() returned)', 'ok');
+            _results.reloadReturned = true;
+            logOk('engine.reload() returned');
+          }
+
+          // Mark download complete
+          set('rDlDone', 'YES', 'ok');
+          _results.downloadCompleted = true;
+          set('rModelLoaded', modelToLoad, 'ok');
+          _results.modelIdActuallyLoaded = modelToLoad;
+          logOk('MODEL_DOWNLOAD_COMPLETED');
+
+          // Pipeline check
+          let pipelineOk  = false;
+          let pipelineDesc = '';
+          try {
+            if (engine.getPipeline && engine.getPipeline()) {
+              pipelineOk   = true;
+              pipelineDesc = 'PIPELINE_PRESENT';
+            } else if (typeof engine.runtimeStatsText === 'function') {
+              engine.runtimeStatsText();
+              pipelineOk   = true;
+              pipelineDesc = 'RUNTIME_STATS_OK';
+            } else {
+              pipelineOk   = true;
+              pipelineDesc = 'CHECK_SKIPPED — rely on verify inference';
+            }
+          } catch (pe) {
+            pipelineOk   = false;
+            pipelineDesc = 'THREW: ' + pe.name + ': ' + pe.message;
+            if (pe.name === 'AbortError') _results.abortError = true;
+          }
+
+          set('rPipeline', pipelineDesc, pipelineOk ? 'ok' : 'err');
+          _results.pipelineState = pipelineDesc;
+
+          if (!pipelineOk) {
+            set('rModelState', 'FAILED — pipeline check threw', 'err');
+            set('rErrCode', 'MODEL_LOAD_ABORTED_OR_EMPTY', 'err');
+            logErr('Pipeline check FAILED: ' + pipelineDesc);
+            _results.modelState = 'FAILED';
+            _results.errorCode  = 'MODEL_LOAD_ABORTED_OR_EMPTY';
+            return;
+          }
+          logOk('MODEL_PIPELINE_COUNT: ' + pipelineDesc);
+
+          _engine = engine;
+
+          // Verify
+          await runVerify(engine, modelToLoad);
+
+        } catch (err) {
+          const name = err.name || 'UnknownError';
+          const msg  = err.message || String(err);
+          const stk  = err.stack ? err.stack.split('\n').slice(0,2).join(' | ') : '—';
+
+          _results.firstFailedOperation = _results.firstFailedOperation || 'LOAD_SEQUENCE';
+          _results.errorCode  = _results.errorCode || (
+            name === 'AbortError' || msg.toLowerCase().includes('abort')
+              ? 'MODEL_LOAD_ABORTED_OR_EMPTY'
+              : 'LOAD_FAILED'
+          );
+          _results.errorName  = name;
+          _results.errorMsg   = msg;
+          _results.errorStack = stk;
+          _results.abortError = (name === 'AbortError' || msg.toLowerCase().includes('abort'));
+          _results.modelNotLoadedError = (name === 'ModelNotLoadedError' || msg.toLowerCase().includes('not loaded'));
+          _results.modelState = 'FAILED';
+
+          set('rModelState', 'FAILED', 'err');
+          set('rFailOp',   _results.firstFailedOperation, 'err');
+          set('rErrCode',  _results.errorCode, 'err');
+          set('rErrName',  name, 'err');
+          set('rErrMsg',   msg.substring(0, 200), 'err');
+          set('rErrStack', stk.substring(0, 200), 'err');
+          set('rAbort',    String(_results.abortError),          _results.abortError ? 'err' : 'ok');
+          set('rMNLE',     String(_results.modelNotLoadedError), _results.modelNotLoadedError ? 'err' : 'ok');
+
+          logErr('ORIGINAL_ERROR_NAME:    ' + name);
+          logErr('ORIGINAL_ERROR_MESSAGE: ' + msg);
+          if (err.stack) logErr('ORIGINAL_ERROR_STACK:\n' + err.stack.split('\n').slice(0,5).join('\n'));
+
+          // Hint diagnosis
+          if (name === 'AbortError' || msg.toLowerCase().includes('abort')) {
+            logWarn('→ AbortError during model load. Possible causes: download interrupted, tab backgrounded, insufficient memory, or WebGPU context lost.');
+          }
+          if (!window.crossOriginIsolated && (msg.includes('SharedArrayBuffer') || msg.includes('atomics'))) {
+            logWarn('→ SharedArrayBuffer missing. Run server with COOP/COEP headers: npx serve . --cors');
+          }
+          if (msg.toLowerCase().includes('out of memory') || msg.toLowerCase().includes('oom')) {
+            logWarn('→ Out of memory. SmolLM2-360M requires ~800MB VRAM. Try a smaller model or close other GPU apps.');
+          }
+        }
+      }
+
+      // ── Verify inference ─────────────────────────────────────────────────────
+      async function runVerify(engine, modelId) {
+        log('=== VERIFY INFERENCE ===', 'log-warn');
+        set('rVerifyStart', 'YES', 'ok');
+        _results.verifyStarted = true;
+
+        const PROMPT = 'Reply with exactly two words: sky blue';
+        set('rVerifyPrompt', PROMPT);
+        logInfo('Verify prompt: "' + PROMPT + '"');
+
+        try {
+          const result = await engine.chat.completions.create({
+            messages: [
+              { role: 'system', content: 'You are a test assistant. Be extremely brief and literal.' },
+              { role: 'user',   content: PROMPT },
+            ],
+            max_tokens: 25,
+            temperature: 0.0,
+          });
+
+          const text = result?.choices?.[0]?.message?.content || '';
+          set('rVerifyResp', text ? '"' + text.trim().substring(0, 100) + '"' : '(empty)');
+          _results.verifyResponse = text;
+
+          if (!text || text.trim().length === 0) {
+            set('rVerifyResult', 'FAILED — empty response', 'err');
+            set('rModelState', 'FAILED — verify empty', 'err');
+            _results.verifyResult = 'FAILED_EMPTY';
+            _results.modelState   = 'FAILED';
+            _results.errorCode    = 'VERIFY_EMPTY_RESPONSE';
+            set('rErrCode', 'VERIFY_EMPTY_RESPONSE', 'err');
+            logErr('Verify returned EMPTY response — pipeline not functional');
+          } else {
+            set('rVerifyResult', 'PASS — "' + text.trim().substring(0, 80) + '"', 'ok');
+            set('rModelState', 'READY ✓', 'ok');
+            _results.verifyResult = 'PASS';
+            _results.modelState   = 'READY';
+            logOk('FINAL_MODEL_STATE: READY');
+            logOk('Verify inference PASS: "' + text.trim().substring(0, 60) + '"');
+            logOk('MODEL_READY: YES — real inference probe succeeded');
+            document.getElementById('btnInference').disabled = false;
+            document.getElementById('btnLoad').disabled = true;
+          }
+        } catch (err) {
+          const name = err.name || 'Error';
+          const msg  = err.message || String(err);
+          set('rVerifyResult', 'FAILED — ' + name + ': ' + msg.substring(0, 80), 'err');
+          set('rModelState',   'FAILED — verify threw', 'err');
+          _results.verifyResult = 'FAILED_EXCEPTION';
+          _results.modelState   = 'FAILED';
+          _results.errorName    = name;
+          _results.errorMsg     = msg;
+          _results.errorCode    = name === 'ModelNotLoadedError' ? 'MODEL_NOT_LOADED'
+                                : (name === 'AbortError' ? 'MODEL_LOAD_ABORTED_OR_EMPTY'
+                                : 'VERIFY_INFERENCE_FAILED');
+          _results.modelNotLoadedError = (name === 'ModelNotLoadedError' || msg.toLowerCase().includes('not loaded'));
+          _results.abortError = (name === 'AbortError');
+
+          set('rErrName',  name, 'err');
+          set('rErrMsg',   msg.substring(0, 200), 'err');
+          set('rErrStack', err.stack ? err.stack.split('\n').slice(0,2).join(' | ').substring(0,200) : '—', 'err');
+          set('rErrCode',  _results.errorCode, 'err');
+          set('rAbort', String(_results.abortError), _results.abortError ? 'err' : 'ok');
+          set('rMNLE',  String(_results.modelNotLoadedError), _results.modelNotLoadedError ? 'err' : 'ok');
+
+          logErr('ORIGINAL_ERROR_NAME:    ' + name);
+          logErr('ORIGINAL_ERROR_MESSAGE: ' + msg);
+          if (err.stack) logErr('ORIGINAL_ERROR_STACK:\n' + err.stack.split('\n').slice(0,5).join('\n'));
+        }
+      }
+
+      // ── Inference tests (after READY) ────────────────────────────────────────
+      async function runInferenceTests() {
+        if (!_engine) { logErr('No engine — run probe + load first.'); return; }
+        log('=== REAL INFERENCE TESTS ===', 'log-warn');
+
+        const tests = [
+          { id: '1', prompt: 'Reply with exactly: sky blue',            sEl: 'rInf1src', rEl: 'rInf1resp' },
+          { id: '2', prompt: 'Tell me something funny.',                sEl: 'rInf2src', rEl: 'rInf2resp' },
+          { id: '3', prompt: 'What is a video game?',                   sEl: 'rInf3src', rEl: 'rInf3resp' },
+          { id: '4', prompt: 'My project is called Blue Wolf.',         sEl: 'rInf4src', rEl: null },
+          { id: '5', prompt: 'What project did I just tell you about?', sEl: 'rInf5src', rEl: 'rInf5resp' },
+        ];
+
+        const history = [];
+        for (const t of tests) {
+          logInfo('Test ' + t.id + ': "' + t.prompt + '"');
+          history.push({ role: 'user', content: t.prompt });
+          try {
+            const result = await _engine.chat.completions.create({
+              messages: [
+                { role: 'system', content: 'You are Shadow Reaper, a direct and helpful AI. Keep replies brief.' },
+                ...history,
+              ],
+              max_tokens: 120,
+              temperature: 0.7,
+            });
+            const text = result?.choices?.[0]?.message?.content || '';
+            history.push({ role: 'assistant', content: text });
+            set(t.sEl, 'LOCAL_MODEL', 'ok');
+            if (t.rEl) set(t.rEl, text.trim().substring(0, 200));
+            _results['inf' + t.id + '_source']   = 'LOCAL_MODEL';
+            _results['inf' + t.id + '_response'] = text;
+            logOk('Test ' + t.id + ' SOURCE=LOCAL_MODEL: "' + text.trim().substring(0, 60) + '"');
+          } catch (err) {
+            set(t.sEl, 'ERROR: ' + err.name, 'err');
+            if (t.rEl) set(t.rEl, err.message.substring(0, 100), 'err');
+            _results['inf' + t.id + '_source'] = 'ERROR';
+            _results['inf' + t.id + '_error']  = err.message;
+            logErr('Test ' + t.id + ' FAILED: ' + err.name + ': ' + err.message);
+          }
+        }
+        logOk('Inference tests complete.');
+      }
+
+      // ── Hybrid Runtime Probe ─────────────────────────────────────────────────
+      function setHR(id, val, cls) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = (val === null || val === undefined) ? '—' : String(val);
+        if (cls) el.className = 'val ' + cls;
+      }
+
+      async function probeHybridRuntime() {
+        log('=== HYBRID INFERENCE RUNTIME PROBE ===', 'log-warn');
+
+        // Import SRInferenceRuntime from local file
+        let RT = null;
+        try {
+          const mod = await import('../core/sr-inference-runtime.js');
+          RT = window.SRInferenceRuntime;
+          if (!RT) throw new Error('SRInferenceRuntime not exported to window');
+          logOk('SRInferenceRuntime loaded');
+        } catch (err) {
+          logErr('SRInferenceRuntime import failed: ' + err.message);
+          setHR('hrRuntimeState', 'LOAD_FAILED', 'err');
+          return;
+        }
+
+        // Listen for state changes
+        const unsub = RT.onStateChange(function(state, aiState, active) {
+          setHR('hrRuntimeState',  state,   state.includes('READY') ? 'ok' : state.includes('FAIL') || state === 'DEGRADED' ? 'err' : 'warn');
+          setHR('hrFinalAIState',  aiState, aiState === 'AI_READY' ? 'ok' : aiState === 'DEGRADED_TEMPLATE_ONLY' ? 'warn' : 'dim');
+          setHR('hrSelectedRuntime', active || '—', active ? 'ok' : 'dim');
+          logInfo('Runtime state: ' + state + ' | AI: ' + aiState + ' | Active: ' + (active || 'none'));
         });
 
-        const text = result?.choices?.[0]?.message?.content || '';
-        set('rVerifyResp', text || '(empty)');
-        _results.verifyResponse = text;
-
-        if (!text || text.trim().length === 0) {
-          set('rVerifyResult', 'FAILED — empty response', 'err');
-          _results.verifyResult = 'FAILED_EMPTY';
-          _results.modelState = 'FAILED';
-          set('rModelState', 'FAILED — verify empty', 'err');
-          logErr('Verify inference returned empty response');
-        } else {
-          set('rVerifyResult', 'PASS — "' + text.trim().substring(0, 80) + '"', 'ok');
-          _results.verifyResult = 'PASS';
-          _results.modelState = 'READY';
-          set('rModelState', 'READY', 'ok');
-          logOk('Verify inference PASS: "' + text.trim().substring(0, 60) + '"');
-
-          // Enable inference tests
-          document.getElementById('btnInference').disabled = false;
-          document.getElementById('btnLoad').disabled = true;
-        }
-      } catch (err) {
-        const name = err.name || 'Error';
-        const msg  = err.message || String(err);
-        set('rVerifyResult', 'FAILED — ' + name + ': ' + msg.substring(0, 80), 'err');
-        _results.verifyResult  = 'FAILED_EXCEPTION';
-        _results.modelState    = 'FAILED';
-        _results.errorName     = name;
-        _results.errorMsg      = msg;
-        _results.errorCode     = name === 'ModelNotLoadedError' ? 'MODEL_NOT_LOADED' :
-                                  (name === 'AbortError' ? 'MODEL_LOAD_ABORTED_OR_EMPTY' : 'VERIFY_INFERENCE_FAILED');
-        _results.modelNotLoadedError = name === 'ModelNotLoadedError' || msg.toLowerCase().includes('not loaded');
-        _results.abortError    = name === 'AbortError';
-
-        set('rModelState', 'FAILED — verify exception', 'err');
-        set('rErrName',  name, 'err');
-        set('rErrMsg',   msg.substring(0, 120), 'err');
-        set('rErrCode',  _results.errorCode, 'err');
-        set('rAbort',    String(_results.abortError), _results.abortError ? 'err' : 'ok');
-        set('rMNLE',     String(_results.modelNotLoadedError), _results.modelNotLoadedError ? 'err' : 'ok');
-        logErr('Verify inference FAILED: ' + name + ': ' + msg);
-      }
-    }
-
-    // ── Inference tests (after READY) ────────────────────────────────────────────
-    async function runInferenceTests() {
-      if (!_engine) { logErr('No engine available'); return; }
-      log('=== REAL INFERENCE TESTS ===', 'log-warn');
-
-      const tests = [
-        { id: '1', prompt: 'Reply with exactly: sky blue',    sysEl: 'rInf1src', respEl: 'rInf1resp' },
-        { id: '2', prompt: 'Tell me something funny.',        sysEl: 'rInf2src', respEl: 'rInf2resp' },
-        { id: '3', prompt: 'What is a video game?',           sysEl: 'rInf3src', respEl: 'rInf3resp' },
-        { id: '4', prompt: 'My project is called Blue Wolf.', sysEl: 'rInf4src', respEl: null },
-        { id: '5', prompt: 'What project did I just tell you about?', sysEl: 'rInf5src', respEl: 'rInf5resp' },
-      ];
-
-      const history = [];
-
-      for (const t of tests) {
-        logInfo('Testing: "' + t.prompt + '"');
-        history.push({ role: 'user', content: t.prompt });
+        logInfo('Starting initialization sequence…');
         try {
-          const result = await _engine.chat.completions.create({
-            messages: [
-              { role: 'system', content: 'You are Shadow Reaper, a direct and helpful AI. Keep replies brief.' },
-              ...history,
-            ],
-            max_tokens: 120,
-            temperature: 0.7,
-          });
-          const text = result?.choices?.[0]?.message?.content || '';
-          history.push({ role: 'assistant', content: text });
-          set(t.sysEl, 'LOCAL_MODEL', 'ok');
-          if (t.respEl) set(t.respEl, text.trim().substring(0, 200));
-          _results['inf' + t.id + '_source']   = 'LOCAL_MODEL';
-          _results['inf' + t.id + '_response'] = text;
-          logOk('Inference ' + t.id + ' SOURCE=LOCAL_MODEL: "' + text.trim().substring(0, 60) + '"');
-        } catch (err) {
-          set(t.sysEl, 'ERROR: ' + err.name, 'err');
-          if (t.respEl) set(t.respEl, err.message.substring(0, 100));
-          _results['inf' + t.id + '_source'] = 'ERROR';
-          _results['inf' + t.id + '_error']  = err.message;
-          logErr('Inference ' + t.id + ' FAILED: ' + err.name + ': ' + err.message);
+          await RT.initialize();
+        } catch (e) {
+          logWarn('initialize() error: ' + e.message);
         }
-      }
-    }
 
-    // ── Button wiring ────────────────────────────────────────────────────────────
-    document.getElementById('btnProbe').addEventListener('click', async () => {
-      document.getElementById('btnProbe').disabled = true;
-      try {
-        await probeBrowser();
-        await probeWebLLM();
-        document.getElementById('btnLoad').disabled = false;
-      } catch (e) {
-        logErr('Probe error: ' + e.message);
-      }
-      document.getElementById('btnProbe').disabled = false;
-    });
+        // Unsub from state changes
+        try { unsub(); } catch(_) {}
 
-    document.getElementById('btnLoad').addEventListener('click', async () => {
-      document.getElementById('btnLoad').disabled = true;
-      try {
-        await loadModel();
-      } catch (e) {
-        logErr('Load error: ' + e.message);
-        document.getElementById('btnLoad').disabled = false;
-      }
-    });
+        // Get final diagnostics
+        const diag = RT.getDiagnostics();
+        logInfo('Final diagnostics:');
+        logInfo(JSON.stringify(diag, null, 2));
 
-    document.getElementById('btnInference').addEventListener('click', async () => {
-      document.getElementById('btnInference').disabled = true;
-      try {
-        await runInferenceTests();
-      } catch (e) {
-        logErr('Inference test error: ' + e.message);
-      }
-      document.getElementById('btnInference').disabled = false;
-    });
+        // Populate diagnostic rows
+        setHR('hrSelectedRuntime', diag.SELECTED_RUNTIME || '—',
+          diag.SELECTED_RUNTIME ? 'ok' : 'warn');
+        setHR('hrFinalAIState', diag.FINAL_AI_STATE,
+          diag.FINAL_AI_STATE === 'AI_READY' ? 'ok' : 'warn');
+        setHR('hrRuntimeState', diag.state,
+          (diag.state || '').includes('READY') ? 'ok' :
+          (diag.state || '').includes('DEGRAD') ? 'warn' : 'dim');
 
-    document.getElementById('btnCopy').addEventListener('click', () => {
-      navigator.clipboard.writeText(JSON.stringify(_results, null, 2)).then(() => {
-        logOk('Results JSON copied to clipboard.');
-      }).catch(() => {
-        logWarn('Clipboard copy failed. Results in console.');
-        console.log('PROBE RESULTS:', JSON.stringify(_results, null, 2));
+        // WebGPU
+        setHR('hrWgpuApi',      String(diag.WEBGPU_API_AVAILABLE),
+          diag.WEBGPU_API_AVAILABLE ? 'ok' : 'warn');
+        setHR('hrWgpuAdapter',  String(diag.WEBGPU_ADAPTER_AVAILABLE),
+          diag.WEBGPU_ADAPTER_AVAILABLE ? 'ok' : diag.WEBGPU_API_AVAILABLE === true ? 'err' : 'dim');
+        setHR('hrWgpuDevice',   String(diag.WEBGPU_DEVICE_AVAILABLE),
+          diag.WEBGPU_DEVICE_AVAILABLE ? 'ok' : 'dim');
+        setHR('hrWgpuModel',    String(diag.WEBGPU_MODEL_LOADED),
+          diag.WEBGPU_MODEL_LOADED ? 'ok' : 'dim');
+        setHR('hrWgpuVerified', String(diag.WEBGPU_INFERENCE_VERIFIED),
+          diag.WEBGPU_INFERENCE_VERIFIED ? 'ok' : 'dim');
+        setHR('hrWgpuReady',    String(diag.WEBGPU_READY),
+          diag.WEBGPU_READY ? 'ok' : 'warn');
+        setHR('hrWgpuFailReason', diag.WEBGPU_FAIL_REASON || '—',
+          diag.WEBGPU_FAIL_REASON ? 'warn' : 'ok');
+
+        // CPU — top-level
+        setHR('hrCpuRuntime',   String(diag.CPU_RUNTIME_AVAILABLE),
+          diag.CPU_RUNTIME_AVAILABLE ? 'ok' : 'warn');
+        setHR('hrCpuTxVer', diag.CPU_TRANSFORMERS_VERSION || '—',
+          diag.CPU_TRANSFORMERS_VERSION ? 'ok' : 'dim');
+        setHR('hrCpuRequestedModel', diag.CPU_REQUESTED_MODEL || '—',
+          diag.CPU_REQUESTED_MODEL ? 'ok' : 'dim');
+        setHR('hrCpuModelId',   diag.CPU_MODEL_ID || '—',
+          diag.CPU_MODEL_ID
+            ? (diag.CPU_MODEL_ID !== diag.CPU_REQUESTED_MODEL ? 'warn' : 'ok')
+            : 'dim');
+        setHR('hrCpuModel',     String(diag.CPU_MODEL_LOADED),
+          diag.CPU_MODEL_LOADED ? 'ok' : 'dim');
+        setHR('hrCpuVerified',  String(diag.CPU_INFERENCE_VERIFIED),
+          diag.CPU_INFERENCE_VERIFIED ? 'ok' : (diag.CPU_MODEL_LOADED ? 'err' : 'dim'));
+        setHR('hrCpuReady',     String(diag.CPU_READY),
+          diag.CPU_READY ? 'ok' : 'warn');
+        setHR('hrCpuFailReason', diag.CPU_FAIL_REASON || '—',
+          diag.CPU_FAIL_REASON ? 'warn' : 'ok');
+
+        // CPU runtime environment
+        const cpuEnvCOI = diag.CPU_ENV_CROSS_ORIGIN_ISOLATED;
+        const cpuEnvSAB = diag.CPU_ENV_SHARED_ARRAY_BUFFER;
+        setHR('hrCpuCOI',   cpuEnvCOI == null ? '—' : String(cpuEnvCOI),  cpuEnvCOI ? 'ok' : 'warn');
+        setHR('hrCpuSAB',   cpuEnvSAB == null ? '—' : String(cpuEnvSAB),  cpuEnvSAB ? 'ok' : 'warn');
+        setHR('hrCpuWasmThreads', diag.CPU_ENV_WASM_THREADS == null ? '—' : String(diag.CPU_ENV_WASM_THREADS),
+          diag.CPU_ENV_WASM_THREADS ? 'ok' : 'warn');
+        setHR('hrCpuWasmSimd',    diag.CPU_ENV_WASM_SIMD == null ? '—' : String(diag.CPU_ENV_WASM_SIMD),
+          diag.CPU_ENV_WASM_SIMD ? 'ok' : 'warn');
+        setHR('hrCpuBrowserArch', diag.CPU_ENV_BROWSER_ARCH || '—', 'dim');
+        if (diag.CPU_ENV_PERFORMANCE_MEMORY) {
+          const mb = n => Math.round(n / 1048576) + ' MB';
+          setHR('hrCpuHeapUsed',  mb(diag.CPU_ENV_PERFORMANCE_MEMORY.usedJSHeapSize),
+            diag.CPU_ENV_PERFORMANCE_MEMORY.usedJSHeapSize > 0 ? 'ok' : 'dim');
+          setHR('hrCpuHeapLimit', mb(diag.CPU_ENV_PERFORMANCE_MEMORY.jsHeapSizeLimit), 'dim');
+        }
+
+        // CPU primary model load diagnostics
+        setHR('hrCpuPrimaryStarted', String(diag.CPU_PRIMARY_MODEL_LOAD_STARTED),
+          diag.CPU_PRIMARY_MODEL_LOAD_STARTED ? 'ok' : 'dim');
+        setHR('hrCpuPrimaryErrName', diag.CPU_PRIMARY_MODEL_LOAD_ERROR_NAME || '—',
+          diag.CPU_PRIMARY_MODEL_LOAD_ERROR_NAME ? 'err' : 'ok');
+        setHR('hrCpuPrimaryErrMsg',  diag.CPU_PRIMARY_MODEL_LOAD_ERROR_MESSAGE || '—',
+          diag.CPU_PRIMARY_MODEL_LOAD_ERROR_MESSAGE ? 'err' : 'ok');
+        {
+          const el = document.getElementById('hrCpuPrimaryErrStack');
+          if (el) el.textContent = diag.CPU_PRIMARY_MODEL_LOAD_ERROR_STACK || '—';
+        }
+
+        // CPU stage pipeline
+        function stageVal(v) { return v == null ? '—' : (v ? 'true ✓' : 'false ✗'); }
+        function stageCls(v) { return v == null ? 'dim' : (v ? 'ok' : 'err'); }
+        setHR('hrCpuStageTokReady',   stageVal(diag.CPU_STAGE_TOKENIZER_READY),        stageCls(diag.CPU_STAGE_TOKENIZER_READY));
+        setHR('hrCpuStageModelReady', stageVal(diag.CPU_STAGE_MODEL_READY),            stageCls(diag.CPU_STAGE_MODEL_READY));
+        setHR('hrCpuStageTokStart',   stageVal(diag.CPU_STAGE_TOKENIZATION_STARTED),   stageCls(diag.CPU_STAGE_TOKENIZATION_STARTED));
+        setHR('hrCpuStageTokDone',    stageVal(diag.CPU_STAGE_TOKENIZATION_COMPLETED), stageCls(diag.CPU_STAGE_TOKENIZATION_COMPLETED));
+        setHR('hrCpuStageChatStart',  stageVal(diag.CPU_STAGE_CHAT_TEMPLATE_STARTED),  stageCls(diag.CPU_STAGE_CHAT_TEMPLATE_STARTED));
+        setHR('hrCpuStageChatDone',   stageVal(diag.CPU_STAGE_CHAT_TEMPLATE_COMPLETED),stageCls(diag.CPU_STAGE_CHAT_TEMPLATE_COMPLETED));
+        setHR('hrCpuStageGenStart',   stageVal(diag.CPU_STAGE_GENERATION_STARTED),     stageCls(diag.CPU_STAGE_GENERATION_STARTED));
+        setHR('hrCpuStageGenDone',    stageVal(diag.CPU_STAGE_GENERATION_COMPLETED),   stageCls(diag.CPU_STAGE_GENERATION_COMPLETED));
+        setHR('hrCpuStageDecStart',   stageVal(diag.CPU_STAGE_DECODE_STARTED),         stageCls(diag.CPU_STAGE_DECODE_STARTED));
+        setHR('hrCpuStageDecDone',    stageVal(diag.CPU_STAGE_DECODE_COMPLETED),       stageCls(diag.CPU_STAGE_DECODE_COMPLETED));
+
+        // CPU tokenizer test
+        setHR('hrCpuTokIds',
+          diag.CPU_TOK_TEST_IDS ? '[' + diag.CPU_TOK_TEST_IDS.join(', ') + ']' : '—',
+          diag.CPU_TOK_TEST_IDS ? 'ok' : 'dim');
+        setHR('hrCpuTokLen',    diag.CPU_TOK_TEST_LEN != null ? String(diag.CPU_TOK_TEST_LEN) : '—',
+          diag.CPU_TOK_TEST_LEN > 0 ? 'ok' : 'dim');
+        setHR('hrCpuTokDecoded', diag.CPU_TOK_TEST_DECODED != null ? JSON.stringify(diag.CPU_TOK_TEST_DECODED) : '—',
+          diag.CPU_TOK_TEST_DECODED ? 'ok' : 'dim');
+        if (diag.CPU_TOK_TEST_ERROR) {
+          setHR('hrCpuTokErr', diag.CPU_TOK_TEST_ERROR.name + ': ' + diag.CPU_TOK_TEST_ERROR.message, 'err');
+        }
+
+        // CPU single-thread control test
+        const stRes = diag.CPU_SINGLE_THREAD_RESULT;
+        if (stRes) {
+          setHR('hrCpuSingleAttempted', String(stRes.attempted), stRes.attempted ? 'ok' : 'warn');
+          setHR('hrCpuSingleNumThreads', stRes.numThreadsSet != null ? String(stRes.numThreadsSet) : '—',
+            stRes.numThreadsSet === 1 ? 'ok' : 'dim');
+          setHR('hrCpuSingleReason', stRes.reason || '—', stRes.reason ? 'warn' : 'ok');
+          if (stRes.attempted) {
+            // single-thread was set; alt model verify result tells us if it worked
+            const altVerified = diag.CPU_INFERENCE_VERIFIED;
+            setHR('hrCpuSingleVerified', altVerified ? 'PASS — inference verified with numThreads=1' : 'FAIL — still failed after single-thread',
+              altVerified ? 'ok' : 'err');
+            if (altVerified) {
+              logOk('SINGLE-THREAD RESULT: PASS — setting numThreads=1 resolved the RangeError');
+              logWarn('→ Root cause confirmed: WASM multi-threading conflict (SharedArrayBuffer / crossOriginIsolated missing)');
+            } else {
+              logWarn('SINGLE-THREAD RESULT: FAIL — single-thread did not fix it; root cause is elsewhere');
+            }
+          }
+        }
+
+        // CPU plain text vs chat template
+        const plainRes = diag.CPU_PLAIN_TEXT_RESULT;
+        if (plainRes) {
+          setHR('hrCpuPlainPass', plainRes.pass ? 'PASS ✓' : 'FAIL ✗', plainRes.pass ? 'ok' : 'err');
+          setHR('hrCpuPlainText', plainRes.text ? '"' + plainRes.text.substring(0, 120) + '"' : '(empty)', plainRes.pass ? 'ok' : 'warn');
+          if (plainRes.error) {
+            setHR('hrCpuPlainErr', plainRes.error.name + ': ' + plainRes.error.message, 'err');
+          }
+        }
+        setHR('hrCpuPlainVsChat', diag.CPU_PLAIN_VS_CHAT_DIFF || '—',
+          diag.CPU_PLAIN_VS_CHAT_DIFF === 'BOTH_OK'           ? 'ok' :
+          diag.CPU_PLAIN_VS_CHAT_DIFF === 'PLAIN_OK_CHAT_FAIL' ? 'warn' : 'err');
+
+        // CPU verification deep diagnostics (chat path)
+        setHR('hrCpuVerifyPrompt', diag.CPU_VERIFY_PROMPT || '—', 'dim');
+        setHR('hrCpuRawType',   diag.CPU_RAW_RESULT_TYPE || '—',
+          diag.CPU_RAW_RESULT_TYPE ? 'ok' : 'dim');
+        setHR('hrCpuRawJson',
+          diag.CPU_RAW_RESULT_JSON
+            ? String(diag.CPU_RAW_RESULT_JSON).substring(0, 400) + (String(diag.CPU_RAW_RESULT_JSON).length > 400 ? '…' : '')
+            : '—',
+          diag.CPU_RAW_RESULT_JSON ? 'ok' : 'dim');
+        setHR('hrCpuExtracted',
+          diag.CPU_EXTRACTED_TEXT != null ? JSON.stringify(diag.CPU_EXTRACTED_TEXT) : '—',
+          diag.CPU_EXTRACTED_TEXT && diag.CPU_EXTRACTED_TEXT.length > 0 ? 'ok' : 'err');
+        setHR('hrCpuExtractedLen',
+          diag.CPU_EXTRACTED_TEXT_LENGTH != null ? String(diag.CPU_EXTRACTED_TEXT_LENGTH) : '—',
+          diag.CPU_EXTRACTED_TEXT_LENGTH > 0 ? 'ok' : 'err');
+        setHR('hrCpuErrName',   diag.CPU_GENERATION_ERROR_NAME   || '—',
+          diag.CPU_GENERATION_ERROR_NAME   ? 'err' : 'ok');
+        setHR('hrCpuErrMsg',    diag.CPU_GENERATION_ERROR_MESSAGE || '—',
+          diag.CPU_GENERATION_ERROR_MESSAGE ? 'err' : 'ok');
+        {
+          const stackEl = document.getElementById('hrCpuErrStack');
+          if (stackEl) stackEl.textContent = diag.CPU_GENERATION_ERROR_STACK || '—';
+        }
+
+        // Warn if actual model differs from requested (fallback was used)
+        if (diag.CPU_MODEL_ID && diag.CPU_REQUESTED_MODEL &&
+            diag.CPU_MODEL_ID !== diag.CPU_REQUESTED_MODEL) {
+          logWarn('CPU: primary model failed, FALLBACK loaded: ' + diag.CPU_MODEL_ID);
+          logWarn('     Primary was: ' + diag.CPU_REQUESTED_MODEL);
+          if (diag.CPU_PRIMARY_MODEL_LOAD_ERROR_MESSAGE) {
+            logErr('CPU PRIMARY LOAD ERROR: ' + diag.CPU_PRIMARY_MODEL_LOAD_ERROR_NAME + ': ' + diag.CPU_PRIMARY_MODEL_LOAD_ERROR_MESSAGE);
+          }
+        }
+        // Detail log for failed inference
+        if (diag.CPU_MODEL_LOADED && !diag.CPU_INFERENCE_VERIFIED) {
+          logErr('CPU: MODEL LOADED but INFERENCE VERIFICATION FAILED');
+          logErr('  CPU_PLAIN_VS_CHAT_DIFF:  ' + (diag.CPU_PLAIN_VS_CHAT_DIFF || 'n/a'));
+          logErr('  CPU_PLAIN_TEXT_PASS:     ' + (plainRes ? plainRes.pass : 'n/a'));
+          logErr('  CPU_STAGE_MODEL_READY:   ' + diag.CPU_STAGE_MODEL_READY);
+          logErr('  CPU_STAGE_CHAT_STARTED:  ' + diag.CPU_STAGE_CHAT_TEMPLATE_STARTED);
+          logErr('  CPU_STAGE_CHAT_DONE:     ' + diag.CPU_STAGE_CHAT_TEMPLATE_COMPLETED);
+          logErr('  CPU_STAGE_GEN_STARTED:   ' + diag.CPU_STAGE_GENERATION_STARTED);
+          logErr('  CPU_STAGE_GEN_DONE:      ' + diag.CPU_STAGE_GENERATION_COMPLETED);
+          logErr('  CPU_RAW_RESULT_TYPE:      ' + (diag.CPU_RAW_RESULT_TYPE || 'n/a'));
+          logErr('  CPU_EXTRACTED_TEXT:       ' + JSON.stringify(diag.CPU_EXTRACTED_TEXT));
+          if (diag.CPU_GENERATION_ERROR_MESSAGE) {
+            logErr('  CPU_GENERATION_ERROR:     ' + diag.CPU_GENERATION_ERROR_NAME + ': ' + diag.CPU_GENERATION_ERROR_MESSAGE);
+            if (diag.CPU_GENERATION_ERROR_STACK) {
+              logErr('  CPU_GENERATION_ERROR_STACK:\n' + diag.CPU_GENERATION_ERROR_STACK);
+            }
+          }
+          if (diag.CPU_ENV_WASM_THREADS === false) {
+            logWarn('  WASM THREADING DISABLED — crossOriginIsolated=' + diag.CPU_ENV_CROSS_ORIGIN_ISOLATED +
+                    ' SAB=' + diag.CPU_ENV_SHARED_ARRAY_BUFFER +
+                    '. RangeError often caused by ONNX Runtime using SharedArrayBuffer for buffer copies ' +
+                    'when threading is disabled. Run dev server with COOP/COEP: npm run dev');
+          }
+        }
+
+        // Shadow API
+        setHR('hrApiConfigured', String(diag.SHADOW_API_CONFIGURED),
+          diag.SHADOW_API_CONFIGURED ? 'ok' : 'warn');
+        setHR('hrApiReachable',  String(diag.SHADOW_API_REACHABLE),
+          diag.SHADOW_API_REACHABLE ? 'ok' : 'warn');
+        setHR('hrApiDeployed',   diag.SHADOW_API_NOT_DEPLOYED
+          ? 'NO — SHADOW_API_INFERENCE_NOT_DEPLOYED'
+          : (diag.SHADOW_API_READY ? 'YES' : '—'),
+          diag.SHADOW_API_NOT_DEPLOYED ? 'warn' : (diag.SHADOW_API_READY ? 'ok' : 'dim'));
+        setHR('hrApiVerified',   String(diag.SHADOW_API_INFERENCE_VERIFIED),
+          diag.SHADOW_API_INFERENCE_VERIFIED ? 'ok' : 'dim');
+        setHR('hrApiReady',      String(diag.SHADOW_API_READY),
+          diag.SHADOW_API_READY ? 'ok' : 'dim');
+        setHR('hrApiFailReason', diag.SHADOW_API_FAIL_REASON || '—',
+          diag.SHADOW_API_FAIL_REASON ? 'warn' : 'ok');
+
+        // Final summary log
+        if (diag.FINAL_AI_STATE === 'AI_READY') {
+          logOk('HYBRID RUNTIME RESULT: AI_READY via ' + diag.SELECTED_RUNTIME);
+        } else if (diag.FINAL_AI_STATE === 'DEGRADED_TEMPLATE_ONLY') {
+          logWarn('HYBRID RUNTIME RESULT: DEGRADED_TEMPLATE_ONLY — no generative runtime available');
+          logWarn('WebGPU: ' + (diag.WEBGPU_FAIL_REASON || 'n/a'));
+          logWarn('CPU:    ' + (diag.CPU_FAIL_REASON    || 'n/a'));
+          logWarn('API:    ' + (diag.SHADOW_API_FAIL_REASON || 'n/a'));
+        } else {
+          logInfo('HYBRID RUNTIME: still initializing or unknown state');
+        }
+
+        _results.hybridRuntime = diag;
+      }
+
+      // ── Button wiring ────────────────────────────────────────────────────────
+      document.getElementById('btnHybrid').addEventListener('click', async () => {
+        document.getElementById('btnHybrid').disabled = true;
+        try {
+          await probeHybridRuntime();
+        } catch (e) {
+          logErr('Hybrid probe error: ' + e.name + ': ' + e.message);
+        }
+        document.getElementById('btnHybrid').disabled = false;
       });
-    });
 
-    // Auto-run browser probe on load
-    window.addEventListener('load', async () => {
-      logInfo('Probe loaded. Click "Run Full Probe" to start.');
-      // Pre-populate browser info immediately
-      set('rBrowser', navigator.userAgent.substring(0, 80));
-      set('rSecure', window.isSecureContext, window.isSecureContext ? 'ok' : 'err');
-      set('rGpuApi', !!(navigator.gpu), !!(navigator.gpu) ? 'ok' : 'err');
-    });
+      document.getElementById('btnProbe').addEventListener('click', async () => {
+        document.getElementById('btnProbe').disabled = true;
+        try {
+          await probeBrowser();
+          await probeWebLLM();
+          if (_results.webllmImport === 'OK') {
+            document.getElementById('btnLoad').disabled = false;
+            logOk('Probe complete. Click "Load Model" to proceed.');
+          } else {
+            logErr('Import failed — cannot load model. See errors above.');
+          }
+        } catch (e) {
+          logErr('Probe top-level error: ' + e.name + ': ' + e.message);
+          if (e.stack) logErr(e.stack.split('\n').slice(0,3).join('\n'));
+        }
+        document.getElementById('btnProbe').disabled = false;
+      });
+
+      document.getElementById('btnLoad').addEventListener('click', async () => {
+        document.getElementById('btnLoad').disabled = true;
+        try {
+          await loadModel();
+        } catch (e) {
+          logErr('Load top-level error: ' + e.name + ': ' + e.message);
+          document.getElementById('btnLoad').disabled = false;
+        }
+      });
+
+      document.getElementById('btnInference').addEventListener('click', async () => {
+        document.getElementById('btnInference').disabled = true;
+        try {
+          await runInferenceTests();
+        } catch (e) {
+          logErr('Inference test error: ' + e.name + ': ' + e.message);
+        }
+        document.getElementById('btnInference').disabled = false;
+      });
+
+      document.getElementById('btnCopy').addEventListener('click', () => {
+        navigator.clipboard.writeText(JSON.stringify(_results, null, 2)).then(() => {
+          logOk('Results JSON copied to clipboard.');
+        }).catch(() => {
+          logWarn('Clipboard copy failed. Results logged to console.');
+          console.log('PROBE RESULTS:', JSON.stringify(_results, null, 2));
+        });
+      });
+
+      logInfo('Probe ready. Click "Run Full Probe" to start.');
+
+    } catch (moduleInitErr) {
+      // ── Top-level synchronous error in module setup ───────────────────────
+      // This fires if something throws during module initialization before
+      // the button wiring runs. Show it visibly.
+      const banner = document.getElementById('initErr');
+      if (banner) {
+        banner.style.display = 'block';
+        banner.textContent = '✗ MODULE INIT ERROR: ' + (moduleInitErr.name || 'Error') +
+          ': ' + moduleInitErr.message +
+          (moduleInitErr.stack ? '\n' + moduleInitErr.stack.split('\n').slice(0,4).join('\n') : '');
+      }
+      const log = document.getElementById('log');
+      if (log) {
+        const d = document.createElement('div');
+        d.className = 'log-line log-err';
+        d.textContent = '✗ MODULE INIT FAILED: ' + moduleInitErr.message;
+        log.appendChild(d);
+      }
+      console.error('[diag-probe] Module init error:', moduleInitErr);
+    }
   </script>
 </body>
 </html>

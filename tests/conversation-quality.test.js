@@ -623,6 +623,211 @@ chain = chain.then(function () {
   });
 });
 
+// ── 16. REGRESSION — broken real-world inputs (Stage 14 fixes) ───────────────
+// These tests reproduce the exact three failures found in live website testing.
+// They must remain passing; if any regresses, the pipeline is broken.
+
+// Failure A: Long statement containing "this" was misclassified as FOLLOW_UP
+// and the garbage subject "this AI all day and I" was injected into the
+// followUpAcknowledge template → "this AI all day and I: that. Noted. Anything else?"
+chain = chain.then(function () {
+  resetConversation();
+  return testAsync(
+    'REGRESSION A: long personal statement is not broken by FOLLOW_UP misclassification',
+    function () {
+      return ask("I've been working on this AI all day and I'm trying to make it understand me better.")
+        .then(function (r) {
+          assert(r.trim().length > 0, 'Response must be non-empty');
+          // Must NOT produce the garbled template output
+          assert(
+            r.indexOf('this AI all day and') === -1,
+            'Response must not inject the full message as a subject placeholder. Got: ' + r
+          );
+          assert(
+            r.indexOf('Noted. Anything else?') === -1,
+            'Response must not be the FOLLOW_UP template garbage. Got: ' + r
+          );
+          assert(
+            r.toLowerCase().indexOf('error') === -1,
+            'Response must not contain "error". Got: ' + r
+          );
+        });
+    }
+  );
+});
+
+// Failure B: Weather query returned POOLS.unknown "I want to follow — what are you saying?"
+// Root cause: model not READY + researchSnippet not handled in the not-READY branch.
+// This test verifies that a weather snippet produces a weather-shaped response.
+chain = chain.then(function () {
+  resetConversation();
+  return testAsync(
+    'REGRESSION B: weather query with snippet does not fall to POOLS.unknown',
+    function () {
+      // Simulate what composeAsync receives when the model is not READY but
+      // SRResearchRouter already fetched a weather snippet.
+      // We call SRResponse.composeAsync directly with a fake weather snippet.
+      var understood = global.SRUnderstanding.understand("What's the weather in Austin?");
+      var context    = global.SRContext.update(understood, "What's the weather in Austin?");
+
+      var fakeWeatherSnippet = [
+        '[WEATHER — Austin, TX | 2024-05-10]',
+        'Conditions: Clear sky',
+        'Temperature: 24°C (feels like 23°C)',
+        'Humidity: 45%',
+        'Wind: 12 km/h',
+        'Precipitation: 0 mm',
+        'Source: Open-Meteo | Retrieved: 2024-05-10T18:00Z',
+      ].join('\n');
+
+      return new Promise(function (resolve, reject) {
+        global.SRResponse.composeAsync(understood, context, {
+          researchSnippet: fakeWeatherSnippet,
+        }, function (response, source) {
+          try {
+            assert(response.trim().length > 0, 'Response must be non-empty');
+            assert(
+              response.indexOf('I want to follow') === -1,
+              'Response must not be the POOLS.unknown fallback. Got: ' + response
+            );
+            assert(
+              response.toLowerCase().indexOf('weather') !== -1 ||
+              response.toLowerCase().indexOf('austin') !== -1 ||
+              response.toLowerCase().indexOf('temperature') !== -1 ||
+              response.toLowerCase().indexOf('clear') !== -1,
+              'Response should contain weather-related content. Got: ' + response
+            );
+            resolve();
+          } catch (e) {
+            reject(e);
+          }
+        });
+      });
+    }
+  );
+});
+
+// Failure C: "Yo Shadow what you up to?" greeting path (smoke test)
+// This should produce a friendly greeting — never crash or return an error.
+chain = chain.then(function () {
+  resetConversation();
+  return testAsync(
+    'REGRESSION C: casual greeting "Yo Shadow what you up to?" produces friendly response',
+    function () {
+      return ask("Yo Shadow what you up to?").then(function (r) {
+        assert(r.trim().length > 0, 'Response must be non-empty');
+        assert(
+          r.toLowerCase().indexOf('local model error') === -1,
+          'Response must not expose a raw error message. Got: ' + r
+        );
+      });
+    }
+  );
+});
+
+// Failure D: FOLLOW_UP intent with short real subject should still work correctly
+// (regression guard — the fix must not break normal FOLLOW_UP handling)
+chain = chain.then(function () {
+  resetConversation();
+  var proj = randomProjectName();
+  return testAsync(
+    'REGRESSION D: normal FOLLOW_UP with short subject still works',
+    function () {
+      return ask('My project is called ' + proj + '.')
+        .then(function () { return ask('Make it darker.'); })
+        .then(function (r) {
+          assert(r.trim().length > 0, 'Response to short follow-up must be non-empty');
+          assert(
+            r.toLowerCase().indexOf('local model error') === -1,
+            'Response must not be a raw error. Got: ' + r
+          );
+        });
+    }
+  );
+});
+
+// Failure E: FOLLOW_UP with no prior context (no project/subject) should not crash
+chain = chain.then(function () {
+  resetConversation();
+  return testAsync(
+    'REGRESSION E: FOLLOW_UP with no prior context returns a clarification',
+    function () {
+      return ask('Make it darker.').then(function (r) {
+        assert(r.trim().length > 0, 'Response must be non-empty');
+        assert(
+          r.toLowerCase().indexOf('local model error') === -1,
+          'Response must not be a raw error. Got: ' + r
+        );
+      });
+    }
+  );
+});
+
+// ── Regression F: weather with FAILED model must NOT return LOCAL MODEL ERROR ─
+// This reproduces the exact real-world failure: "What's the weather in Austin?"
+// returned "LOCAL MODEL ERROR: Model in FAILED state [UNKNOWN_LOAD_ERROR]."
+// The fix: researchSnippet is checked BEFORE the FAILED-state early-return.
+chain = chain.then(function () {
+  resetConversation();
+  return testAsync(
+    'REGRESSION F: weather snippet produces weather response even when SRLocalModel is FAILED',
+    function () {
+      return new Promise(function (resolve, reject) {
+        var understood = global.SRUnderstanding.understand("What's the weather in Austin?");
+        var context    = global.SRContext.update(understood, "What's the weather in Austin?");
+
+        var fakeWeatherSnippet = [
+          '[WEATHER — Austin, TX | 2024-05-10]',
+          'Conditions: Sunny',
+          'Temperature: 28°C (feels like 27°C)',
+          'Humidity: 40%',
+          'Wind: 8 km/h',
+          'Precipitation: 0 mm',
+          'Source: Open-Meteo | Retrieved: 2024-05-10T20:00Z',
+        ].join('\n');
+
+        // Install a fake SRLocalModel in FAILED state for this test
+        var origLM = global.SRLocalModel;
+        global.SRLocalModel = {
+          getStatus:      function () { return { state: 'FAILED', modelId: 'SmolLM2-360M-Instruct-q4f16_1-MLC', loadPct: 0, lastError: 'test-forced-failure', isReady: false }; },
+          getDiagnostics: function () { return { errorCode: 'UNKNOWN_LOAD_ERROR', lastErrorName: 'Error', lastErrorMessage: 'test', lastErrorStack: null }; },
+          generate:       function (msg, opts, cb) { cb(new Error('Model FAILED'), null); },
+          onStateChange:  function () { return function () {}; },
+        };
+
+        try {
+          global.SRResponse.composeAsync(understood, context, {
+            researchSnippet: fakeWeatherSnippet,
+          }, function (response, source) {
+            // Restore original model first
+            global.SRLocalModel = origLM;
+            try {
+              assert(response.trim().length > 0, 'Response must be non-empty');
+              assert(
+                response.toLowerCase().indexOf('local model error') === -1,
+                'Response must NOT be LOCAL MODEL ERROR when weather snippet is available. Got: ' + response
+              );
+              assert(
+                response.toLowerCase().indexOf('weather') !== -1 ||
+                response.toLowerCase().indexOf('austin') !== -1 ||
+                response.toLowerCase().indexOf('28') !== -1 ||
+                response.toLowerCase().indexOf('sunny') !== -1,
+                'Response must contain weather content. Got: ' + response
+              );
+              resolve();
+            } catch (e) {
+              reject(e);
+            }
+          });
+        } catch (e) {
+          global.SRLocalModel = origLM;
+          reject(e);
+        }
+      });
+    }
+  );
+});
+
 // ── Final results ─────────────────────────────────────────────────────────────
 chain = chain.then(function () {
   console.log('\n══════════════════════════════════════════════');

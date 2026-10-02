@@ -256,15 +256,26 @@ section('PHASE 5: SENSE INDEX AUDIT');
 
 var senseIndexPath = path.join(ROOT, 'language/indexes/sense-index.js');
 var comprehensionPath = path.join(ROOT, 'language/sr-comprehension-index.js');
+var relationshipsPath = path.join(ROOT, 'language/relationships/relationships.js');
 
 if (fs.existsSync(senseIndexPath)) {
   ok('sense-index.js exists');
-  // Count senses defined
+  // Count ambiguous word entries and senses (including multi-word or hyphenated keys)
   var senseContent = fs.readFileSync(senseIndexPath, 'utf8');
-  var senseWordMatches = senseContent.match(/^\s+'[a-z]+'\s*:/gm) || [];
-  var senseSenseMatches = senseContent.match(/id:\s*'[a-z:]+'/g) || [];
+  var senseWordMatches = senseContent.match(/^\s+'[a-z][a-z '\-]*'\s*:/gm) || [];
+  var senseSenseMatches = senseContent.match(/id:\s*'[a-z][a-z:_]+'/g) || [];
   log('  Ambiguous words indexed: ' + senseWordMatches.length);
   log('  Total senses defined:    ' + senseSenseMatches.length);
+  // Validate sense domains expected by comprehension spec
+  var REQUIRED_SENSES = ['bank', 'run', 'die', 'dead', 'hot', 'crash', 'fire', 'memory', 'server', 'bug', 'table'];
+  var missSenses = REQUIRED_SENSES.filter(function (w) {
+    return senseContent.indexOf("'" + w + "'") === -1;
+  });
+  if (missSenses.length === 0) {
+    ok('All required figurative sense words present');
+  } else {
+    warn('Missing required sense words: ' + missSenses.join(', '));
+  }
 } else {
   fail('sense-index.js not found');
 }
@@ -274,8 +285,44 @@ if (fs.existsSync(comprehensionPath)) {
   var compContent = fs.readFileSync(comprehensionPath, 'utf8');
   var idiomMatches = compContent.match(/phrase:\s*'[^']+'/g) || [];
   log('  Idiom patterns defined: ' + idiomMatches.length);
+  // Check for figurative phrases (§12)
+  var REQUIRED_IDIOMS = ['running late', 'give up', 'car died', 'running hot', 'break down', 'up and running'];
+  var missIdioms = REQUIRED_IDIOMS.filter(function (p) {
+    return compContent.indexOf("'" + p + "'") === -1;
+  });
+  if (missIdioms.length === 0) {
+    ok('All required figurative idiom phrases present');
+  } else {
+    warn('Missing required idiom phrases: ' + missIdioms.join(', '));
+  }
 } else {
   fail('sr-comprehension-index.js not found');
+}
+
+// Count relationship graph edges
+var relEdgeCount = 0;
+var relNodeCount = 0;
+if (fs.existsSync(relationshipsPath)) {
+  var relContent = fs.readFileSync(relationshipsPath, 'utf8');
+  var relEdges = relContent.match(/\{\s*from:/g) || [];
+  relEdgeCount = relEdges.length;
+  // Count unique 'from' values
+  var relFromMatches = relContent.match(/from:\s*'([^']+)'/g) || [];
+  var relFromSet = new Set(relFromMatches.map(function(m){ return m.replace(/from:\s*'|'/g,''); }));
+  relNodeCount = relFromSet.size;
+  log('  Relationship edges:   ' + relEdgeCount);
+  log('  Relationship nodes:   ' + relNodeCount);
+  // Validate required taxonomy entries
+  var REQUIRED_RELS = ['dog', 'cpu', 'rain', 'car', 'volt', 'hot', 'die'];
+  var missRels = REQUIRED_RELS.filter(function (w) {
+    return relContent.indexOf("from:'" + w + "'") === -1 &&
+           relContent.indexOf("from: '" + w + "'") === -1;
+  });
+  if (missRels.length === 0) {
+    ok('Relationship graph: all required taxonomy concepts present');
+  } else {
+    warn('Missing relationship concepts: ' + missRels.join(', '));
+  }
 }
 
 // ─── Phase 6: Number intelligence audit ──────────────────────────────────────
@@ -452,20 +499,25 @@ var report = {
   morphFailed:          morphCoverage.failed,
 
   // Sense index
-  ambiguousWordsIndexed: (function() {
+  ambiguousWordsIndexed: senseWordMatches ? senseWordMatches.length : (function() {
     try {
       var sc = fs.readFileSync(senseIndexPath, 'utf8');
-      return (sc.match(/^\s+'[a-z]+'\s*:/gm) || []).length;
+      return (sc.match(/^\s+'[a-z][a-z '\-]*'\s*:/gm) || []).length;
     } catch(_) { return 0; }
   })(),
+  totalSensesIndexed: senseSenseMatches ? senseSenseMatches.length : 0,
 
   // Idiom patterns
-  idiomPatterns: (function() {
+  idiomPatterns: idiomMatches ? idiomMatches.length : (function() {
     try {
       var cc = fs.readFileSync(comprehensionPath, 'utf8');
       return (cc.match(/phrase:\s*'[^']+'/g) || []).length;
     } catch(_) { return 0; }
   })(),
+
+  // Relationship graph
+  relationshipEdges:    relEdgeCount,
+  relationshipNodes:    relNodeCount,
 
   // File inventory
   filesPresent: integrationFiles.filter(function(f){ return fs.existsSync(path.join(ROOT, f)); }),
@@ -496,9 +548,10 @@ log('  INVALID ENTRIES:             ' + stats.malformed);
 log('  LEMMA RELATIONSHIPS:         ' + lemmaStats.totalLemmas.toLocaleString() + ' lemmas → ' + lemmaStats.totalForms.toLocaleString() + ' forms');
 log('  MORPHOLOGY RELATIONSHIPS:    ' + morphCoverage.passed + '/' + morphCoverage.tested + ' key pairs');
 log('  DEFINITIONS (WordNet):       147,477 lemmas / 204,506 senses (via sr-lexicon.js)');
-log('  MULTI-SENSE WORDS INDEXED:   ' + report.ambiguousWordsIndexed);
-log('  PHRASES (sense index):       ' + report.idiomPatterns + ' idiom patterns');
-log('  SEMANTIC RELATIONSHIPS:      see language/relationships/relationships.js');
+log('  MULTI-SENSE WORDS INDEXED:   ' + report.ambiguousWordsIndexed + ' words / ' + (report.totalSensesIndexed || 0) + ' senses');
+log('  IDIOM PATTERNS:              ' + report.idiomPatterns);
+log('  SEMANTIC RELATIONSHIP EDGES: ' + (report.relationshipEdges || 0));
+log('  SEMANTIC RELATIONSHIP NODES: ' + (report.relationshipNodes || 0));
 log('  DUPLICATES:                  ' + stats.duplicateKeys);
 log('  TARGET MET (111,600+):       ' + (report.targetMet ? 'YES' : 'NO'));
 log('');

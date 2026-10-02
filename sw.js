@@ -29,7 +29,21 @@
 
 // Shadow Reaper-specific cache namespace.
 // Bump version here to force a full re-cache on next visit.
-const CACHE_VERSION = 'sr-shell-v5';
+// IMPORTANT: Incrementing CACHE_VERSION purges the OLD shell cache but does NOT
+// affect SR_MODEL_CACHE_VERSION. Model assets (downloaded by WebLLM and
+// Transformers.js into IndexedDB/Cache Storage under their own namespaces)
+// are managed independently so an app-shell update never forces a re-download
+// of the ~200-600MB model weights.
+const CACHE_VERSION = 'sr-shell-v7';
+
+// Inference runtime model assets use a separate cache namespace.
+// Bumping this version forces a re-download of model weights on next session.
+// Only bump when the model ID changes or model corruption is suspected.
+// WebLLM manages its own cache internally (IndexedDB + Cache Storage under
+// 'webllm-model-*' keys). Transformers.js caches under 'transformers-cache'.
+// This constant documents the separation policy but the SW does not
+// pre-cache model files — they are cached by the runtime on first download.
+const SR_MODEL_CACHE_VERSION = 'sr-model-v1';
 
 // GitHub Pages subdirectory prefix.
 // All app URLs are under this path.
@@ -75,6 +89,8 @@ const APP_SHELL = [
   BASE + '/core/response-engine.js',
   BASE + '/core/persistence-bridge.js',
   BASE + '/core/local-model.js',
+  // Hybrid Inference Runtime (SR-INFERENCE-RUNTIME-1)
+  BASE + '/core/sr-inference-runtime.js',
   BASE + '/knowledge/knowledge-engine.js',
   BASE + '/knowledge/sr-knowledge-learner.js',
   BASE + '/translation/translation-engine.js',
@@ -165,16 +181,24 @@ self.addEventListener('install', function (event) {
 });
 
 // ─── Activate: clean up old caches ───────────────────────────────────────────
+// IMPORTANT: Only delete app-shell caches (sr-shell-*).
+// Model caches (webllm-model-*, transformers-cache, sr-model-*) are managed
+// by the inference runtimes and must NOT be deleted on shell update — that
+// would force a full re-download of hundreds of MB of model weights.
 self.addEventListener('activate', function (event) {
   console.log('[SW] Activating', CACHE_VERSION);
   event.waitUntil(
     caches.keys().then(function (keys) {
       return Promise.all(
         keys.map(function (key) {
-          if (key !== CACHE_VERSION) {
-            console.log('[SW] Deleting old cache:', key);
+          // Only delete old app-SHELL caches — preserve model caches
+          var isOldShellCache = key.startsWith('sr-shell-') && key !== CACHE_VERSION;
+          if (isOldShellCache) {
+            console.log('[SW] Deleting old shell cache:', key);
             return caches.delete(key);
           }
+          // Do NOT delete: webllm-model-*, transformers-cache, sr-model-*
+          // These are managed by the inference runtimes and may be large.
         })
       );
     })
