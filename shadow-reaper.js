@@ -88,8 +88,9 @@
     return;
   }
 
-  // ─── Stage 12 Build Tag ───────────────────────────────────────────────────
-  // Updated to SR-V2-STAGE12 (personality, session, assistant profiles, number intelligence, research router)
+  // ─── Stage 13 Build Tag ───────────────────────────────────────────────────
+  // SR-V2-STAGE13: Human-like adaptive personality, conversational cue analysis,
+  // sarcasm scale, attitude matching, Shadow baseline traits, user-specific adaptation.
 
   // ─── State ───────────────────────────────────────────────────────────────────
 
@@ -165,6 +166,9 @@
     }
     if (!global.SRResearchRouter) {
       console.warn('[ShadowReaper V2] SRResearchRouter not loaded — research routing unavailable.');
+    }
+    if (!global.SRConversationalCue) {
+      console.warn('[ShadowReaper V2] SRConversationalCue not loaded — conversational cue analysis unavailable.');
     }
     return missing;
   }
@@ -389,14 +393,28 @@
 
     global.SRConversation.addTurn('user', message, understood.intent, understood.tone);
 
+    // ── CONVERSATIONAL CUE ANALYSIS ───────────────────────────────────────────
+    // Analyze HOW the user is communicating (tone, sarcasm, frustration, humor).
+    // This produces a cue snapshot that feeds into personality analysis.
+    // Must run BEFORE personality analysis so cue data can inform it.
+    var conversationalCue = null;
+    var cueAnalyzer = global.SRConversationalCue;
+    if (cueAnalyzer) {
+      try {
+        var _recentForCue = global.SRConversation.getRecentTurns(6);
+        conversationalCue = cueAnalyzer.analyze(message, understood, _recentForCue);
+      } catch (_) {}
+    }
+
     // ── PERSONALITY ANALYSIS ──────────────────────────────────────────────────
     // Analyze current turn for personality context.
-    // Returns humor/tone/length signals for response shaping.
+    // Now receives the conversational cue for richer signal integration.
+    // Returns humor/tone/length/attitudeStyle/sarcasmLevel signals for response shaping.
     var personalityCtx = null;
     var personality = global.SRPersonality;
     if (personality) {
       try {
-        personalityCtx = personality.analyzeTurn(message, understood);
+        personalityCtx = personality.analyzeTurn(message, understood, conversationalCue);
       } catch (_) {}
     }
 
@@ -558,8 +576,10 @@
         sentenceStruct:   comprehensionResult ? comprehensionResult.sentenceStruct : null,
         wordSenses:       comprehensionResult ? comprehensionResult.wordSenses : {},
         // Personality context for response shaping
-        personalityCtx:   personalityCtx,
-        assistantName:    assistantName,
+        personalityCtx:     personalityCtx,
+        assistantName:      assistantName,
+        // Conversational cue for TTS prosody metadata and future use
+        conversationalCue:  conversationalCue,
       };
 
       global.SRResponse.composeAsync(understood, context, composeOpts, function (response, source) {
@@ -834,7 +854,7 @@
   var ShadowReaper = {
 
     _initialized: false,
-    _version: 'SR-V2-STAGE12',
+    _version: 'SR-V2-STAGE13',
 
     /**
      * Initialize Shadow Reaper V2.

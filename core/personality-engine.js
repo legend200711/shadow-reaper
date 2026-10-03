@@ -2,7 +2,7 @@
  * shadow-reaper-v2/core/personality-engine.js
  * Shadow Reaper — Personality Engine
  *
- * Build: SR-V2-PERSONALITY-1
+ * Build: SR-V2-PERSONALITY-2
  *
  * Exposes: window.SRPersonality
  *
@@ -20,13 +20,10 @@
  *   - Detects when humor is appropriate or inappropriate given context.
  *   - Provides a per-turn "personality context" object that the response/model
  *     layer can use to shape responses naturally.
- *
- * WHAT THIS MODULE DOES NOT DO:
- *   - Does not replace ShadowReaper.ask() or any pipeline stage.
- *   - Does not create a second AI brain.
- *   - Does not store sensitive data.
- *   - Does not override internet rules.
- *   - Does not hardcode specific responses.
+ *   - Integrates conversational cue data from SRConversationalCue.
+ *   - Exposes Shadow's baseline personality traits to the generation layer.
+ *   - Implements sarcasm scale (0–3): none / occasional / playful / strong.
+ *   - Implements attitude matching: friendly→friendly, playful→playful, etc.
  *
  * PERSONALITY PROFILE FIELDS:
  *   humorFrequency      float 0-1  — how often humor is appropriate
@@ -39,6 +36,10 @@
  *   correctionCount     int        — how many times user corrected Shadow
  *   jokeCount           int        — times user engaged positively with humor
  *   seriousTurnCount    int        — recent serious turns (suppress humor)
+ *   conversationEnergy  float 0-1  — user's conversational energy level
+ *   sarcasmPreference   int 0-3    — user sarcasm preference scale
+ *   humorPreference     int 0-3    — user humor preference scale
+ *   responseDirectness  float 0-1  — how direct the user wants answers
  *
  * STORAGE:
  *   Firestore: users/{uid}/shadowReaperPreferences/personality
@@ -55,7 +56,7 @@
 
 (function (global) {
 
-  var BUILD_ID = 'SR-V2-PERSONALITY-1';
+  var BUILD_ID = 'SR-V2-PERSONALITY-2';
 
   // ─── Default profile ──────────────────────────────────────────────────────
 
@@ -71,17 +72,51 @@
     jokeCount:        0,
     seriousTurnCount: 0,
     totalTurns:       0,
+    // Stage 2 extensions
+    conversationEnergy: 0.50, // user's typical energy level
+    sarcasmPreference:  1,    // 0=none 1=occasional 2=playful 3=strong
+    humorPreference:    1,    // 0=none 1=occasional 2=playful 3=strong
+    responseDirectness: 0.65, // mirrors directness for explicit user-visible setting
+  };
+
+  // ─── Shadow's baseline personality traits ─────────────────────────────────
+  // These describe WHO Shadow is at its core. They influence generation
+  // but are NOT rigid rules — they shape the response naturally.
+  // They do NOT change per user.
+  var SHADOW_BASELINE_TRAITS = {
+    confident:           true,
+    loyal:               true,
+    witty:               true,
+    slightlySarcastic:   true,   // context-gated by seriousness
+    curious:             true,
+    direct:              true,
+    protective:          true,
+    conversational:      true,
+    occasionallyMischievous: true,
+  };
+
+  // ─── Sarcasm scale mapping ─────────────────────────────────────────────────
+  // Maps sarcasmPreference (0–3) to prompt instruction
+  var SARCASM_SCALE = {
+    0: 'No sarcasm — be direct and sincere.',
+    1: 'Occasional light sarcasm when the moment genuinely calls for it.',
+    2: 'Playful sarcasm and banter are welcome.',
+    3: 'Strong wit and sarcasm — match the user\'s irreverent energy.',
+  };
+
+  // ─── Humor scale mapping ───────────────────────────────────────────────────
+  var HUMOR_SCALE = {
+    0: 'Avoid humor — keep it straight.',
+    1: 'Light humor when it fits naturally.',
+    2: 'A good dose of humor, dry wit welcome.',
+    3: 'High humor — dry jokes, roasting, banter are all fair game.',
   };
 
   // ─── Humor suppression thresholds ────────────────────────────────────────
-  // If recent serious turns >= this, suppress humor for the current turn.
   var SERIOUS_TURN_SUPPRESS_THRESHOLD = 2;
-
-  // After this many turns of low-engagement, reduce humor frequency
   var HUMOR_DECAY_THRESHOLD = 5;
 
   // ─── Sensitivity patterns — topics where humor is NEVER appropriate ───────
-  // These are checked in the turn text before issuing any humor signal.
   var SERIOUS_TOPIC_PATTERNS = [
     /\b(suicid|kill\s+myself|end\s+my\s+life|self.harm|depressed|depression|anxiety)\b/i,
     /\b(cancer|died|death|funeral|grieving|grief|loss of|passed away|dead)\b/i,
@@ -170,16 +205,11 @@
     callback = callback || function () {};
 
     // OFFLINE-FIRST: always apply local profile immediately.
-    // Personality must work without waiting for a Firestore round-trip.
-    // If Firestore is unreachable, the locally-stored profile is used.
     var local = _readLocal();
     if (local) _applyProfile(local);
 
-    // Mark loaded immediately from local data — personality is now operational.
-    // Firestore sync is a background enrichment, NOT a requirement.
     _loaded = true;
 
-    // Report to SROfflineState
     var offState = global.SROfflineState;
     if (offState && typeof offState.setPersonalityLoaded === 'function') {
       try { offState.setPersonalityLoaded(true); } catch (_) {}
@@ -191,8 +221,6 @@
       return;
     }
 
-    // Background Firestore sync — does NOT block personality use.
-    // On success, enriches the local profile and saves it for next offline use.
     ref.get().then(function (doc) {
       if (doc && doc.exists) {
         _applyProfile(doc.data() || {});
@@ -200,7 +228,6 @@
       }
       callback(null, _getProfile());
     }).catch(function () {
-      // Firestore unreachable — that is fine, local profile is already applied.
       callback(null, _getProfile());
     });
   }
@@ -233,26 +260,31 @@
 
   // ─── Analyze turn for personality signals ─────────────────────────────────
   /**
-   * analyzeTurn(text, understood)
+   * analyzeTurn(text, understood, cue)
    *
    * Classifies the turn for personality context signals.
+   * Optionally accepts a pre-computed conversational cue from SRConversationalCue.
    * Returns a personality context object for use by the response layer.
    *
    * Returns:
    *   {
-   *     humorAppropriate:   boolean
-   *     sarcasmAppropriate: boolean
-   *     playfulMode:        boolean
-   *     seriousMode:        boolean
-   *     technicalMode:      boolean
-   *     frustratedMode:     boolean
-   *     preferredLength:    'short'|'medium'|'long'
-   *     directness:         float
-   *     humorLevel:         float
-   *     casualness:         float
+   *     humorAppropriate:       boolean
+   *     sarcasmAppropriate:     boolean
+   *     playfulMode:            boolean
+   *     seriousMode:            boolean
+   *     technicalMode:          boolean
+   *     frustratedMode:         boolean
+   *     attitudeStyle:          string  — dominant attitude to match
+   *     sarcasmLevel:           int 0-3 — current sarcasm level for this turn
+   *     preferredLength:        'short'|'medium'|'long'
+   *     directness:             float
+   *     humorLevel:             float
+   *     casualness:             float
+   *     conversationalCue:      object  — full cue snapshot (may be null)
+   *     shadowTraits:           object  — baseline Shadow personality traits
    *   }
    */
-  function analyzeTurn(text, understood) {
+  function analyzeTurn(text, understood, cue) {
     if (!text) text = '';
     var lower = text.toLowerCase();
     var intent = (understood && understood.intent) || 'UNKNOWN';
@@ -262,7 +294,14 @@
     var isAbsolutelySerious = SERIOUS_TOPIC_PATTERNS.some(function (p) { return p.test(lower); });
     if (isAbsolutelySerious) {
       _recordTone('serious');
-      return _buildContext({ seriousMode: true, humorAppropriate: false, sarcasmAppropriate: false });
+      return _buildContext({
+        seriousMode:        true,
+        humorAppropriate:   false,
+        sarcasmAppropriate: false,
+        sarcasmLevel:       0,
+        attitudeStyle:      'supportive',
+        conversationalCue:  cue || null,
+      });
     }
 
     // ── Signal detection ──────────────────────────────────────────────────
@@ -272,12 +311,23 @@
                        tone === 'playful';
     var isTechnical  = TECHNICAL_PATTERNS.some(function (p) { return p.test(lower); });
 
+    // Integrate conversational cue if available
+    var cuePlayful     = cue && cue.tone === 'playful';
+    var cueSarcastic   = cue && cue.tone === 'sarcastic';
+    var cueFrustrated  = cue && cue.frustrationLikelihood >= 0.55;
+    var cueExcited     = cue && cue.tone === 'excited';
+    var cueSeriousShift = cue && cue.seriousness >= 0.60;
+
+    // Merge cue signals
+    if (cuePlayful || cueSarcastic) isPlayful = true;
+    if (cueFrustrated) isFrustrated = true;
+
     // Intent-based seriousness
     var isIntentSerious = (intent === 'USER_CORRECTION' || tone === 'sad' ||
-                           tone === 'anxious' || tone === 'angry');
+                           tone === 'anxious' || tone === 'angry' || cueSeriousShift);
 
     // Track tone for context window
-    if (isPlayful) {
+    if (isPlayful || cueSarcastic) {
       _recordTone('playful');
     } else if (isFrustrated || isTechnical) {
       _recordTone('focused');
@@ -293,11 +343,6 @@
     }).length;
 
     // ── Humor logic ───────────────────────────────────────────────────────
-    // Humor is appropriate when:
-    //   - profile says it's ok (humorFrequency > threshold)
-    //   - no recent serious turns
-    //   - not currently frustrated
-    //   - not a technical deep-work turn (small allowance for technical turns)
     var humorThreshold = isTechnical ? 0.60 : (isFrustrated ? 0.75 : 0.25);
     var humorSuppressed = (recentSeriousCount >= SERIOUS_TURN_SUPPRESS_THRESHOLD) ||
                           isIntentSerious;
@@ -305,37 +350,99 @@
                            (_profile.humorFrequency >= humorThreshold) &&
                            !isFrustrated;
 
-    // If user is explicitly being playful, boost
-    if (isPlayful && !humorSuppressed) {
+    if ((isPlayful || cuePlayful) && !humorSuppressed) {
       humorAppropriate = true;
     }
 
+    // ── Sarcasm logic ─────────────────────────────────────────────────────
+    // Sarcasm scale: consider both user profile preference and current cue
     var sarcasmAppropriate = humorAppropriate &&
                              _profile.sarcasmTolerance >= 0.30 &&
-                             isPlayful;
+                             (isPlayful || cueSarcastic);
+
+    // Compute current sarcasm level (0–3) for this turn
+    var sarcasmLevel = 0;
+    if (sarcasmAppropriate) {
+      var sp = _profile.sarcasmPreference;
+      // If cue shows high sarcasm likelihood, raise level by 1
+      var cueBoost = (cue && cue.sarcasmLikelihood >= 0.50) ? 1 : 0;
+      sarcasmLevel = Math.min(3, sp + cueBoost);
+      // Never go above 2 unless user profile explicitly says 3
+      if (sp < 3) sarcasmLevel = Math.min(2, sarcasmLevel);
+    }
+    // Seriousness override: hard limit sarcasm level
+    if (recentSeriousCount >= SERIOUS_TURN_SUPPRESS_THRESHOLD) sarcasmLevel = 0;
+
+    // ── Attitude matching ─────────────────────────────────────────────────
+    // Maps the user's current tone to Shadow's response attitude.
+    // Hostile input → confident/calm (never mirror hostility directly).
+    // Genuine frustration → direct/helpful.
+    var attitudeStyle = _mapAttitude(cue, tone, isPlayful, cueSarcastic,
+                                     isFrustrated, cueExcited, isIntentSerious);
 
     return _buildContext({
       humorAppropriate:   humorAppropriate,
       sarcasmAppropriate: sarcasmAppropriate,
-      playfulMode:        isPlayful,
+      sarcasmLevel:       sarcasmLevel,
+      playfulMode:        isPlayful || cuePlayful,
       seriousMode:        isIntentSerious || recentSeriousCount >= SERIOUS_TURN_SUPPRESS_THRESHOLD,
       technicalMode:      isTechnical,
       frustratedMode:     isFrustrated,
+      attitudeStyle:      attitudeStyle,
+      conversationalCue:  cue || null,
     });
   }
+
+  // ─── Attitude matching logic ──────────────────────────────────────────────
+  // Returns one of: 'playful' | 'banter' | 'direct' | 'supportive' | 'energetic' | 'calm' | 'focused'
+
+  function _mapAttitude(cue, srTone, isPlayful, cueSarcastic, isFrustrated, cueExcited, isIntentSerious) {
+    // Seriousness overrides everything
+    if (isIntentSerious) return 'supportive';
+    if (cue && cue.seriousness >= 0.60) return 'supportive';
+
+    // Genuine frustration → direct and helpful (not jokey)
+    if (isFrustrated && !(cue && cue.humor >= 0.40)) return 'direct';
+
+    // Banter / sarcastic → banter back (within reason)
+    if (cueSarcastic || (cue && cue.sarcasmLikelihood >= 0.50)) return 'banter';
+
+    // Playful → playful
+    if (isPlayful || (cue && cue.tone === 'playful')) return 'playful';
+
+    // Excited → energetic
+    if (cueExcited || srTone === 'excited') return 'energetic';
+
+    // Casual greeting → casual
+    if (cue && cue.tone === 'casual') return 'casual';
+
+    // Technical → focused
+    if (srTone === 'technical') return 'focused';
+
+    return 'calm';
+  }
+
+  // ─── Build context object ─────────────────────────────────────────────────
 
   function _buildContext(overrides) {
     var ctx = {
       humorAppropriate:   false,
       sarcasmAppropriate: false,
+      sarcasmLevel:       0,
       playfulMode:        false,
       seriousMode:        false,
       technicalMode:      false,
       frustratedMode:     false,
+      attitudeStyle:      'calm',
       preferredLength:    _profile.preferredLength,
       directness:         _profile.directness,
       humorLevel:         _profile.humorFrequency,
       casualness:         _profile.casualness,
+      conversationalCue:  null,
+      shadowTraits:       SHADOW_BASELINE_TRAITS,
+      sarcasmPreference:  _profile.sarcasmPreference,
+      humorPreference:    _profile.humorPreference,
+      conversationEnergy: _profile.conversationEnergy,
     };
     return Object.assign(ctx, overrides);
   }
@@ -349,17 +456,15 @@
 
   // ─── Learn from turn outcome ──────────────────────────────────────────────
   /**
-   * learnFromTurn(userText, understood, assistantResponse, feedback)
+   * learnFromTurn(userText, understood, assistantResponse)
    *
    * Called after each completed turn to adaptively update the personality profile.
-   * feedback is optional: { positive: bool } when explicit feedback is available.
+   * Uses gradual confidence: one playful message does NOT permanently change profile.
+   * Repeated patterns build confidence.
    *
-   * Learning signals:
-   *   - User says something playful after Shadow responded → humor resonated
-   *   - User says "that's not what I meant" / correction → directness issue
-   *   - User sends very short messages consistently → prefer shorter responses
-   *   - User asks for more detail → increase technical depth
-   *   - User jokes back → increase humor frequency
+   * LONG-TERM vs SHORT-TERM:
+   *   Short-term: _recentTones (session only, cleared on new conversation)
+   *   Long-term:  _profile (persisted per user, updated gradually)
    */
   function learnFromTurn(userText, understood, assistantResponse) {
     if (!userText) return;
@@ -372,19 +477,23 @@
     // ── Humor engagement ──────────────────────────────────────────────────
     if (PLAYFUL_PATTERNS.some(function (p) { return p.test(lower); })) {
       _profile.jokeCount++;
-      // Gradually raise humor frequency when user engages positively
       if (_profile.humorFrequency < 0.80) {
-        _profile.humorFrequency = Math.min(0.80,
-          _profile.humorFrequency + 0.04);
+        _profile.humorFrequency = Math.min(0.80, _profile.humorFrequency + 0.04);
+      }
+      // Gradually raise humor preference level
+      if (_profile.jokeCount >= 3 && _profile.humorPreference < 2) {
+        _profile.humorPreference = Math.min(3, _profile.humorPreference + 1);
       }
     }
 
     // ── Sarcasm tolerance ─────────────────────────────────────────────────
-    // If user uses sarcasm/banter, they likely tolerate it from Shadow too
     if (/\b(smartass|wise(ass|guy)|oh come on|sarcasm|sarcastic|banter)\b/i.test(lower)) {
       if (_profile.sarcasmTolerance < 0.80) {
-        _profile.sarcasmTolerance = Math.min(0.80,
-          _profile.sarcasmTolerance + 0.05);
+        _profile.sarcasmTolerance = Math.min(0.80, _profile.sarcasmTolerance + 0.05);
+      }
+      // Raise sarcasmPreference level after repeated engagement
+      if (_profile.sarcasmTolerance >= 0.50 && _profile.sarcasmPreference < 2) {
+        _profile.sarcasmPreference = Math.min(3, _profile.sarcasmPreference + 1);
       }
     }
 
@@ -392,26 +501,20 @@
     if (intent === 'USER_CORRECTION' ||
         /\b(no[,.]?\s*(i meant|that.?s not|that wasn.?t)|actually[,.]|correction[:]?|wait[,.]?\s+i meant)\b/i.test(lower)) {
       _profile.correctionCount++;
-      // More corrections → Shadow needs to be more direct and precise
       if (_profile.directness < 0.90) {
         _profile.directness = Math.min(0.90, _profile.directness + 0.03);
       }
+      _profile.responseDirectness = _profile.directness;
     }
 
     // ── Response length preference ────────────────────────────────────────
-    // Very short user messages suggest they prefer concise exchanges
     var wordCount = userText.trim().split(/\s+/).length;
     if (wordCount <= 4 && _profile.totalTurns > 10) {
-      // User communicates in short bursts — prefer short responses
-      if (_profile.preferredLength !== 'short') {
-        // Soft push toward short after many brief turns
-        var shortSignals = _recentTones.filter(function (t) { return t; }).length;
-        if (shortSignals >= 4) {
-          _profile.preferredLength = 'short';
-        }
+      var shortSignals = _recentTones.filter(function (t) { return t; }).length;
+      if (shortSignals >= 4) {
+        _profile.preferredLength = 'short';
       }
     } else if (wordCount >= 20 && _profile.preferredLength === 'short') {
-      // User wrote a detailed message — maybe they want detailed responses
       _profile.preferredLength = 'medium';
     }
 
@@ -429,6 +532,14 @@
       }
     }
 
+    // ── Conversation energy ────────────────────────────────────────────────
+    // Short, punchy messages raise energy; long thoughtful ones lower it slightly
+    if (wordCount <= 5) {
+      _profile.conversationEnergy = Math.min(1.0, _profile.conversationEnergy + 0.02);
+    } else if (wordCount >= 30) {
+      _profile.conversationEnergy = Math.max(0.1, _profile.conversationEnergy - 0.01);
+    }
+
     // ── Serious-mode tracking ─────────────────────────────────────────────
     if (tone === 'sad' || tone === 'anxious' || SERIOUS_TOPIC_PATTERNS.some(function (p) { return p.test(lower); })) {
       _profile.seriousTurnCount++;
@@ -444,43 +555,89 @@
   /**
    * getPersonalityPromptAddendum(personalityCtx)
    *
-   * Returns a short instruction string to inject into the local model's
-   * system prompt, shaping the personality of the response.
+   * Returns instruction string to inject into the generation system prompt.
+   * Includes: Shadow baseline traits, sarcasm scale, attitude matching,
+   * humor level, casualness, length preference, and seriousness override.
    *
-   * This is specifically for the local model path. The deterministic path
-   * uses the personality context object directly via analyzeTurn().
+   * This is specifically for the hosted/local model path.
    */
   function getPersonalityPromptAddendum(personalityCtx) {
     if (!personalityCtx) return '';
 
     var parts = [];
 
-    // Tone direction
+    // ── Shadow baseline personality ───────────────────────────────────────
+    parts.push(
+      'You are Shadow — confident, loyal, direct, witty, occasionally mischievous, and protective. ' +
+      'You do not sound like customer support or a corporate chatbot. ' +
+      'You speak naturally, with personality. ' +
+      'You are an AI that speaks human-like — but you do not claim to be human.'
+    );
+
+    // ── Seriousness override — ALWAYS first, hardest constraint ──────────
     if (personalityCtx.seriousMode) {
-      parts.push('Be direct and supportive. No humor right now.');
-    } else if (personalityCtx.frustratedMode) {
-      parts.push('The user is frustrated. Acknowledge it briefly, then focus on the problem. Light humor only if it naturally fits.');
-    } else if (personalityCtx.technicalMode) {
-      parts.push('Focus on the technical topic. Be clear and precise.');
-    } else if (personalityCtx.playfulMode && personalityCtx.humorAppropriate) {
-      parts.push('Match the user\'s relaxed energy. Conversational, smart, a little witty if it fits naturally.');
-    } else {
-      parts.push('Conversational, direct, and real — not robotic.');
+      parts.push('The conversation has turned serious. Remove all sarcasm, jokes, and banter immediately. Be direct, warm, and supportive.');
+      return parts.join(' ');
     }
 
-    // Length preference
+    // ── Attitude / response style matching ────────────────────────────────
+    var style = personalityCtx.attitudeStyle || 'calm';
+    switch (style) {
+      case 'playful':
+        parts.push('The user is in a playful mood. Match that energy — be light, fun, and natural.');
+        break;
+      case 'banter':
+        parts.push('The user is giving banter. You can give it back — smart, witty, slightly sarcastic. Stay warm underneath.');
+        break;
+      case 'energetic':
+        parts.push('The user is excited and energetic. Match that vibe — be upbeat and engaged.');
+        break;
+      case 'direct':
+        parts.push('The user is being direct or task-focused. Be equally direct. Skip the fluff.');
+        break;
+      case 'supportive':
+        parts.push('The user may need support. Be genuine and direct. Skip humor.');
+        break;
+      case 'casual':
+        parts.push('This is a casual, conversational exchange. Be natural and relaxed.');
+        break;
+      case 'focused':
+        parts.push('The user is in focused/technical mode. Stay on-topic and precise.');
+        break;
+      default:
+        parts.push('Conversational, direct, and real — not robotic.');
+    }
+
+    // ── Frustrated mode ───────────────────────────────────────────────────
+    if (personalityCtx.frustratedMode) {
+      parts.push('The user is frustrated. Acknowledge it briefly, then focus on actually solving the problem. Light humor only if it naturally reduces tension.');
+    }
+
+    // ── Technical mode ────────────────────────────────────────────────────
+    if (personalityCtx.technicalMode) {
+      parts.push('Focus on the technical topic. Be clear and precise.');
+    }
+
+    // ── Sarcasm level ─────────────────────────────────────────────────────
+    var sarcasmLevel = personalityCtx.sarcasmLevel || 0;
+    var sarcasmInstr = SARCASM_SCALE[sarcasmLevel];
+    if (sarcasmInstr) parts.push(sarcasmInstr);
+
+    // ── Humor ─────────────────────────────────────────────────────────────
+    if (personalityCtx.humorAppropriate && !personalityCtx.seriousMode) {
+      var humorPref = personalityCtx.humorPreference || 1;
+      var humorInstr = HUMOR_SCALE[humorPref];
+      if (humorInstr) parts.push(humorInstr);
+    }
+
+    // ── Length preference ─────────────────────────────────────────────────
     if (personalityCtx.preferredLength === 'short') {
       parts.push('Keep the response concise.');
     } else if (personalityCtx.preferredLength === 'long' || personalityCtx.technicalMode) {
       parts.push('Provide enough detail to actually be useful.');
     }
 
-    // Humor
-    if (personalityCtx.humorAppropriate && !personalityCtx.seriousMode) {
-      parts.push('A light, natural touch of humor is welcome if the moment genuinely calls for it.');
-    }
-
-    // Casualness
+    // ── Casualness ────────────────────────────────────────────────────────
     if (personalityCtx.casualness >= 0.70) {
       parts.push('The user communicates casually — match that register.');
     }
@@ -489,17 +646,46 @@
   }
 
   // ─── Get assistant display name for current session ───────────────────────
-  /**
-   * getAssistantName()
-   * Returns the currently selected assistant profile name.
-   * Falls back to 'Shadow' if no profile is selected.
-   */
+
   function getAssistantName() {
     var wm = global.SRWakeName;
     if (wm && typeof wm.getWakeName === 'function') {
       return wm.getWakeName();
     }
     return 'Shadow';
+  }
+
+  // ─── User-facing preference setters ──────────────────────────────────────
+  // These allow settings UI to set simple explicit preferences.
+  // They take effect immediately and persist to storage.
+
+  function setSarcasmPreference(level) {
+    level = parseInt(level, 10);
+    if (isNaN(level) || level < 0 || level > 3) return false;
+    _profile.sarcasmPreference = level;
+    // Sync to underlying sarcasmTolerance
+    _profile.sarcasmTolerance = level === 0 ? 0.0 :
+                                level === 1 ? 0.25 :
+                                level === 2 ? 0.55 : 0.80;
+    _save();
+    return true;
+  }
+
+  function setHumorPreference(level) {
+    level = parseInt(level, 10);
+    if (isNaN(level) || level < 0 || level > 3) return false;
+    _profile.humorPreference = level;
+    _profile.humorFrequency = level === 0 ? 0.05 :
+                              level === 1 ? 0.35 :
+                              level === 2 ? 0.60 : 0.80;
+    _save();
+    return true;
+  }
+
+  function setAdaptiveEnabled(enabled) {
+    // Stub for settings bridge — SRPersonality itself is always adaptive.
+    // This allows a UI toggle to be wired without crashing.
+    return true;
   }
 
   // ─── Reset profile ────────────────────────────────────────────────────────
@@ -524,11 +710,13 @@
 
   function getStatus() {
     return {
-      build:         BUILD_ID,
-      loaded:        _loaded,
-      profile:       _getProfile(),
-      recentTones:   _recentTones.slice(),
-      assistantName: getAssistantName(),
+      build:              BUILD_ID,
+      loaded:             _loaded,
+      profile:            _getProfile(),
+      recentTones:        _recentTones.slice(),
+      assistantName:      getAssistantName(),
+      shadowTraits:       SHADOW_BASELINE_TRAITS,
+      sarcasmScale:       SARCASM_SCALE,
     };
   }
 
@@ -544,6 +732,10 @@
     getProfile:                 _getProfile,
     resetProfile:               resetProfile,
     getStatus:                  getStatus,
+    setSarcasmPreference:       setSarcasmPreference,
+    setHumorPreference:         setHumorPreference,
+    setAdaptiveEnabled:         setAdaptiveEnabled,
+    shadowTraits:               SHADOW_BASELINE_TRAITS,
   };
 
 })(typeof window !== 'undefined' ? window : global);

@@ -73,6 +73,8 @@ var SUITES = [
   { name: 'creator-knowledge',       file: 'sr-creator-knowledge.test.js' },
   // SR-HF-VOICE-1 — Hands-free voice conversation tests
   { name: 'handsfree-voice',         file: 'sr-handsfree-voice.test.js' },
+  // SR-V2-PERSONALITY-2 — Human-like adaptive personality Stage 1
+  { name: 'personality-adaptive',    file: 'sr-personality-adaptive.test.js' },
 ];
 
 var TESTS_DIR = __dirname;

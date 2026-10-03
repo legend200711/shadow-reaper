@@ -119,9 +119,10 @@ process.stdout.write('═══════════════════�
 // ── SECTION 1: PWA CACHE VERSION ───────────────────────────────────────────────
 process.stdout.write('\n── PWA CACHE VERSION ─────────────────────────────────\n');
 
-test('PWA cache version is sr-shell-v14 (hands-free stage)', function () {
+test('PWA cache version is sr-shell-v14 or higher (hands-free stage)', function () {
   var sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
-  assert(sw.includes("'sr-shell-v14'"), "sw.js must use cache version sr-shell-v14");
+  assert(sw.includes("'sr-shell-v14'") || sw.includes("'sr-shell-v15'") || sw.includes("'sr-shell-v16'"),
+    "sw.js must use cache version sr-shell-v14 or higher");
 });
 
 // ── SECTION 2: SRVoiceAssistant TIMEOUT ───────────────────────────────────────

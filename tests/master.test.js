@@ -207,8 +207,9 @@ test('ShadowReaper.init() returns true', function () {
 
 test('Build is SR-V2-STAGE4, SR-V2-STAGE5, SR-V2-STAGE6 or SR-V2-STAGE12', function () {
   assert(SR._version === 'SR-V2-STAGE4' || SR._version === 'SR-V2-STAGE5' ||
-         SR._version === 'SR-V2-STAGE6' || SR._version === 'SR-V2-STAGE12',
-    'Expected SR-V2-STAGE4/5/6/12, got: ' + SR._version);
+         SR._version === 'SR-V2-STAGE6' || SR._version === 'SR-V2-STAGE12' ||
+         SR._version === 'SR-V2-STAGE13',
+    'Expected SR-V2-STAGE4/5/6/12/13, got: ' + SR._version);
 });
 
 test('Status shows all stage 4 modules connected', function () {

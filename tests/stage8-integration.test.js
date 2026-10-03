@@ -138,8 +138,8 @@ test('ShadowReaper loads with correct Stage build tag', function () {
   assert(global.ShadowReaper, 'ShadowReaper not loaded');
   var v = global.ShadowReaper._version;
   assert(
-    v === 'SR-V2-STAGE12' || v === 'SR-V2-STAGE6' || v === 'SR-V2-STAGE5' || v === 'SR-V2-STAGE4',
-    'Expected SR-V2-STAGE4/5/6/12, got: ' + v);
+    v === 'SR-V2-STAGE13' || v === 'SR-V2-STAGE12' || v === 'SR-V2-STAGE6' || v === 'SR-V2-STAGE5' || v === 'SR-V2-STAGE4',
+    'Expected SR-V2-STAGE4/5/6/12/13, got: ' + v);
 });
 
 test('ShadowReaper initializes successfully', function () {

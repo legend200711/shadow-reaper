@@ -654,7 +654,36 @@
   function _buildMessages(userMessage, opts) {
     opts = opts || {};
 
-    var systemParts = [SYSTEM_PROMPT];
+    // ── Dynamic system prompt (assistant name + personality) ─────────────────
+    // The base SYSTEM_PROMPT is always included. Name and personality addendum
+    // are injected dynamically so changing the assistant profile never rebuilds
+    // the model — only the system message changes per request.
+    var assistantName = opts.assistantName || 'Shadow';
+    var basePrompt = SYSTEM_PROMPT;
+
+    // If the selected assistant name is different from "Shadow", tell
+    // the model to present itself as that name in conversation.
+    // Internally it is still Shadow Reaper — the personality is unchanged.
+    if (assistantName && assistantName !== 'Shadow') {
+      basePrompt = basePrompt +
+        ' Your current conversational name is "' + assistantName +
+        '". Present yourself as ' + assistantName + ' when asked your name, ' +
+        'but your intelligence, personality, and capabilities are Shadow Reaper.';
+    }
+
+    // Inject personality addendum if available
+    var personalityAddendum = '';
+    if (opts.personalityCtx && global.SRPersonality &&
+        typeof global.SRPersonality.getPersonalityPromptAddendum === 'function') {
+      try {
+        personalityAddendum = global.SRPersonality.getPersonalityPromptAddendum(opts.personalityCtx);
+      } catch (_) {}
+    }
+    if (personalityAddendum) {
+      basePrompt = basePrompt + ' ' + personalityAddendum;
+    }
+
+    var systemParts = [basePrompt];
 
     // ── Project / topic context ──────────────────────────────────────────────
     if (opts.projectName) {
