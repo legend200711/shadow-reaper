@@ -61,6 +61,7 @@ var SUITES = [
   { name: 'inference-runtime',     file: 'inference-runtime.test.js' },
   { name: 'hosted-inference',      file: 'hosted-inference.test.js' },
   { name: 'pipeline-live',         file: 'pipeline-live-test.js' },
+  { name: 'api-first',             file: 'api-first.test.js' },
 ];
 
 var TESTS_DIR = __dirname;

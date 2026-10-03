@@ -91,7 +91,13 @@
     // API endpoint paths (never hardcoded elsewhere in the codebase)
     endpoints: {
       health:            '/api/v1/health',
-      inference:         '/api/v1/inference',
+      // ── API-FIRST conversation endpoints ────────────────────────────────────
+      chat:              '/api/v1/chat',          // PRIMARY conversation endpoint
+      identity:          '/api/v1/identity',      // device identity management (no login)
+      identityRevoke:    '/api/v1/identity/revoke',
+      clearData:         '/api/v1/clear-data',    // clear user's personal Shadow data
+      // ── Legacy / supplemental endpoints ─────────────────────────────────────
+      inference:         '/api/v1/inference',     // direct inference (used by SRInferenceRuntime)
       weather:           '/api/v1/weather',
       electronics:       '/api/v1/research/electronics',
       memory:            '/api/v1/memory',

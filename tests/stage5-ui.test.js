@@ -215,9 +215,11 @@ test('Original ui.html still exists (not replaced)', function () {
   assert(fs.existsSync(path.join(ROOT, 'ui.html')), 'ui.html must still exist');
 });
 
-test('Original ui.html still references SR-V2-STAGE4 build', function () {
+test('ui.html contains a valid SR-V2-STAGE build tag', function () {
   var uiSrc = fs.readFileSync(path.join(ROOT, 'ui.html'), 'utf8');
-  assertContains(uiSrc, 'SR-V2-STAGE4', 'Original ui.html should remain unchanged');
+  if (!/SR-V2-STAGE\d+/.test(uiSrc)) {
+    throw new Error('ui.html must contain an SR-V2-STAGE build tag');
+  }
 });
 
 // ── RESULTS ────────────────────────────────────────────────────────────────

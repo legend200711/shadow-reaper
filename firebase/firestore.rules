@@ -81,6 +81,17 @@ service cloud.firestore {
       allow read, write: if isOwner(uid) && noForbiddenFields();
     }
 
+    // ── Shadow Device Sessions ────────────────────────────────────────────────
+    // Device token records used by API-first identity (POST /api/v1/identity).
+    // Only the Cloud Worker's service account accesses this collection.
+    // Client-side code NEVER touches this directly.
+    // The uid pattern here matches the server-derived uid (sr_<hash>).
+    // Rules use the Admin SDK path — access is via service account (bypasses rules),
+    // but we explicitly deny client access here for defense-in-depth.
+    match /shadowDevices/{uid} {
+      allow read, write: if false;  // server-only via Admin SDK service account
+    }
+
     // ── Shared Knowledge ─────────────────────────────────────────────────────
     // Authenticated users can READ approved public knowledge.
     // Only server-verified Founders can WRITE.

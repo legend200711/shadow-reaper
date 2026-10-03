@@ -192,9 +192,51 @@ function extractBearer(headerValue) {
   const parts = headerValue.trim().split(/\s+/);
   if (parts.length !== 2 || parts[0].toLowerCase() !== 'bearer') return null;
   const token = parts[1];
-  // Firebase ID tokens are typically 800–1200 chars; allow up to 4096
+  // Firebase ID tokens are typically 800–1200 chars; allow up to 4096.
+  // Shadow device tokens are exactly 64 hex chars.
   if (!token || token.length < 20 || token.length > 4096) return null;
   return token;
 }
 
-export { verifyFirebaseIdToken, extractBearer };
+// ─── Shadow Device Token Verification ────────────────────────────────────────
+
+/**
+ * Verify a Shadow API device token (64-char hex) against Firestore.
+ *
+ * Device tokens are issued by POST /api/v1/identity and stored hashed.
+ * The uid is derived from the token hash.
+ *
+ * @param {string} token        - Raw 64-char hex device token
+ * @param {object} adminClient  - Firebase admin client
+ * @returns {Promise<{ ok: boolean, uid?: string, reason?: string }>}
+ */
+async function verifyDeviceToken(token, adminClient) {
+  if (!token || typeof token !== 'string' || token.length !== 64 || !/^[0-9a-f]+$/.test(token)) {
+    return { ok: false, reason: 'Invalid device token format.' };
+  }
+
+  try {
+    // Hash the presented token
+    const enc  = new TextEncoder();
+    const buf  = await crypto.subtle.digest('SHA-256', enc.encode(token));
+    const bytes = new Uint8Array(buf);
+    const hash  = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+    const uid   = 'sr_' + hash.slice(0, 28);
+
+    const doc = await adminClient.get(`shadowDevices/${uid}`);
+    if (!doc || !doc.data) {
+      return { ok: false, reason: 'Device not found.' };
+    }
+    if (doc.data.tokenHash !== hash) {
+      return { ok: false, reason: 'Token mismatch.' };
+    }
+    if (doc.data.active === false) {
+      return { ok: false, reason: 'Device token revoked.' };
+    }
+    return { ok: true, uid };
+  } catch (_) {
+    return { ok: false, reason: 'Token verification error.' };
+  }
+}
+
+export { verifyFirebaseIdToken, verifyDeviceToken, extractBearer };

@@ -34,7 +34,7 @@
 // Transformers.js into IndexedDB/Cache Storage under their own namespaces)
 // are managed independently so an app-shell update never forces a re-download
 // of the ~200-600MB model weights.
-const CACHE_VERSION = 'sr-shell-v9';
+const CACHE_VERSION = 'sr-shell-v11';
 
 // Inference runtime model assets use a separate cache namespace.
 // Bumping this version forces a re-download of model weights on next session.
@@ -59,6 +59,8 @@ const APP_SHELL = [
   BASE + '/icons/icon-512.png',
   BASE + '/icons/apple-touch-icon.png',
   // Core JS modules (application logic)
+  BASE + '/config/shadow-config.js',         // central endpoint config (API-first)
+  BASE + '/sr-shadow-api-client.js',         // API-first primary conversation client
   BASE + '/shadow-reaper.js',
   BASE + '/sr-auth-ui.js',
   BASE + '/sr-pwa-state.js',

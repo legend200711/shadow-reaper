@@ -1564,8 +1564,14 @@ body::before {
 <!-- Cloud API client (must load after sr-auth-ui.js and shadow-config.js) -->
 <!-- sr-cloud-api.js provides SRCloudAPI — offline queue + Cloudflare Worker sync -->
 <script src="./sr-cloud-api.js"></script>
+
+<!-- Shadow API Client — PRIMARY conversation path (API-first) -->
+<!-- Routes all conversations through MY Shadow API as the stable backbone. -->
+<!-- Provides invisible device identity (no login UI). -->
+<script src="./sr-shadow-api-client.js"></script>
+
 <script>
-/* ── Shadow Reaper Cloud API — Configuration ───────────────────────────────
+/* ── Shadow Reaper Cloud API + Shadow API Client — Configuration ────────────
    Worker URL comes from config/shadow-config.js (single source of truth).
    SRConfig auto-detects environment: localhost → dev Worker, else → production Worker.
    Shadow works fully offline if the Worker is down.
@@ -1583,13 +1589,18 @@ body::before {
   if (window.SRCloudAPI && workerUrl) {
     window.SRCloudAPI.configure({ workerUrl: workerUrl });
   }
+
+  // Configure the API-first client (same Worker URL — same backend)
+  if (window.SRShadowAPIClient && workerUrl) {
+    window.SRShadowAPIClient.configure({ workerUrl: workerUrl });
+  }
 })();
 </script>
 
 <script>
 /* ─────────────────────────────────────────────────────────────────────────
    SHADOW REAPER — SHADOW EDITION UI
-   Build: SR-V2-STANDALONE-UI-3
+   Build: SR-V2-STANDALONE-UI-4 (API-first)
 
    ACCESS MODEL:
    - NO login, NO registration, NO email, NO password required
@@ -1614,6 +1625,7 @@ body::before {
   var SRAuth      = window.SRAuthUI;
   var SRHist      = window.SNXShadowConvHistory;
   var SRFb        = window.SRFirebaseAdapter;
+  var SRAPIClient = window.SRShadowAPIClient;  // API-first client — primary conversation path
 
   // ── DOM refs ─────────────────────────────────────────────────────────────
   var $conv         = document.getElementById('srConversation');
@@ -1639,10 +1651,11 @@ body::before {
   var $tTTS         = document.getElementById('srToggleTTS');
 
   // ── State ─────────────────────────────────────────────────────────────────
-  var _isProcessing = false;
-  var _isListening  = false;
-  var _msgCount     = 0;
-  var _sessionMsgs  = [];  // [{role,text}] — in-memory session buffer
+  var _isProcessing   = false;
+  var _isListening    = false;
+  var _msgCount       = 0;
+  var _sessionMsgs    = [];   // [{role,text}] — in-memory session buffer
+  var _lastGeneration = 'unknown';  // 'hosted'|'local-gpu'|'local-cpu'|'emergency'
 
   // ── FIRST LAUNCH SETUP ───────────────────────────────────────────────────
   var SR_SETUP_KEY = 'srShadowEditionSetupDone';
@@ -2035,6 +2048,36 @@ body::before {
     _chip('schipVoice',       s.voiceConnected,       'Voice');
     _chip('schipKnowledge',   s.knowledgeConnected,   'Knowledge');
     _chip('schipTranslation', s.translationConnected, 'Translate');
+
+    // ── Generation chip — shows what ACTUALLY generated the response ──────────
+    // Never says "Local" just because Language Foundation runs locally.
+    var genChip = document.getElementById('schipGeneration');
+    if (genChip) {
+      if (_lastGeneration === 'hosted') {
+        genChip.textContent = 'Hosted';
+        genChip.className = 'sr-chip on';
+      } else if (_lastGeneration === 'local-gpu') {
+        genChip.textContent = 'Local GPU';
+        genChip.className = 'sr-chip warn';
+      } else if (_lastGeneration === 'local-cpu') {
+        genChip.textContent = 'Local CPU';
+        genChip.className = 'sr-chip warn';
+      } else if (_lastGeneration === 'emergency') {
+        genChip.textContent = 'Emergency';
+        genChip.className = 'sr-chip off';
+      } else {
+        genChip.textContent = 'Generation';
+        genChip.className = 'sr-chip';
+      }
+    }
+
+    // ── Shadow API connection chip ─────────────────────────────────────────────
+    var apiChip = document.getElementById('schipShadowAPI');
+    if (apiChip) {
+      var apiReady = SRAPIClient && SRAPIClient.isConfigured();
+      apiChip.textContent = 'Shadow API';
+      apiChip.className = 'sr-chip ' + (apiReady ? 'on' : 'off');
+    }
   }
 
   function _chip(id, on, label) {
@@ -2131,7 +2174,7 @@ body::before {
     requestAnimationFrame(function () { $conv.scrollTop = $conv.scrollHeight; });
   }
 
-  // ── SEND ──────────────────────────────────────────────────────────────────
+  // ── SEND — API-first with local fallback ──────────────────────────────────
   function _send(text) {
     if (!text || !text.trim() || _isProcessing) return;
     var msg = text.trim();
@@ -2144,7 +2187,73 @@ body::before {
     _appendMessage('user', msg);
     _showTyping();
 
+    // ── PRIMARY PATH: My Shadow API (hosted) ────────────────────────────────
+    // ALL conversations go through MY Shadow API as the permanent backbone.
+    // The server handles: memory, history, projects, personality, inference.
+    // The client never independently coordinates these backend systems.
+    if (SRAPIClient && SRAPIClient.isConfigured() && SRAPIClient.isOnline()) {
+      SRAPIClient.ask(msg, function (apiErr, apiResult) {
+        if (!apiErr && apiResult && apiResult.text) {
+          // ── Hosted response received ───────────────────────────────────────
+          _lastGeneration = 'hosted';  // Workers AI generated this response
+          _hideTyping();
+          _appendMessage('sr', apiResult.text);
+          _isProcessing = false;
+          _setStatus('Ready', 'ready');
+          $sendBtn.disabled = $input.value.trim() === '';
+          _updateStatusChips();
+
+          // Keep local pipeline context in sync with Language Foundation
+          // so SRContext / SRConversation stay accurate for LF analysis
+          try {
+            if (window.SRConversation) {
+              window.SRConversation.addTurn('user',      msg, 'API', 'neutral');
+              window.SRConversation.addTurn('assistant', apiResult.text, null, null);
+            }
+            if (window.SRContext) {
+              window.SRContext.update({ intent: 'API', tone: 'neutral', entities: {} }, msg);
+            }
+          } catch (_) {}
+
+          if (SRVoice && SRVoice.isTTSEnabled()) {
+            var convSessH = window.SRConvSession;
+            if (convSessH) convSessH.onSpeakingStart(apiResult.text);
+            SRVoice.speak(apiResult.text, function () {
+              if (convSessH) convSessH.onSpeakingEnd();
+            }, function () {
+              if (convSessH) convSessH.onSpeakingError();
+            });
+          }
+          return;
+        }
+
+        // API failed or unavailable — fall back to local ShadowReaper pipeline
+        console.warn('[SR-UI] API request failed, using local pipeline:', apiErr && apiErr.message);
+        _fallbackToLocal(msg);
+      });
+      return;
+    }
+
+    // ── FALLBACK PATH: Local ShadowReaper pipeline ─────────────────────────
+    // Used when: offline, API unavailable, or not yet configured.
+    _fallbackToLocal(msg);
+  }
+
+  function _fallbackToLocal(msg) {
     SR.ask(msg, function (response) {
+      // Determine actual generation source from local pipeline
+      var localStatus = SR.getStatus();
+      var activeRuntime = localStatus.ACTIVE_INFERENCE_RUNTIME || '';
+      if (activeRuntime.indexOf('webgpu') !== -1) {
+        _lastGeneration = 'local-gpu';
+      } else if (activeRuntime.indexOf('cpu') !== -1) {
+        _lastGeneration = 'local-cpu';
+      } else if (activeRuntime.indexOf('shadow-api') !== -1) {
+        _lastGeneration = 'hosted';   // hosted via SRInferenceRuntime
+      } else {
+        _lastGeneration = 'emergency';
+      }
+
       _hideTyping();
       _appendMessage('sr', response);
       _isProcessing = false;
@@ -2153,16 +2262,12 @@ body::before {
       _updateStatusChips();
 
       if (SRVoice && SRVoice.isTTSEnabled()) {
-        // ONE response → ONE TTS speak. The same text is both displayed and spoken.
-        // Notify conversation session that speaking is starting.
-        var convSess = window.SRConvSession;
-        if (convSess) convSess.onSpeakingStart(response);
+        var convSessL = window.SRConvSession;
+        if (convSessL) convSessL.onSpeakingStart(response);
         SRVoice.speak(response, function () {
-          // TTS finished — notify session so it transitions back to LISTENING
-          if (convSess) convSess.onSpeakingEnd();
+          if (convSessL) convSessL.onSpeakingEnd();
         }, function () {
-          // TTS error — graceful recovery
-          if (convSess) convSess.onSpeakingError();
+          if (convSessL) convSessL.onSpeakingError();
         });
       }
     });
@@ -2307,20 +2412,28 @@ body::before {
   // New conversation
   document.getElementById('srNewConvoBtn').addEventListener('click', function () {
     SR.newConversation();
+    if (SRAPIClient) SRAPIClient.newConversation();
+    _lastGeneration = 'unknown';
     _appendDivider('New conversation');
     _setStatus('Ready', 'ready');
     _sessionMsgs = [];
+    _updateStatusChips();
   });
 
   // Nav: new conversation (desktop + mobile)
   document.getElementById('srNavNewConvo').addEventListener('click', function () {
     SR.newConversation();
+    if (SRAPIClient) SRAPIClient.newConversation();
+    _lastGeneration = 'unknown';
     _appendDivider('New conversation');
     _setStatus('Ready', 'ready');
     _sessionMsgs = [];
+    _updateStatusChips();
   });
   document.getElementById('srMobileNavNewConvo').addEventListener('click', function () {
     SR.newConversation();
+    if (SRAPIClient) SRAPIClient.newConversation();
+    _lastGeneration = 'unknown';
     _appendDivider('New conversation');
     _sessionMsgs = [];
     _closeSidebars();
@@ -2365,9 +2478,12 @@ body::before {
   // New conversation (settings panel)
   document.getElementById('srClearHistoryBtn').addEventListener('click', function () {
     SR.newConversation();
+    if (SRAPIClient) SRAPIClient.newConversation();
+    _lastGeneration = 'unknown';
     _appendDivider('New conversation started');
     _sessionMsgs = [];
     _closeSidebars();
+    _updateStatusChips();
   });
 
   // Clear My Shadow Data — clears all local and Firestore data (no auth required)

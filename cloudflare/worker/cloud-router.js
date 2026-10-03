@@ -2,7 +2,7 @@
  * cloudflare/worker/cloud-router.js
  * Shadow Reaper Cloud API — Request Router
  *
- * Build: SR-CLOUD-API-1
+ * Build: SR-CLOUD-API-2 (API-first migration: chat, identity, clear-data)
  *
  * Routes all /api/v1/* requests to the appropriate cloud handler.
  * Framework-agnostic: works inside the Cloudflare Worker runtime only
@@ -27,7 +27,7 @@
 'use strict';
 
 import { createAdminClient }        from './lib/firebase-admin.js';
-import { verifyFirebaseIdToken, extractBearer } from './lib/cloud-auth.js';
+import { verifyFirebaseIdToken, verifyDeviceToken, extractBearer } from './lib/cloud-auth.js';
 import { buildError, statusFor }    from './lib/cloud-errors.js';
 import { check as rateCheck }       from './lib/cloud-rate-limiter.js';
 import { logRequest, logFirebaseFailure, logAuthFailure, logRateLimit } from './lib/cloud-logger.js';
@@ -46,6 +46,14 @@ import { handleElectronicsResearch } from './routes/cloud-electronics.js';
 
 // ── Inference route (Build: SR-CLOUD-INFERENCE-STUB-1) ───────────────────────
 import { handleInference }          from './routes/cloud-inference.js';
+
+// ── API-first routes (Build: SR-CLOUD-API-2) ─────────────────────────────────
+// Primary conversation endpoint — the stable doorway into Shadow Reaper
+import { handleChat }               from './routes/cloud-chat.js';
+// Device identity management — no visible login
+import { handleIdentity, handleRevokeIdentity } from './routes/cloud-identity.js';
+// Clear My Shadow Data
+import { handleClearData }          from './routes/cloud-clear-data.js';
 
 // ─── Request ID ───────────────────────────────────────────────────────────────
 
@@ -80,8 +88,23 @@ function _matchPath(pattern, path) {
 // ─── Route table ──────────────────────────────────────────────────────────────
 
 const ROUTES = [
-  // Health (public)
+  // ── Health (public) ───────────────────────────────────────────────────────
   { method: 'GET',    pattern: '/api/v1/health',                  public: true,  handler: (b, ctx) => handleHealth(ctx) },
+
+  // ── PRIMARY CONVERSATION ENDPOINT (API-first) ─────────────────────────────
+  // POST /api/v1/chat — The stable doorway into Shadow Reaper.
+  // Supports both Firebase ID tokens and Shadow device tokens.
+  // Auth optional: falls back to session-only mode without memory persistence.
+  { method: 'POST',   pattern: '/api/v1/chat',                    authOptional: true, handler: (b, ctx) => handleChat(b, ctx) },
+
+  // ── Device Identity (API-first — no visible login) ────────────────────────
+  // Establishes or restores a device session automatically.
+  { method: 'POST',   pattern: '/api/v1/identity',                public: true,  handler: (b, ctx) => handleIdentity(b, ctx) },
+  // Revoke device session (requires auth)
+  { method: 'POST',   pattern: '/api/v1/identity/revoke',         handler: (b, ctx) => handleRevokeIdentity(b, ctx) },
+
+  // ── Clear My Shadow Data (requires auth) ──────────────────────────────────
+  { method: 'POST',   pattern: '/api/v1/clear-data',              handler: (b, ctx) => handleClearData(b, ctx) },
 
   // ── Inference (Build: SR-CLOUD-INFERENCE-STUB-1) ─────────────────────────
   // Public: anonymous access allowed (stub returns 503 until backend deployed)
@@ -171,41 +194,81 @@ async function dispatch(request, env, workerCtx) {
   }
 
   // ── Authentication ─────────────────────────────────────────────────────────
+  // Supports two auth mechanisms:
+  //   1. Firebase Anonymous ID token (existing clients — backward compatible)
+  //   2. Shadow device token (API-first — 64-char hex, issued by /api/v1/identity)
+  //
+  // authOptional routes (e.g. /api/v1/chat): auth attempted but failure doesn't
+  // block the request — the handler runs without uid/adminClient (session-only).
   let uid         = null;
   let adminClient = null;
 
-  if (!matchedRoute.public) {
+  const isPublic   = !!matchedRoute.public;
+  const isOptional = !!matchedRoute.authOptional;
+
+  if (!isPublic) {
     const authHeader = request.headers.get('authorization');
     const token      = extractBearer(authHeader);
 
     if (!token) {
-      logAuthFailure(requestId, 'missing_token');
-      logRequest({ requestId, method, path, status: 401, latencyMs: Date.now() - startMs, event: 'auth_failure' });
-      return { status: 401, body: buildError('UNAUTHORIZED', requestId), requestId };
-    }
+      if (isOptional) {
+        // No token — run without identity (session-only mode for chat)
+      } else {
+        logAuthFailure(requestId, 'missing_token');
+        logRequest({ requestId, method, path, status: 401, latencyMs: Date.now() - startMs, event: 'auth_failure' });
+        return { status: 401, body: buildError('UNAUTHORIZED', requestId), requestId };
+      }
+    } else {
+      // Try to build admin client first (needed for device token verification)
+      let tempAdmin = null;
+      const projectId = env.FIREBASE_PROJECT_ID;
 
-    const projectId = env.FIREBASE_PROJECT_ID;
-    if (!projectId) {
-      logRequest({ requestId, method, path, status: 503, latencyMs: Date.now() - startMs, event: 'config_error' });
-      return { status: 503, body: buildError('SERVICE_UNAVAILABLE', requestId, 'API not configured.'), requestId };
-    }
+      if (projectId) {
+        try {
+          tempAdmin = await createAdminClient(env);
+        } catch (_) {
+          // Admin client creation failed — only a problem for protected routes
+        }
+      }
 
-    let authResult;
-    try {
-      authResult = await verifyFirebaseIdToken(token, projectId);
-    } catch (e) {
-      logAuthFailure(requestId, 'verify_error');
-      logRequest({ requestId, method, path, status: 503, latencyMs: Date.now() - startMs, event: 'auth_error' });
-      return { status: 503, body: buildError('SERVICE_UNAVAILABLE', requestId), requestId };
-    }
+      let authResult = null;
 
-    if (!authResult.ok) {
-      logAuthFailure(requestId, authResult.reason || 'invalid_token');
-      logRequest({ requestId, method, path, status: 401, latencyMs: Date.now() - startMs, event: 'auth_failure' });
-      return { status: 401, body: buildError('UNAUTHORIZED', requestId), requestId };
-    }
+      // ── Try Shadow device token (64 hex chars) ──────────────────────────────
+      if (token.length === 64 && /^[0-9a-f]+$/.test(token) && tempAdmin) {
+        authResult = await verifyDeviceToken(token, tempAdmin);
+      }
 
-    uid = authResult.uid;
+      // ── Try Firebase ID token (JWT format — 3 dot-separated parts) ──────────
+      if (!authResult || !authResult.ok) {
+        if (!projectId) {
+          if (!isOptional) {
+            logRequest({ requestId, method, path, status: 503, latencyMs: Date.now() - startMs, event: 'config_error' });
+            return { status: 503, body: buildError('SERVICE_UNAVAILABLE', requestId, 'API not configured.'), requestId };
+          }
+        } else {
+          try {
+            authResult = await verifyFirebaseIdToken(token, projectId);
+          } catch (e) {
+            if (!isOptional) {
+              logAuthFailure(requestId, 'verify_error');
+              logRequest({ requestId, method, path, status: 503, latencyMs: Date.now() - startMs, event: 'auth_error' });
+              return { status: 503, body: buildError('SERVICE_UNAVAILABLE', requestId), requestId };
+            }
+            authResult = { ok: false, reason: 'verify_error' };
+          }
+        }
+      }
+
+      if (authResult && authResult.ok) {
+        uid = authResult.uid;
+        // Reuse tempAdmin if we already created it (avoid double SA OAuth call)
+        adminClient = tempAdmin;
+      } else if (!isOptional) {
+        logAuthFailure(requestId, (authResult && authResult.reason) || 'invalid_token');
+        logRequest({ requestId, method, path, status: 401, latencyMs: Date.now() - startMs, event: 'auth_failure' });
+        return { status: 401, body: buildError('UNAUTHORIZED', requestId), requestId };
+      }
+    }
   }
 
   // ── Rate limiting ──────────────────────────────────────────────────────────
@@ -219,14 +282,35 @@ async function dispatch(request, env, workerCtx) {
     return { status: 429, body: errBody, requestId };
   }
 
-  // ── Firebase admin client (for protected routes) ───────────────────────────
-  if (!matchedRoute.public) {
+  // ── Firebase admin client (for protected routes not yet initialized) ───────
+  // For authOptional routes: adminClient may already be set from auth step above.
+  // For protected routes: we need an admin client if auth succeeded.
+  if (!matchedRoute.public && !isOptional && !adminClient) {
     try {
       adminClient = await createAdminClient(env);
     } catch (e) {
       logFirebaseFailure(requestId, 'init', e.constructor.name);
       logRequest({ requestId, method, path, status: 503, latencyMs: Date.now() - startMs, event: 'firebase_failure' });
       return { status: 503, body: buildError('FIREBASE_UNAVAILABLE', requestId), requestId };
+    }
+  }
+
+  // For authOptional routes: if we have a uid but no adminClient yet, create one
+  if (isOptional && uid && !adminClient) {
+    try {
+      adminClient = await createAdminClient(env);
+    } catch (_) {
+      // Non-fatal for optional-auth routes — handler will run without persistence
+    }
+  }
+
+  // For public routes that still benefit from adminClient (e.g. /api/v1/identity):
+  // Try to attach an admin client — handlers that don't need it simply ignore it.
+  if (isPublic && !adminClient && (path === '/api/v1/identity')) {
+    try {
+      adminClient = await createAdminClient(env);
+    } catch (_) {
+      // Non-fatal — identity handler degrades gracefully to session-only
     }
   }
 

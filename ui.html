@@ -636,11 +636,17 @@
     <div class="sr-settings-body">
 
       <!-- Status -->
-      <div class="sr-settings-label">Status</div>
+      <div class="sr-settings-label">Shadow Connection</div>
       <div class="sr-status-chips" id="srStatusChips">
+        <span class="sr-chip" id="schipShadowAPI">Shadow API</span>
         <span class="sr-chip" id="schipHistory">History</span>
         <span class="sr-chip" id="schipMemory">Memory</span>
         <span class="sr-chip" id="schipAdaptive">Adaptive</span>
+      </div>
+
+      <div class="sr-settings-label">Generation</div>
+      <div class="sr-status-chips">
+        <span class="sr-chip" id="schipGeneration">Generation</span>
         <span class="sr-chip" id="schipVoice">Voice</span>
         <span class="sr-chip" id="schipKnowledge">Knowledge</span>
         <span class="sr-chip" id="schipTranslation">Translation</span>
@@ -715,8 +721,8 @@
 
       <!-- Build info -->
       <div style="margin-top:16px;font-size:10px;color:var(--text-dim);text-align:center;line-height:1.8">
-        Shadow Reaper V2 · SR-V2-STAGE4<br>
-        Model-independent · No hosted AI
+        Shadow Reaper V2 · SR-V2-STAGE13<br>
+        API-First Architecture · My Shadow API
       </div>
 
     </div>
@@ -725,19 +731,25 @@
 </div><!-- /sr-wrapper -->
 
 <!-- ─── SCRIPTS ─────────────────────────────────────────────────────────────── -->
-<!-- Standalone infrastructure — must load before persistence modules -->
+<!-- 1. Configuration — single canonical source of worker URLs -->
+<script src="./config/shadow-config.js"></script>
+
+<!-- 2. Firebase infrastructure (anonymous auth — no login UI) -->
 <script src="./firebase/firebase-config.js"></script>
 <script src="./config/environment.js"></script>
 <script src="./security/security-policy.js"></script>
 <script src="./adapters/firebase-adapter.js"></script>
 <script src="./adapters/cloudflare-adapter.js"></script>
 
-<!-- Standalone persistence modules — live inside this project -->
+<!-- 3. Identity — automatic anonymous auth (no login UI) -->
+<script src="./sr-auth-ui.js"></script>
+
+<!-- 4. Standalone persistence modules -->
 <script src="./snx-shadow-conv-history.js"></script>
 <script src="./snx-shadow-memory.js"></script>
 <script src="./snx-shadow-adaptive.js"></script>
 
-<!-- Shadow Reaper V2 core -->
+<!-- 5. Shadow Reaper V2 core -->
 <script src="core/adaptive-brain.js"></script>
 <script src="core/understanding-engine.js"></script>
 <script src="core/context-engine.js"></script>
@@ -746,7 +758,7 @@
 <script src="core/persistence-bridge.js"></script>
 <script src="core/local-model.js"></script>
 
-<!-- Stage 4 modules -->
+<!-- 6. Stage 4 modules -->
 <script src="knowledge/knowledge-engine.js"></script>
 <script src="translation/translation-engine.js"></script>
 <script src="voice/voice-engine.js"></script>
@@ -754,20 +766,28 @@
 <script src="language/lexicon/sr-word-definitions.js"></script>
 <script src="language/lexicon/sr-lexicon.js"></script>
 
-<!-- Main entry point -->
+<!-- 7. Shadow Reaper main intelligence (local pipeline fallback) -->
 <script src="shadow-reaper.js"></script>
+
+<!-- 8. Cloud data API client (memory/history/projects sync) -->
+<script src="./sr-cloud-api.js"></script>
+
+<!-- 9. Shadow API Client — PRIMARY conversation path (API-first) -->
+<!-- Routes all conversations through MY Shadow API as the backbone -->
+<script src="./sr-shadow-api-client.js"></script>
 
 <script>
   /* ─────────────────────────────────────────────────────────────
-     SHADOW REAPER V2 UI — SR-V2-UI-1
+     SHADOW REAPER V2 UI — SR-V2-UI-2 (API-first)
      Mobile-first. XSS-safe. No innerHTML from user data.
      All user content is rendered via textContent only.
   ───────────────────────────────────────────────────────────────*/
   (function () {
     'use strict';
 
-    var SR         = window.ShadowReaper;
-    var SRVoice    = window.SRVoice;
+    var SR            = window.ShadowReaper;
+    var SRVoice       = window.SRVoice;
+    var SRAPIClient   = window.SRShadowAPIClient;  // API-first client
 
     // ── DOM refs ──────────────────────────────────────────────────
     var $conv       = document.getElementById('srConversation');
@@ -788,9 +808,10 @@
     var $tTTS      = document.getElementById('srToggleTTS');
 
     // State
-    var _isProcessing = false;
-    var _isListening  = false;
-    var _msgCount     = 0;
+    var _isProcessing    = false;
+    var _isListening     = false;
+    var _msgCount        = 0;
+    var _lastGeneration  = 'unknown';  // 'hosted' | 'local-gpu' | 'local-cpu' | 'emergency'
 
     // ── INIT ─────────────────────────────────────────────────────
     function init() {
@@ -799,12 +820,9 @@
         return;
       }
 
-      // Check standalone Firebase adapter (no SNS globals needed).
-      // Anonymous auth is automatic — "not authenticated yet" is a normal
-      // transient state, not a permanent condition requiring user action.
-      if (!window.SRFirebaseAdapter || !window.SRFirebaseAdapter.isAuthenticated ||
-          !window.SRFirebaseAdapter.isAuthenticated()) {
-        _setStatus('Session mode', 'warn');
+      // Initialize SRAuthUI — automatic anonymous session, no login UI
+      if (window.SRAuthUI) {
+        window.SRAuthUI.init();
       }
 
       var ok = SR.init();
@@ -813,7 +831,13 @@
         return;
       }
 
-      _setStatus('Ready', 'ready');
+      // Determine initial connection status
+      if (SRAPIClient && SRAPIClient.isConfigured()) {
+        _setStatus('Shadow API · Ready', 'ready');
+      } else {
+        _setStatus('Ready', 'ready');
+      }
+
       _updateStatusChips();
       _syncToggles();
     }
@@ -824,6 +848,11 @@
       $statusLabel.className = 'sr-header-status' + (cls ? ' ' + cls : '');
     }
 
+    /**
+     * Update status chips.
+     * GENERATION chip shows Hosted/Local accurately based on actual response source.
+     * Never says "Local" just because Language Foundation is running locally.
+     */
     function _updateStatusChips() {
       var s = SR.getStatus();
       _chip('schipHistory',    s.historyEnabled,    'History');
@@ -832,6 +861,36 @@
       _chip('schipVoice',      s.voiceConnected,    'Voice');
       _chip('schipKnowledge',  s.knowledgeConnected,'Knowledge');
       _chip('schipTranslation',s.translationConnected,'Translate');
+
+      // ── Generation status chip ─────────────────────────────────
+      // Shows WHAT generated the response — not where Language Foundation runs
+      var genChip = document.getElementById('schipGeneration');
+      if (genChip) {
+        if (_lastGeneration === 'hosted') {
+          genChip.textContent = 'Hosted';
+          genChip.className = 'sr-chip on';
+        } else if (_lastGeneration === 'local-gpu') {
+          genChip.textContent = 'Local GPU';
+          genChip.className = 'sr-chip warn';
+        } else if (_lastGeneration === 'local-cpu') {
+          genChip.textContent = 'Local CPU';
+          genChip.className = 'sr-chip warn';
+        } else if (_lastGeneration === 'emergency') {
+          genChip.textContent = 'Emergency';
+          genChip.className = 'sr-chip off';
+        } else {
+          genChip.textContent = 'Generation';
+          genChip.className = 'sr-chip';
+        }
+      }
+
+      // ── Shadow API connection chip ─────────────────────────────
+      var apiChip = document.getElementById('schipShadowAPI');
+      if (apiChip) {
+        var apiReady = SRAPIClient && SRAPIClient.isConfigured();
+        apiChip.textContent = 'Shadow API';
+        apiChip.className = 'sr-chip ' + (apiReady ? 'on' : 'off');
+      }
     }
 
     function _chip(id, on, label) {
@@ -921,7 +980,7 @@
       });
     }
 
-    // ── SEND ─────────────────────────────────────────────────────
+    // ── SEND — API-first with local fallback ─────────────────────
     function _send(text) {
       if (!text || !text.trim() || _isProcessing) return;
 
@@ -935,7 +994,72 @@
       _appendMessage('user', msg);
       _showTyping();
 
+      // ── PRIMARY PATH: My Shadow API (hosted) ──────────────────────
+      // All conversations go through MY Shadow API as the backbone.
+      // Server handles: memory, history, projects, inference.
+      if (SRAPIClient && SRAPIClient.isConfigured() && SRAPIClient.isOnline()) {
+        SRAPIClient.ask(msg, function (apiErr, apiResult) {
+          if (!apiErr && apiResult && apiResult.text) {
+            // ── Hosted response received ────────────────────────────
+            _lastGeneration = 'hosted';  // Workers AI generated this
+            _hideTyping();
+            _appendMessage('sr', apiResult.text);
+            _isProcessing = false;
+            _setStatus('Shadow API · Ready', 'ready');
+            $sendBtn.disabled = $input.value.trim() === '';
+            _updateStatusChips();
+
+            // Also update local pipeline context so Language Foundation stays in sync
+            if (SR && SR.ask) {
+              // Feed turn into local context without triggering another generation
+              // This keeps SRContext / SRConversation in sync for Language Foundation
+              try {
+                if (window.SRConversation) {
+                  window.SRConversation.addTurn('user',      msg, 'API', 'neutral');
+                  window.SRConversation.addTurn('assistant', apiResult.text, null, null);
+                }
+                if (window.SRContext && window.SRLanguage) {
+                  var la = window.SRLanguage.analyze(msg, {});
+                  window.SRContext.update({ intent: 'API', tone: 'neutral', entities: {} }, msg);
+                  window.SRLanguage.initializeContextTurn('user', msg, la);
+                  window.SRLanguage.initializeContextTurn('assistant', apiResult.text, null);
+                }
+              } catch (_) {}
+            }
+
+            if (SRVoice && SRVoice.isTTSEnabled()) {
+              SRVoice.speak(apiResult.text);
+            }
+            return;
+          }
+
+          // API failed — fall back to local ShadowReaper pipeline
+          console.warn('[Shadow UI] API request failed, using local pipeline:', apiErr && apiErr.message);
+          _fallbackToLocal(msg);
+        });
+        return;
+      }
+
+      // ── FALLBACK PATH: Local ShadowReaper pipeline ────────────────
+      // Used when: offline, API unavailable, or not configured.
+      _fallbackToLocal(msg);
+    }
+
+    function _fallbackToLocal(msg) {
       SR.ask(msg, function (response) {
+        // Determine actual generation source from local pipeline
+        var localStatus = SR.getStatus();
+        var activeRuntime = localStatus.ACTIVE_INFERENCE_RUNTIME || '';
+        if (activeRuntime.indexOf('webgpu') !== -1) {
+          _lastGeneration = 'local-gpu';
+        } else if (activeRuntime.indexOf('cpu') !== -1) {
+          _lastGeneration = 'local-cpu';
+        } else if (activeRuntime.indexOf('shadow-api') !== -1) {
+          _lastGeneration = 'hosted';  // Shadow API via inference runtime
+        } else {
+          _lastGeneration = 'emergency';
+        }
+
         _hideTyping();
         _appendMessage('sr', response);
         _isProcessing = false;
@@ -943,7 +1067,6 @@
         $sendBtn.disabled = $input.value.trim() === '';
         _updateStatusChips();
 
-        // TTS — if enabled and voice connected
         if (SRVoice && SRVoice.isTTSEnabled()) {
           SRVoice.speak(response);
         }
@@ -1011,8 +1134,15 @@
 
     document.getElementById('srNewConvoBtn').addEventListener('click', function () {
       SR.newConversation();
+      // Reset API client conversation too
+      if (SRAPIClient) SRAPIClient.newConversation();
+      _lastGeneration = 'unknown';
       _appendDivider('New conversation');
-      _setStatus('Ready', 'ready');
+      if (SRAPIClient && SRAPIClient.isConfigured()) {
+        _setStatus('Shadow API · Ready', 'ready');
+      } else {
+        _setStatus('Ready', 'ready');
+      }
     });
 
     document.getElementById('srSettingsBtn').addEventListener('click', function () {
@@ -1033,6 +1163,8 @@
 
     document.getElementById('srClearHistoryBtn').addEventListener('click', function () {
       SR.newConversation();
+      if (SRAPIClient) SRAPIClient.newConversation();
+      _lastGeneration = 'unknown';
       $settings.classList.remove('open');
       $scrim.classList.remove('visible');
       _appendDivider('New conversation started');
