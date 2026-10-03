@@ -389,45 +389,68 @@
     }
 
     // ── WEATHER ──────────────────────────────────────────────────────────────
+    // PRODUCTION PATH: SRCloudAPI.weather is ALWAYS tried first (Shadow API).
+    // SRWeather.query() is the fallback for offline / unconfigured environments.
+    // SRWeather's location extraction and WMO utilities remain available.
     if (route === ROUTE.WEATHER) {
-      var wx = _weather();
-      if (wx && wx.query) {
-        wx.query(text, function (result) {
-          callback({
-            route:   ROUTE.WEATHER,
-            ok:      !!(result && result.ok),
-            data:    result || null,
-            reason:  result ? (result.reason || 'weather_result') : 'weather_failed',
-            trusted: true,   // Weather data from a known source (Open-Meteo)
-          });
-        });
-      } else {
-        // Fallback: try SRCloudAPI.weather if direct weather module unavailable
-        var capi = _cloudAPI();
-        if (capi && capi.weather && capi.isOnline && capi.isOnline()) {
-          var loc = null;
-          // Simple location extraction for cloud fallback
+      var capi = _cloudAPI();
+      if (capi && capi.weather && capi.isConfigured && capi.isConfigured() &&
+          capi.isOnline && capi.isOnline()) {
+        // Extract location using SRWeather utility if available, else simple pattern
+        var loc = null;
+        var wx = _weather();
+        if (wx && wx._extractLocation) {
+          loc = wx._extractLocation(text);
+        }
+        if (!loc) {
           var locM = text.match(/\b(?:in|for|at)\s+([A-Za-z][A-Za-z\s,\.]{1,40}?)(?:\s*[\?\.,!]|$)/i);
           if (locM && locM[1]) loc = locM[1].trim();
-          capi.weather.query({ location: loc || '' }, function (cloudResult) {
-            if (cloudResult && cloudResult.ok && cloudResult.weather) {
-              callback({
-                route:    ROUTE.WEATHER,
-                ok:       true,
-                data:     { ok: true, formatted: cloudResult.weather.formatted, location: cloudResult.weather.location },
-                reason:   'cloud_weather_result',
-                trusted:  true,
-              });
-            } else {
-              callback({ route: ROUTE.WEATHER, ok: false, data: null, reason: 'weather_unavailable', trusted: true });
-            }
+        }
+        capi.weather.query({ location: loc || '' }, function (cloudResult) {
+          if (cloudResult && cloudResult.ok && cloudResult.weather) {
+            callback({
+              route:    ROUTE.WEATHER,
+              ok:       true,
+              data:     {
+                ok:        true,
+                formatted: cloudResult.weather.formatted,
+                location:  cloudResult.weather.location,
+                cached:    false,
+              },
+              reason:   'cloud_weather_result',
+              trusted:  true,
+            });
+          } else {
+            // Cloud returned an error (location not found, service down, etc.)
+            var cloudErr = (cloudResult && cloudResult.error) ? cloudResult.error.code : 'cloud_weather_failed';
+            callback({
+              route:   ROUTE.WEATHER,
+              ok:      false,
+              data:    null,
+              reason:  cloudErr,
+              trusted: true,
+            });
+          }
+        });
+      } else {
+        // Fallback: SRCloudAPI not configured or offline — try SRWeather directly
+        var wxFallback = _weather();
+        if (wxFallback && wxFallback.query) {
+          wxFallback.query(text, function (result) {
+            callback({
+              route:   ROUTE.WEATHER,
+              ok:      !!(result && result.ok),
+              data:    result || null,
+              reason:  result ? (result.reason || 'weather_result') : 'weather_failed',
+              trusted: true,
+            });
           });
         } else {
           callback({
             route:   ROUTE.WEATHER,
             ok:      false,
             data:    null,
-            reason:  'weather_module_unavailable',
+            reason:  'weather_unavailable',
             trusted: true,
           });
         }

@@ -488,6 +488,12 @@
   //
   // Result is ALWAYS labelled trusted: false.
   // It flows into ShadowReaper pipeline as untrusted context — never raw output.
+  //
+  // AUTH TIMING FIX (SR-CONN-REPAIR-1):
+  //   POST /api/v1/research/electronics requires a valid Firebase auth token.
+  //   Anonymous auth may not be ready at the moment this is called (race on
+  //   first page load). We therefore check SRAuthUI and wait for anonymous
+  //   auth to complete before making the request.  This eliminates the 401.
 
   var research = {
     electronics: function (query, cb) {
@@ -508,7 +514,28 @@
         return;
       }
 
-      _request('POST', '/api/v1/research/electronics', { query: query.trim(), maxResults: 3 }, cb, false);
+      var trimmedQuery = query.trim();
+
+      // ── Auth timing: ensure anonymous identity is ready before the request ──
+      // SRAuthUI.onAuthChange fires when auth has settled (user or null).
+      // If auth is already ready we proceed immediately.
+      // If Firebase is not configured we proceed without a token (server will
+      // return 401 which is handled gracefully by the caller).
+      var authUI = global.SRAuthUI;
+      if (authUI && typeof authUI.onAuthChange === 'function' &&
+          !authUI.isAuthenticated()) {
+        // Auth not yet settled — register a one-time listener
+        var _done = false;
+        authUI.onAuthChange(function () {
+          if (_done) return;
+          _done = true;
+          _request('POST', '/api/v1/research/electronics',
+            { query: trimmedQuery, maxResults: 3 }, cb, false);
+        });
+      } else {
+        _request('POST', '/api/v1/research/electronics',
+          { query: trimmedQuery, maxResults: 3 }, cb, false);
+      }
     },
   };
 

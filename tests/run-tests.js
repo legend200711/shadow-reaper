@@ -67,6 +67,10 @@ var SUITES = [
   { name: 'founder-shadow',        file: 'founder-shadow.test.js' },
   { name: 'conversation-regression', file: 'sr-conversation-regression.test.js' },
   { name: 'knowledge-hosted-connection', file: 'knowledge-hosted-connection.test.js' },
+  // SR-CONN-REPAIR-1 targeted tests
+  { name: 'weather-production',      file: 'sr-weather-production.test.js' },
+  { name: 'electronics-auth',        file: 'sr-electronics-auth.test.js' },
+  { name: 'creator-knowledge',       file: 'sr-creator-knowledge.test.js' },
 ];
 
 var TESTS_DIR = __dirname;
