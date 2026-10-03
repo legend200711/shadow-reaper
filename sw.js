@@ -34,7 +34,7 @@
 // Transformers.js into IndexedDB/Cache Storage under their own namespaces)
 // are managed independently so an app-shell update never forces a re-download
 // of the ~200-600MB model weights.
-const CACHE_VERSION = 'sr-shell-v11';
+const CACHE_VERSION = 'sr-shell-v12';
 
 // Inference runtime model assets use a separate cache namespace.
 // Bumping this version forces a re-download of model weights on next session.
@@ -61,6 +61,7 @@ const APP_SHELL = [
   // Core JS modules (application logic)
   BASE + '/config/shadow-config.js',         // central endpoint config (API-first)
   BASE + '/sr-shadow-api-client.js',         // API-first primary conversation client
+  BASE + '/sr-cloud-api.js',                 // offline queue + Cloudflare Worker sync
   BASE + '/shadow-reaper.js',
   BASE + '/sr-auth-ui.js',
   BASE + '/sr-pwa-state.js',
@@ -101,7 +102,10 @@ const APP_SHELL = [
   BASE + '/voice/sr-conversation-session.js',
   BASE + '/voice/sr-voice-assistant.js',
   BASE + '/sr-feature-registry.js',
+  BASE + '/firebase/sr-env-loader.js',
   BASE + '/firebase/firebase-config.js',
+  BASE + '/platform/sr-native-diagnostics.js',
+  BASE + '/global-learning/sr-global-learning.js',
 
   // ── Language Foundation JS — all local, zero internet required ────────────
   BASE + '/language/tokenizer/tokenizer.js',
@@ -115,6 +119,8 @@ const APP_SHELL = [
   BASE + '/language/lexicon/sr-lexicon.js',
   BASE + '/language/sr-language.js',
   BASE + '/language/sr-number-intelligence.js',
+  BASE + '/language/indexes/sense-index.js',
+  BASE + '/language/sr-comprehension-index.js',
 
   // ── Language Foundation data — ~38MB total; cached once for offline use ───
   // NOTE: wordnet-index.json is ~27MB. It is cached here so that word

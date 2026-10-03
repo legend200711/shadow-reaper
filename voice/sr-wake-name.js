@@ -13,7 +13,9 @@
  *   Shadow Reaper intent pipeline, TTS engine, or Device Action Router.
  *
  * WAKE NAMES (exact set — do not add/remove without authorization):
- *   Salem | Shadow | Elsa | Luna | Pepper | Simba | Rambo | Legend
+ *   Shadow | Ace | Atlas | Aurora | Echo | Elsa | Ember | Ghost | Legend |
+ *   Luna | Midnight | Nova | Onyx | Pepper | Phoenix | Rambo | Raven |
+ *   Salem | Simba | Storm
  *
  * ARCHITECTURE:
  *   Wake phrase detected in transcript
@@ -61,8 +63,12 @@
   var BUILD_ID = 'SR-STANDALONE-WAKE-NAME-2';
 
   // ─── Available wake names (exact list — server of truth) ─────────────────
-  // Order: Shadow first (default), then remaining 7 in alphabetical order
-  var WAKE_NAMES = ['Shadow', 'Elsa', 'Legend', 'Luna', 'Pepper', 'Rambo', 'Salem', 'Simba'];
+  // Order: Shadow first (default), then remaining 19 in alphabetical order
+  var WAKE_NAMES = [
+    'Shadow', 'Ace', 'Atlas', 'Aurora', 'Echo', 'Elsa', 'Ember',
+    'Ghost', 'Legend', 'Luna', 'Midnight', 'Nova', 'Onyx',
+    'Pepper', 'Phoenix', 'Rambo', 'Raven', 'Salem', 'Simba', 'Storm',
+  ];
 
   // ─── Valid voice genders ──────────────────────────────────────────────────
   var VOICE_GENDERS = ['female', 'male'];

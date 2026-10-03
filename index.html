@@ -1230,6 +1230,8 @@ body::before {
             <span class="sr-chip" id="schipVoice">Voice</span>
             <span class="sr-chip" id="schipKnowledge">Knowledge</span>
             <span class="sr-chip" id="schipTranslation">Translate</span>
+            <span class="sr-chip" id="schipGeneration">Generation</span>
+            <span class="sr-chip" id="schipShadowAPI">Shadow API</span>
           </div>
         </div>
 
@@ -1268,6 +1270,17 @@ body::before {
               <input type="checkbox" id="srToggleAdaptive" checked />
               <span class="sr-toggle-track"></span>
             </label>
+          </div>
+        </div>
+
+        <!-- Companion Name / Wake Name -->
+        <div class="sr-settings-section">
+          <div class="sr-settings-label">Companion Name</div>
+          <div style="font-size:11px;color:var(--text-dim);line-height:1.5;margin-bottom:10px;">
+            The name Shadow responds to. Changing it does not reset memory or history.
+          </div>
+          <div class="sr-wake-picker" id="srWakeNamePicker">
+            <!-- populated by JS from SRWakeName.getWakeNames() -->
           </div>
         </div>
 
@@ -1627,15 +1640,16 @@ body::before {
   'use strict';
 
   // ── Module refs ──────────────────────────────────────────────────────────
-  var SR          = window.ShadowReaper;
-  var SRVoice     = window.SRVoice;
-  var SRPlat      = window.SRPlatformDetector;
-  var SRCaps      = window.SRCapabilityManager;
-  var SRWeb       = window.SRWebAdapter;
-  var SRAuth      = window.SRAuthUI;
-  var SRHist      = window.SNXShadowConvHistory;
-  var SRFb        = window.SRFirebaseAdapter;
-  var SRAPIClient = window.SRShadowAPIClient;  // API-first client — primary conversation path
+  var SR            = window.ShadowReaper;
+  var SRVoice       = window.SRVoice;
+  var SRPlat        = window.SRPlatformDetector;
+  var SRCaps        = window.SRCapabilityManager;
+  var SRWeb         = window.SRWebAdapter;
+  var SRAuth        = window.SRAuthUI;
+  var SRHist        = window.SNXShadowConvHistory;
+  var SRFb          = window.SRFirebaseAdapter;
+  var SRAPIClient   = window.SRShadowAPIClient;  // API-first client — primary conversation path
+  var SRWakeNameMod = window.SRWakeName;         // companion name / wake name system
 
   // ── DOM refs ─────────────────────────────────────────────────────────────
   var $conv         = document.getElementById('srConversation');
@@ -1890,6 +1904,55 @@ body::before {
     }
   }
 
+  // ── WAKE NAME PICKER ──────────────────────────────────────────────────────
+  // Renders the companion-name chips in settings and wires selection.
+  // Changing the name does NOT reset memory, history, or adaptation.
+  function _initWakeNamePicker() {
+    var picker = document.getElementById('srWakeNamePicker');
+    if (!picker || !SRWakeNameMod) return;
+
+    var names = SRWakeNameMod.getWakeNames ? SRWakeNameMod.getWakeNames() : [];
+    if (!names.length) return;
+
+    var currentName = SRWakeNameMod.getWakeName ? SRWakeNameMod.getWakeName() : 'Shadow';
+
+    picker.innerHTML = '';
+    names.forEach(function (name) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'sr-wake-chip' + (name === currentName ? ' selected' : '');
+      btn.textContent = name;
+      btn.setAttribute('data-name', name);
+      btn.addEventListener('click', function () {
+        // Update selection chips
+        picker.querySelectorAll('.sr-wake-chip').forEach(function (c) {
+          c.classList.toggle('selected', c.getAttribute('data-name') === name);
+        });
+        // Persist via SRWakeName — does not reset memory/history/adaptation
+        SRWakeNameMod.setWakeName(name, function () {
+          console.log('[SR-UI] Wake name changed to:', name);
+        });
+        // Update header title to reflect companion name
+        var titleEl = document.querySelector('.sr-header-title');
+        if (titleEl) titleEl.textContent = name + ' Reaper';
+      });
+      picker.appendChild(btn);
+    });
+
+    // Load persisted preference and apply to header title
+    SRWakeNameMod.load(function (err, prefs) {
+      if (prefs && prefs.wakeName) {
+        picker.querySelectorAll('.sr-wake-chip').forEach(function (c) {
+          c.classList.toggle('selected', c.getAttribute('data-name') === prefs.wakeName);
+        });
+        var titleEl = document.querySelector('.sr-header-title');
+        if (titleEl && prefs.wakeName !== 'Shadow') {
+          titleEl.textContent = prefs.wakeName + ' Reaper';
+        }
+      }
+    });
+  }
+
   // ── ANONYMOUS SESSION READY ───────────────────────────────────────────────
   // Called once the anonymous Firebase session resolves (or falls back to
   // session-only mode). The UI is already visible at this point — no gating.
@@ -1923,6 +1986,9 @@ body::before {
 
     // Load recent conversations (works with anonymous UID or session-only)
     _loadRecentConversations();
+
+    // Initialize wake name picker (companion name UI in settings)
+    _initWakeNamePicker();
 
     // Show first-launch setup if this is the first time
     _initSetupOverlay();
@@ -2766,7 +2832,12 @@ body::before {
   if ($tHistory)  $tHistory.addEventListener('change',  function () { SR.setHistoryEnabled(this.checked);  _updateStatusChips(); });
   if ($tMemory)   $tMemory.addEventListener('change',   function () { SR.setMemoryEnabled(this.checked);   _updateStatusChips(); });
   if ($tAdaptive) $tAdaptive.addEventListener('change', function () { SR.setAdaptiveEnabled(this.checked); _updateStatusChips(); });
-  if ($tVoice)    $tVoice.addEventListener('change',    function () { SR.setVoiceEnabled(this.checked);    _updateStatusChips(); });
+  if ($tVoice) {
+    $tVoice.addEventListener('change', function () {
+      SR.setVoiceEnabled(this.checked);
+      _updateStatusChips();
+    });
+  }
   if ($tTTS)      $tTTS.addEventListener('change',      function () { SR.setTTSEnabled(this.checked); });
 
   // ── HINT CHIPS ─────────────────────────────────────────────────────────────

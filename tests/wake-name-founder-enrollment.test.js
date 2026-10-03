@@ -7,7 +7,7 @@
  *
  * Tests:
  *   WAKE NAME:
- *     WN-01  All eight wake names available
+ *     WN-01  All twenty wake names available
  *     WN-02  Default wake name is Shadow
  *     WN-03  Set wake name persists to localStorage (simulated Firestore offline)
  *     WN-04  Invalid wake name rejected
@@ -23,7 +23,7 @@
  *     WN-14  processTranscript with wakeListening=ON detects wake
  *     WN-15  User A (Salem) and User B (Luna) stored independently
  *     WN-16  getWakePlatformInfo returns honest platform info (no false claims)
- *     WN-17  All eight wake names can be set and normalized
+ *     WN-17  All twenty wake names can be set and normalized
  *     WN-18  Wake listening OFF: normal conversation still works
  *
  *   FOUNDER ENROLLMENT:
@@ -146,11 +146,15 @@ function assertEqual(a, b, label) {
 // ════════════════════════════════════════════════════════════════════════════
 console.log('\n── Wake Name Tests ─────────────────────────────────────────────');
 
-test('WN-01', 'All eight wake names available', function () {
+test('WN-01', 'All twenty wake names available', function () {
   var names = global.SRWakeName.getWakeNames();
-  var expected = ['Salem', 'Shadow', 'Elsa', 'Luna', 'Pepper', 'Simba', 'Rambo', 'Legend'];
-  assertEqual(names.length, expected.length, 'name count');
-  expected.forEach(function (n) {
+  var required = [
+    'Shadow', 'Ace', 'Atlas', 'Aurora', 'Echo', 'Elsa', 'Ember',
+    'Ghost', 'Legend', 'Luna', 'Midnight', 'Nova', 'Onyx',
+    'Pepper', 'Phoenix', 'Rambo', 'Raven', 'Salem', 'Simba', 'Storm',
+  ];
+  assertEqual(names.length, required.length, 'name count');
+  required.forEach(function (n) {
     assert(names.indexOf(n) !== -1, 'Missing wake name: ' + n);
   });
 });
@@ -312,8 +316,12 @@ test('WN-16', 'getWakePlatformInfo returns info without false claims', function 
   assertEqual(info.wakeAvailability, 'NOT_SUPPORTED', 'Node.js has no speech API');
 });
 
-test('WN-17', 'All eight wake names can be set and normalize their own wake phrase', function () {
-  var names = ['Salem', 'Shadow', 'Elsa', 'Luna', 'Pepper', 'Simba', 'Rambo', 'Legend'];
+test('WN-17', 'All twenty wake names can be set and normalize their own wake phrase', function () {
+  var names = [
+    'Shadow', 'Ace', 'Atlas', 'Aurora', 'Echo', 'Elsa', 'Ember',
+    'Ghost', 'Legend', 'Luna', 'Midnight', 'Nova', 'Onyx',
+    'Pepper', 'Phoenix', 'Rambo', 'Raven', 'Salem', 'Simba', 'Storm',
+  ];
   names.forEach(function (name) {
     global.SRWakeName.setWakeName(name, function () {});
     var r = global.SRWakeName.normalizeTranscript('Hey ' + name + ', run a test');

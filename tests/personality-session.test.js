@@ -46,7 +46,7 @@
  *
  *  ASSISTANT PROFILES / WAKE NAMES
  *    AP-01  Default wake name is Shadow (not Salem)
- *    AP-02  All 8 names available: Shadow, Pepper, Luna, Elsa, Simba, Salem, Rambo, Legend
+ *    AP-02  All 20 names available (full companion set)
  *    AP-03  setWakeName persists selected name
  *    AP-04  Invalid wake name rejected
  *    AP-05  voiceGender defaults to 'female'
@@ -69,7 +69,7 @@
  *    OB-02  ShadowReaper.ask() is the only ask entry point
  *    OB-03  Personality engine does NOT replace ShadowReaper.ask()
  *    OB-04  Conversation session does NOT replace ShadowReaper.ask()
- *    OB-05  All 8 wake names use ShadowReaper.ask() (not separate pipelines)
+ *    OB-05  All 20 wake names use ShadowReaper.ask() (not separate pipelines)
  *
  *  NATURAL CONVERSATION (via ShadowReaper.ask())
  *    NC-01  "Shadow, this website is acting stupid again." → non-empty response
@@ -549,13 +549,17 @@ test('AP-01  Default wake name is Shadow (not Salem)', function () {
   assert(name === 'Shadow', 'Default wake name must be Shadow, got: ' + name);
 });
 
-test('AP-02  All 8 names available: Shadow, Pepper, Luna, Elsa, Simba, Salem, Rambo, Legend', function () {
+test('AP-02  All 20 names available including full companion set', function () {
   var names = WN.getWakeNames();
-  var required = ['Shadow', 'Pepper', 'Luna', 'Elsa', 'Simba', 'Salem', 'Rambo', 'Legend'];
+  var required = [
+    'Shadow', 'Ace', 'Atlas', 'Aurora', 'Echo', 'Elsa', 'Ember',
+    'Ghost', 'Legend', 'Luna', 'Midnight', 'Nova', 'Onyx',
+    'Pepper', 'Phoenix', 'Rambo', 'Raven', 'Salem', 'Simba', 'Storm',
+  ];
   required.forEach(function (n) {
     assert(names.indexOf(n) !== -1, 'Missing wake name: ' + n);
   });
-  assert(names.length === 8, 'Should have exactly 8 names, got: ' + names.length);
+  assert(names.length === 20, 'Should have exactly 20 names, got: ' + names.length);
 });
 
 test('AP-03  setWakeName persists selected name', function () {
@@ -698,13 +702,17 @@ test('OB-04  Conversation session does NOT replace ShadowReaper.ask()', function
   assert(!CS.brain, 'SRConvSession must not have a brain property');
 });
 
-test('OB-05  All 8 wake name profiles use ShadowReaper.ask() — no separate routing', function () {
+test('OB-05  All 20 wake name profiles use ShadowReaper.ask() — no separate routing', function () {
   // Verify: switching wake name does not change which ask() is called
   var askCalled = false;
   var origAsk = SR.ask;
   SR.ask = function (msg, cb) { askCalled = true; if (cb) cb('ok'); };
 
-  var names = ['Shadow', 'Pepper', 'Luna', 'Elsa', 'Simba', 'Salem', 'Rambo', 'Legend'];
+  var names = [
+    'Shadow', 'Ace', 'Atlas', 'Aurora', 'Echo', 'Elsa', 'Ember',
+    'Ghost', 'Legend', 'Luna', 'Midnight', 'Nova', 'Onyx',
+    'Pepper', 'Phoenix', 'Rambo', 'Raven', 'Salem', 'Simba', 'Storm',
+  ];
   names.forEach(function (n) {
     askCalled = false;
     WN.setWakeName(n, function () {});
