@@ -260,6 +260,38 @@
     }
   }
 
+  /**
+   * Query the local preloaded knowledge base for content relevant to the message.
+   * Returns up to 2 matching knowledge snippets, or null if nothing is relevant.
+   *
+   * PRIVACY: SRKnowledge contains only public/shared preloaded knowledge.
+   * It has no access to personal memory. The returned content strings are
+   * bounded and safe to send to the Worker.
+   *
+   * Called once per request, before _doFetch. Keeps the Worker the
+   * generation engine — not the source of truth for preloaded facts.
+   */
+  function _getKnowledgeContext(message) {
+    var k = global.SRKnowledge;
+    if (!k || typeof k.queryMultiple !== 'function') return null;
+
+    try {
+      var entries = k.queryMultiple(message, 2);
+      if (!entries || entries.length === 0) return null;
+
+      // Return content strings only — category is informational, keywords are internal
+      // Bound each snippet to 512 chars to stay well within request limits
+      return entries.map(function (e) {
+        return {
+          category: String(e.category || '').slice(0, 32),
+          content:  String(e.content  || '').slice(0, 512),
+        };
+      });
+    } catch (_) {
+      return null;
+    }
+  }
+
   // ── Primary chat method ────────────────────────────────────────────────────
 
   /**
@@ -306,8 +338,9 @@
   }
 
   function _sendChat(message, identity, opts, callback) {
-    var url      = _workerUrl + '/api/v1/chat';
-    var langHints = _getLanguageAnalysis(message);
+    var url        = _workerUrl + '/api/v1/chat';
+    var langHints  = _getLanguageAnalysis(message);
+    var knowledgeCtx = _getKnowledgeContext(message);
 
     var requestBody = {
       message:          message,
@@ -318,6 +351,14 @@
     // Include language analysis hints if available
     if (langHints) {
       requestBody.languageAnalysis = langHints;
+    }
+
+    // Include relevant preloaded knowledge if available.
+    // This is PUBLIC shared knowledge only — never personal memory.
+    // The Worker incorporates it as reference context, keeping generation
+    // grounded in facts already present in Shadow's knowledge base.
+    if (knowledgeCtx) {
+      requestBody.knowledgeContext = knowledgeCtx;
     }
 
     var headers = { 'Content-Type': 'application/json' };

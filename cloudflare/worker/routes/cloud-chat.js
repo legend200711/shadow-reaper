@@ -106,6 +106,17 @@ function _validateChatRequest(body) {
     return { ok: false, error: 'languageAnalysis must be an object if provided.' };
   }
 
+  // knowledgeContext is optional client-supplied preloaded knowledge snippets
+  // It must be an array of objects if provided; each entry is bounded server-side
+  if (body.knowledgeContext !== undefined) {
+    if (!Array.isArray(body.knowledgeContext)) {
+      return { ok: false, error: 'knowledgeContext must be an array if provided.' };
+    }
+    if (body.knowledgeContext.length > 5) {
+      return { ok: false, error: 'knowledgeContext must contain at most 5 entries.' };
+    }
+  }
+
   return { ok: true };
 }
 
@@ -184,10 +195,11 @@ async function _loadProjects(adminClient, uid) {
  *   → memory context
  *   → history context
  *   → project context
+ *   → preloaded knowledge context (from client SRKnowledge — public facts only)
  *   → personality / system prompt
  *   → inference
  */
-function _assembleMessages(message, history, memory, projects, langAnalysis) {
+function _assembleMessages(message, history, memory, projects, langAnalysis, knowledgeContext) {
   const messages = [];
 
   // 1. Core system identity — NEVER from client
@@ -207,7 +219,27 @@ function _assembleMessages(message, history, memory, projects, langAnalysis) {
     systemPrompt += '\n\nUser\'s active projects:\n' + projBlock;
   }
 
-  // 4. Language analysis hints from client Language Foundation
+  // 4. Inject relevant preloaded knowledge (public facts from Shadow's knowledge base).
+  //    This is the CREATOR / SNS / GENERAL knowledge that the client retrieved locally.
+  //    Entries are sanitized: content capped at 512 chars, array bounded to ≤5 items.
+  //    This keeps Shadow grounded in known facts when answering knowledge-relevant questions.
+  //    PRIVACY: This slot is for shared/public knowledge only — personal memory is in slot 2.
+  if (knowledgeContext && Array.isArray(knowledgeContext) && knowledgeContext.length > 0) {
+    const knowledgeBlock = knowledgeContext
+      .slice(0, 5)
+      .map(function (e) {
+        // Server-side sanitization: accept only string content, cap at 512 chars
+        const content = (e && typeof e.content === 'string') ? e.content.slice(0, 512) : '';
+        return content ? '• ' + content : null;
+      })
+      .filter(Boolean)
+      .join('\n');
+    if (knowledgeBlock) {
+      systemPrompt += '\n\nRelevant knowledge about Shadow Nexus Social and its creator:\n' + knowledgeBlock;
+    }
+  }
+
+  // 5. Language analysis hints from client Language Foundation
   // These are linguistic annotations only — not system-prompt injections
   if (langAnalysis) {
     const hints = [];
@@ -231,12 +263,12 @@ function _assembleMessages(message, history, memory, projects, langAnalysis) {
 
   messages.push({ role: 'system', content: systemPrompt });
 
-  // 5. Conversation history (recent turns — already bounded)
+  // 6. Conversation history (recent turns — already bounded)
   for (var i = 0; i < history.length; i++) {
     messages.push(history[i]);
   }
 
-  // 6. Current user message
+  // 7. Current user message
   messages.push({ role: 'user', content: message });
 
   return messages;
@@ -371,6 +403,7 @@ export async function handleChat(body, ctx) {
     ? body.conversationId : null;
   const langAnalysis    = (body.languageAnalysis && typeof body.languageAnalysis === 'object')
     ? body.languageAnalysis : null;
+  const knowledgeContext = Array.isArray(body.knowledgeContext) ? body.knowledgeContext : null;
 
   // ── Check Workers AI binding ────────────────────────────────────────────────
   if (!env.AI || typeof env.AI.run !== 'function') {
@@ -401,7 +434,7 @@ export async function handleChat(body, ctx) {
   }
 
   // ── Assemble context messages ────────────────────────────────────────────────
-  const messages = _assembleMessages(message, history, memory, projects, langAnalysis);
+  const messages = _assembleMessages(message, history, memory, projects, langAnalysis, knowledgeContext);
 
   // ── Run inference ────────────────────────────────────────────────────────────
   const modelId  = (env.SR_INFERENCE_MODEL && typeof env.SR_INFERENCE_MODEL === 'string')
@@ -442,6 +475,7 @@ export async function handleChat(body, ctx) {
   console.log('[chat] OK. model:', inferResult.model,
     'turns:', history.length + 1,
     'memory:', memory.length,
+    'knowledge:', knowledgeContext ? knowledgeContext.length : 0,
     'latencyMs:', latencyMs,
     'requestId:', requestId);
 

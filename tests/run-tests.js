@@ -66,6 +66,7 @@ var SUITES = [
   { name: 'sns-launcher',          file: 'sns-launcher-tests.js' },
   { name: 'founder-shadow',        file: 'founder-shadow.test.js' },
   { name: 'conversation-regression', file: 'sr-conversation-regression.test.js' },
+  { name: 'knowledge-hosted-connection', file: 'knowledge-hosted-connection.test.js' },
 ];
 
 var TESTS_DIR = __dirname;
