@@ -80,7 +80,7 @@
 
   // ── Defaults ──────────────────────────────────────────────────────────────
   var DEFAULT_WAKE_NAME      = 'Shadow';
-  var DEFAULT_TIMEOUT_MS     = 15000;   // 15 s of silence → standby
+  var DEFAULT_TIMEOUT_MS     = 60000;   // 60 s of silence → standby
   var DEFAULT_CONTINUOUS     = true;
   var ACTIVATION_ACK         = 'Yeah?';
   var WAKE_DEBOUNCE_MS       = 1200;    // min ms between wake detections

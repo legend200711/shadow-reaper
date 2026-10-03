@@ -494,7 +494,36 @@ body::before {
   border-top: 1px solid var(--border);
   background: var(--bg-deep);
 }
-.sr-voice-bar.visible { display: block; }
+.sr-voice-bar.visible { display: flex; align-items: center; justify-content: center; gap: 10px; }
+/* Hands-free state dot */
+.sr-hf-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex: 0 0 8px;
+  background: var(--electric);
+}
+.sr-voice-bar.hf-listening .sr-hf-dot { background: #ef4444; animation: hf-pulse 1.2s infinite; }
+.sr-voice-bar.hf-thinking  .sr-hf-dot { background: #f59e0b; animation: hf-pulse 0.6s infinite; }
+.sr-voice-bar.hf-speaking  .sr-hf-dot { background: #22c55e; animation: hf-pulse 0.9s infinite; }
+.sr-voice-bar.hf-wake      .sr-hf-dot { background: var(--electric); }
+@keyframes hf-pulse {
+  0%,100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.4; transform: scale(0.8); }
+}
+/* Hands-free button in input row */
+.sr-hf-btn {
+  width: 36px; height: 36px; flex: 0 0 36px;
+  border: 1.5px solid var(--border);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all var(--transition);
+  line-height: 1;
+}
+.sr-hf-btn:hover { border-color: var(--electric); color: var(--electric); }
+.sr-hf-btn.active { border-color: #22c55e; color: #22c55e; background: rgba(34,197,94,0.10); }
+.sr-hf-btn.unavailable { opacity: 0.3; cursor: not-allowed; }
 
 /* ── INPUT AREA ─────────────────────────────────────────────────────────── */
 .sr-input-area {
@@ -1186,9 +1215,10 @@ body::before {
         </div>
       </div>
 
-      <!-- Voice listening bar -->
+      <!-- Voice / Hands-free status bar -->
       <div class="sr-voice-bar" id="srVoiceBar" aria-live="polite">
-        Listening… speak now
+        <span class="sr-hf-dot" id="srHFDot"></span>
+        <span id="srVoiceBarLabel">Listening… speak now</span>
       </div>
 
       <!-- Input area -->
@@ -1204,7 +1234,9 @@ body::before {
             autocorrect="on"
             spellcheck="true"
           ></textarea>
-          <button class="sr-voice-btn" id="srVoiceBtn" title="Voice input" aria-label="Voice input">&#127908;</button>
+          <!-- Hands-free conversation button (🎙 long-press style activation) -->
+          <button class="sr-hf-btn" id="srHFBtn" title="Hands-free conversation" aria-label="Hands-free conversation">&#127911;</button>
+          <button class="sr-voice-btn" id="srVoiceBtn" title="Voice input (one turn)" aria-label="Voice input">&#127908;</button>
           <button class="sr-send-btn" id="srSendBtn" title="Send" aria-label="Send message" disabled>&#9658;</button>
         </div>
       </div>
@@ -1296,6 +1328,18 @@ body::before {
             </div>
             <label class="sr-toggle" aria-label="Text to speech">
               <input type="checkbox" id="srToggleTTS" />
+              <span class="sr-toggle-track"></span>
+            </label>
+          </div>
+
+          <!-- Hands-Free Conversation -->
+          <div class="sr-toggle-row">
+            <div>
+              <div class="sr-toggle-label">Hands-Free Conversation</div>
+              <div class="sr-toggle-desc">Wake name → auto listen → speak → loop</div>
+            </div>
+            <label class="sr-toggle" aria-label="Hands-free conversation">
+              <input type="checkbox" id="srToggleHandsFree" />
               <span class="sr-toggle-track"></span>
             </label>
           </div>
@@ -1673,10 +1717,15 @@ body::before {
   var $tAdaptive    = document.getElementById('srToggleAdaptive');
   var $tVoice       = document.getElementById('srToggleVoice');
   var $tTTS         = document.getElementById('srToggleTTS');
+  var $tHandsFree   = document.getElementById('srToggleHandsFree');
+  var $hfBtn        = document.getElementById('srHFBtn');
+  var $voiceBarLbl  = document.getElementById('srVoiceBarLabel');
 
   // ── State ─────────────────────────────────────────────────────────────────
   var _isProcessing   = false;
   var _isListening    = false;
+  var _isHandsFree    = false;   // true while continuous hands-free session is active
+  var _hfSpeaking     = false;   // true while TTS is playing in hands-free session
   var _msgCount       = 0;
   var _sessionMsgs    = [];   // [{role,text}] — in-memory session buffer
   var _lastGeneration = 'unknown';  // 'hosted'|'local-gpu'|'local-cpu'|'emergency'
@@ -2294,11 +2343,20 @@ body::before {
           if (SRVoice && SRVoice.isTTSEnabled()) {
             var convSessH = window.SRConvSession;
             if (convSessH) convSessH.onSpeakingStart(apiResult.text);
+            _hfSpeaking = true;
+            _setVoiceBarState('speaking');
             SRVoice.speak(apiResult.text, function () {
+              _hfSpeaking = false;
               if (convSessH) convSessH.onSpeakingEnd();
+              _hfAfterSpeak();
             }, function () {
+              _hfSpeaking = false;
               if (convSessH) convSessH.onSpeakingError();
+              _hfAfterSpeak();
             });
+          } else {
+            // TTS off — still re-open mic if hands-free
+            _hfAfterSpeak();
           }
           return;
         }
@@ -2340,11 +2398,20 @@ body::before {
       if (SRVoice && SRVoice.isTTSEnabled()) {
         var convSessL = window.SRConvSession;
         if (convSessL) convSessL.onSpeakingStart(response);
+        _hfSpeaking = true;
+        _setVoiceBarState('speaking');
         SRVoice.speak(response, function () {
+          _hfSpeaking = false;
           if (convSessL) convSessL.onSpeakingEnd();
+          _hfAfterSpeak();
         }, function () {
+          _hfSpeaking = false;
           if (convSessL) convSessL.onSpeakingError();
+          _hfAfterSpeak();
         });
+      } else {
+        // TTS off — still re-open mic if hands-free
+        _hfAfterSpeak();
       }
     });
   }
@@ -2431,6 +2498,7 @@ body::before {
     });
   }
 
+  // ── ONE-SHOT VOICE (microphone button — single turn) ─────────────────────
   function _toggleVoice() {
     if (!SRVoice || !SRVoice.isSupported()) {
       _appendMessage('sr', 'Voice input is not supported in this browser. You can still type to talk to Shadow.');
@@ -2449,11 +2517,236 @@ body::before {
       return;
     }
 
-    // Start continuous session
     _setVoiceUI(true);
     var convSess = window.SRConvSession;
     if (convSess) convSess.startSession();
 
+    _startOneListenCycle(convSess, false);
+  }
+
+  // ── HANDS-FREE MODE (continuous conversation loop) ─────────────────────
+  //
+  //   IDLE
+  //   → user enables hands-free (button or toggle)
+  //   → WAKE READY — mic opens, listening for wake name
+  //   → wake name heard → LISTENING (mic stays open for command)
+  //   → user speaks → THINKING → Shadow pipeline → one response
+  //   → SPEAKING — TTS plays the SAME response shown in chat
+  //   → safe POST_SPEECH delay (echo protection)
+  //   → LISTENING AGAIN — mic auto-reopens
+  //   → loop until end-phrase or user disables
+  //
+  // Voice input and text input go through the IDENTICAL _send() pipeline.
+  // There is no separate voice brain.
+
+  var _hfConvSess = null;   // reference to the SRConvSession kept for the session
+
+  function _startHandsFree() {
+    if (_isHandsFree) return;   // already running
+
+    if (!SRVoice || !SRVoice.isSupported()) {
+      _appendMessage('sr', 'Speech recognition is not supported in this browser. Try Chrome on Android.');
+      return;
+    }
+    if (!SRVoice.isVoiceEnabled()) {
+      // Enable voice automatically when the user explicitly starts hands-free
+      SRVoice.setVoiceEnabled(true);
+    }
+    if (!SRVoice.isTTSEnabled()) {
+      // Enable TTS automatically for hands-free (required for speak-back)
+      SRVoice.setTTSEnabled(true);
+      if ($tTTS) $tTTS.checked = true;
+    }
+
+    _isHandsFree = true;
+    _hfSpeaking  = false;
+
+    if ($hfBtn) $hfBtn.classList.add('active');
+    if ($tHandsFree) $tHandsFree.checked = true;
+
+    _hfConvSess = window.SRConvSession || null;
+    if (_hfConvSess) _hfConvSess.startSession();
+
+    // Subscribe to session-end so we can tear down hands-free UI
+    if (_hfConvSess) {
+      _hfConvSess.onSessionEnd(function (reason) {
+        if (_isHandsFree) {
+          _stopHandsFree(reason);
+        }
+      });
+    }
+
+    _setVoiceBarState('wake');
+    _openHandsFreeListenCycle();
+  }
+
+  function _stopHandsFree(reason) {
+    if (!_isHandsFree) return;
+    _isHandsFree = false;
+    _hfSpeaking  = false;
+
+    SRVoice.stopListening();
+    if (_hfConvSess && _hfConvSess.isActive()) _hfConvSess.endSession(reason || 'user_stopped');
+
+    if ($hfBtn) $hfBtn.classList.remove('active');
+    if ($tHandsFree) $tHandsFree.checked = false;
+
+    $voiceBar.classList.remove('visible', 'hf-listening', 'hf-thinking', 'hf-speaking', 'hf-wake');
+    console.log('[SR-HF] Hands-free ended. Reason:', reason || 'user_stopped');
+  }
+
+  /**
+   * _openHandsFreeListenCycle()
+   * Opens one SpeechRecognition cycle. When a result fires it:
+   *   1. Checks for end-conversation phrases (→ stops hands-free)
+   *   2. Strips wake name prefix if present (supports both "Shadow, ..." and direct speech)
+   *   3. Echo-protects (SRConvSession)
+   *   4. Passes cleaned text to _send() — the ONE Shadow pipeline
+   * After TTS completes, _hfAfterSpeak() re-calls this function.
+   */
+  function _openHandsFreeListenCycle() {
+    if (!_isHandsFree) return;
+    if (_hfSpeaking) return;   // Don't reopen while speaking — _hfAfterSpeak handles that
+    if (_isProcessing) return; // Don't reopen while a response is in-flight
+
+    _setVoiceBarState('listening');
+
+    SRVoice.startListening(
+      function (rawTranscript) {
+        if (!_isHandsFree) return;
+
+        // Duplicate prevention
+        var now = Date.now();
+        if (rawTranscript === _lastVoiceTranscript && now - _lastVoiceTranscriptTime < 2000) {
+          // Silently re-listen
+          _hfAfterSpeak();
+          return;
+        }
+        _lastVoiceTranscript     = rawTranscript;
+        _lastVoiceTranscriptTime = now;
+
+        if (!rawTranscript || !rawTranscript.trim()) {
+          _hfAfterSpeak();
+          return;
+        }
+
+        // ── Echo protection via SRConvSession ────────────────────────────
+        var convSess = _hfConvSess;
+        if (convSess) {
+          var echoCheck = convSess.onSpeechResult(rawTranscript);
+          if (echoCheck && !echoCheck.process) {
+            if (echoCheck.sessionEnded) {
+              _stopHandsFree('end_command');
+            } else {
+              // Echo — re-open listener
+              _hfAfterSpeak();
+            }
+            return;
+          }
+        }
+
+        // ── Wake-name strip (optional — works mid-session too) ────────────
+        var wm = window.SRWakeName;
+        var command = rawTranscript.trim();
+        if (wm && typeof wm.normalizeTranscript === 'function') {
+          var norm = wm.normalizeTranscript(rawTranscript);
+          if (norm.command && norm.command.trim()) {
+            command = norm.command.trim();
+          }
+        }
+
+        // Show recognized text
+        $input.value = command;
+
+        // Notify session → THINKING
+        if (convSess) convSess.onThinkingStart();
+        _setVoiceBarState('thinking');
+
+        // Route through the SAME pipeline as typed messages
+        _send(command);
+        // _hfAfterSpeak() is called from _send's TTS callbacks
+      },
+      function (err) {
+        if (!_isHandsFree) return;
+
+        if (err === 'not-allowed' || err === 'permission-denied') {
+          _stopHandsFree('mic_permission_denied');
+          _appendMessage('sr', 'Microphone permission was denied. Grant microphone access in your browser settings and try again.');
+          return;
+        }
+
+        if (_hfConvSess) _hfConvSess.onRecognitionError(err || 'unknown');
+
+        if (err === 'no-speech' || err === 'aborted') {
+          // Normal pause — re-open cycle (inactivity timer in SRConvSession handles timeout)
+          setTimeout(_openHandsFreeListenCycle, 100);
+          return;
+        }
+
+        // Other error — short delay then retry
+        console.warn('[SR-HF] STT error in hands-free:', err);
+        setTimeout(_openHandsFreeListenCycle, 1500);
+      }
+    );
+  }
+
+  /**
+   * _hfAfterSpeak()
+   * Called after TTS finishes (or when no TTS). Waits the echo-protection delay
+   * then re-opens the microphone for the next turn.
+   */
+  function _hfAfterSpeak() {
+    if (!_isHandsFree) return;
+    if (_isProcessing) return;   // wait for the response to finish
+    // Post-speech suppression window (echo protection)
+    setTimeout(function () {
+      if (!_isHandsFree) return;
+      _openHandsFreeListenCycle();
+    }, 850);   // matches POST_SPEECH_SUPPRESS_MS in sr-voice-assistant.js
+  }
+
+  /**
+   * _setVoiceBarState(state)
+   * Updates the visible status bar: 'wake' | 'listening' | 'thinking' | 'speaking' | 'off'
+   */
+  function _setVoiceBarState(state) {
+    if (!$voiceBar || !$voiceBarLbl) return;
+    var wakeName = (window.SRWakeName && typeof window.SRWakeName.getWakeName === 'function')
+      ? window.SRWakeName.getWakeName() : 'Shadow';
+
+    $voiceBar.classList.remove('hf-listening', 'hf-thinking', 'hf-speaking', 'hf-wake');
+
+    if (state === 'off') {
+      $voiceBar.classList.remove('visible');
+      return;
+    }
+
+    $voiceBar.classList.add('visible');
+
+    switch (state) {
+      case 'wake':
+        $voiceBar.classList.add('hf-wake');
+        $voiceBarLbl.textContent = wakeName + ' • Wake Ready — say "' + wakeName + '"';
+        break;
+      case 'listening':
+        $voiceBar.classList.add('hf-listening');
+        $voiceBarLbl.textContent = wakeName + ' • Listening…';
+        break;
+      case 'thinking':
+        $voiceBar.classList.add('hf-thinking');
+        $voiceBarLbl.textContent = wakeName + ' • Thinking…';
+        break;
+      case 'speaking':
+        $voiceBar.classList.add('hf-speaking');
+        $voiceBarLbl.textContent = wakeName + ' • Speaking…';
+        break;
+      default:
+        $voiceBarLbl.textContent = state;
+    }
+  }
+
+  // ── ONE-SHOT VOICE helper (used by microphone button) ─────────────────────
+  function _startOneListenCycle(convSess, isRetry) {
     SRVoice.startListening(
       function (rawTranscript) {
         // Duplicate prevention — ignore if same transcript within 2s
@@ -2470,7 +2763,6 @@ body::before {
         if (convSess) {
           var res = convSess.onSpeechResult(rawTranscript);
           if (res && !res.process) {
-            // Echo or end-session command — do not process
             if (res.sessionEnded) _setVoiceUI(false);
             return;
           }
@@ -2483,25 +2775,20 @@ body::before {
         if (convSess) convSess.onThinkingStart();
 
         // Route through the SAME ShadowReaper.ask() pipeline.
-        // Typed and voice conversation always use the same brain.
         _send(rawTranscript);
-
-        // After _send() completes, the response is both displayed and spoken
-        // (TTS is wired in _send above). Session transitions back to LISTENING
-        // are handled by the TTS callbacks in _send.
       },
       function (err) {
-        // STT error — graceful recovery, no crash
         if (convSess) convSess.onRecognitionError(err || 'unknown');
         if (err === 'not-allowed' || err === 'permission-denied') {
           _setVoiceUI(false);
           if (convSess) convSess.endSession('mic_permission_denied');
           _appendMessage('sr', 'Microphone permission was denied. Grant microphone access in your browser settings and try again.');
         } else if (err === 'no-speech') {
-          // Normal — user paused, stay in session
+          // Normal — user paused; stop the listening indicator
+          _setVoiceUI(false);
         } else {
-          // Other errors — stay in session but surface gently
           console.warn('[SR-UI] Voice STT error:', err);
+          _setVoiceUI(false);
         }
       }
     );
@@ -2510,7 +2797,10 @@ body::before {
   function _setVoiceUI(listening) {
     _isListening = listening;
     $voiceBtn.classList.toggle('listening', listening);
-    $voiceBar.classList.toggle('visible', listening);
+    if (!_isHandsFree) {
+      $voiceBar.classList.toggle('visible', listening);
+      if ($voiceBarLbl) $voiceBarLbl.textContent = 'Listening… speak now';
+    }
   }
 
   // ── HELPERS ────────────────────────────────────────────────────────────────
@@ -2544,6 +2834,19 @@ body::before {
   // ── BUTTON EVENTS ─────────────────────────────────────────────────────────
   $sendBtn.addEventListener('click', function () { _send($input.value); });
   $voiceBtn.addEventListener('click', _toggleVoice);
+
+  // Hands-free button: toggle the continuous voice session
+  if ($hfBtn) {
+    $hfBtn.addEventListener('click', function () {
+      if (_isHandsFree) {
+        _stopHandsFree('user_stopped');
+      } else {
+        _startHandsFree();
+      }
+    });
+    // Mark unavailable if speech not supported
+    if (!SRVoice || !SRVoice.isSupported()) $hfBtn.classList.add('unavailable');
+  }
 
   // New conversation
   document.getElementById('srNewConvoBtn').addEventListener('click', function () {
@@ -2839,6 +3142,11 @@ body::before {
     });
   }
   if ($tTTS)      $tTTS.addEventListener('change',      function () { SR.setTTSEnabled(this.checked); });
+  if ($tHandsFree) {
+    $tHandsFree.addEventListener('change', function () {
+      if (this.checked) { _startHandsFree(); } else { _stopHandsFree('toggle_off'); }
+    });
+  }
 
   // ── HINT CHIPS ─────────────────────────────────────────────────────────────
   document.querySelectorAll('.sr-hint-chip').forEach(function (chip) {

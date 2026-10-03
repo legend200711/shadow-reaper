@@ -71,6 +71,8 @@ var SUITES = [
   { name: 'weather-production',      file: 'sr-weather-production.test.js' },
   { name: 'electronics-auth',        file: 'sr-electronics-auth.test.js' },
   { name: 'creator-knowledge',       file: 'sr-creator-knowledge.test.js' },
+  // SR-HF-VOICE-1 — Hands-free voice conversation tests
+  { name: 'handsfree-voice',         file: 'sr-handsfree-voice.test.js' },
 ];
 
 var TESTS_DIR = __dirname;
