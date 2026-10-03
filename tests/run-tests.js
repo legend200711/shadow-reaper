@@ -79,6 +79,12 @@ var SUITES = [
   { name: 'natural-conversation',    file: 'sr-natural-conversation.test.js' },
   { name: 'voice-personality',       file: 'sr-voice-personality.test.js' },
   { name: 'companion-integration',   file: 'sr-companion-integration.test.js' },
+  // SR-STANDALONE-1 — 6-Stage Standalone Intelligence Migration
+  { name: 'reasoning-core',          file: 'sr-reasoning-core.test.js' },
+  { name: 'coding-foundation',       file: 'sr-coding-foundation.test.js' },
+  { name: 'knowledge-expansion',     file: 'sr-knowledge-expansion.test.js' },
+  { name: 'model-adapter',           file: 'sr-model-adapter.test.js' },
+  { name: 'standalone-validation',   file: 'sr-standalone-validation.test.js' },
 ];
 
 var TESTS_DIR = __dirname;
