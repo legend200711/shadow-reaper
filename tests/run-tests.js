@@ -75,6 +75,10 @@ var SUITES = [
   { name: 'handsfree-voice',         file: 'sr-handsfree-voice.test.js' },
   // SR-V2-PERSONALITY-2 — Human-like adaptive personality Stage 1
   { name: 'personality-adaptive',    file: 'sr-personality-adaptive.test.js' },
+  // SHADOW-HUMAN-1 — 7-stage human-like companion evolution
+  { name: 'natural-conversation',    file: 'sr-natural-conversation.test.js' },
+  { name: 'voice-personality',       file: 'sr-voice-personality.test.js' },
+  { name: 'companion-integration',   file: 'sr-companion-integration.test.js' },
 ];
 
 var TESTS_DIR = __dirname;

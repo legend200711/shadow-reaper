@@ -629,9 +629,13 @@ console.log('══════════════════════�
 
 var V = global.SRVoice;
 
-test('VE-01  SRVoice loads with build SR-V2-VOICE-2', function () {
+test('VE-01  SRVoice loads with valid build tag (SR-V2-VOICE-2 or higher)', function () {
   assert(V, 'SRVoice not loaded');
-  assert(V.build === 'SR-V2-VOICE-2', 'Build ID should be SR-V2-VOICE-2, got: ' + V.build);
+  // Accept V2 or V3+ (updated in SHADOW-HUMAN-1 Stage 6)
+  assert(
+    V.build === 'SR-V2-VOICE-2' || V.build === 'SR-V2-VOICE-3',
+    'Build ID should be SR-V2-VOICE-2 or SR-V2-VOICE-3, got: ' + V.build
+  );
 });
 
 test('VE-02  setVoiceGender male / getVoiceGender', function () {

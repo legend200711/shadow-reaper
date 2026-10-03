@@ -2,7 +2,7 @@
  * shadow-reaper-v2/voice/voice-engine.js
  * Shadow Reaper V2 — Voice Engine
  *
- * Build: SR-V2-VOICE-2
+ * Build: SR-V2-VOICE-3
  *
  * Exposes: window.SRVoice
  *
@@ -33,7 +33,7 @@
 (function (global) {
   'use strict';
 
-  var BUILD_ID = 'SR-V2-VOICE-2';
+  var BUILD_ID = 'SR-V2-VOICE-3';
   var VOICE_ENABLED_KEY  = 'srVoiceEnabled';
   var TTS_ENABLED_KEY    = 'srTTSEnabled';
   var VOICE_GENDER_KEY   = 'srVoiceGender';   // 'male' | 'female'
@@ -348,6 +348,135 @@
      NEVER stores raw audio. Only uses synthesis API.
      Integrates with SRConvSession for interrupt handling.
   ───────────────────────────────────────────────────────────────*/
+  /* ─────────────────────────────────────────────────────────────
+     STAGE 6: speakWithCue — Expressive TTS with personality metadata
+     Applies conservative rate/pitch adjustments based on the
+     conversational cue snapshot produced by SRConversationalCue.
+     Uses ONLY supported SpeechSynthesisUtterance properties.
+     NEVER generates a second AI response for voice.
+     The spoken text is ALWAYS the same text shown in the UI.
+     Falls back to plain speak() if no cue metadata is provided.
+  ───────────────────────────────────────────────────────────────*/
+  /**
+   * speakWithCue(text, cueSnapshot, onEnd)
+   *   text        — the response text to speak (same as displayed in UI)
+   *   cueSnapshot — optional object from SRConversationalCue.analyze()
+   *   onEnd       — optional callback when TTS finishes
+   *
+   * Supported cue → prosody adjustments (conservative):
+   *   serious/supportive  → slightly slower rate, neutral pitch
+   *   playful/banter      → slightly higher energy rate, +pitch
+   *   excited             → slightly higher rate, +pitch
+   *   frustrated/direct   → normal rate, neutral pitch (no drama)
+   *   neutral/calm        → default gender-based settings
+   *
+   * All adjustments stay within natural-sounding bounds.
+   * No extreme cartoon effects.
+   */
+  function speakWithCue(text, cueSnapshot, onEnd) {
+    if (!cueSnapshot) {
+      speak(text, onEnd);
+      return;
+    }
+
+    if (!_ttsEnabled || !_synthesis) {
+      var session0c = _sessionModule();
+      if (session0c) session0c.onSpeakingError();
+      if (typeof onEnd === 'function') onEnd();
+      return;
+    }
+
+    try {
+      _synthesis.cancel();
+
+      var utterance = new global.SpeechSynthesisUtterance(text);
+      utterance.volume = 1.0;
+
+      // Apply gender-based baseline first
+      _selectVoice(utterance);
+
+      // Apply personality cue adjustments on top of baseline
+      _applyCueProsody(utterance, cueSnapshot);
+
+      var sessionC = _sessionModule();
+      if (sessionC) sessionC.onSpeakingStart(text);
+
+      utterance.onstart = function () {
+        _setState(STATE.SPEAKING);
+      };
+
+      utterance.onend = function () {
+        _setState(STATE.IDLE);
+        if (sessionC) sessionC.onSpeakingEnd();
+        if (typeof onEnd === 'function') onEnd();
+      };
+
+      utterance.onerror = function () {
+        _setState(STATE.IDLE);
+        if (sessionC) sessionC.onSpeakingError();
+        if (typeof onEnd === 'function') onEnd();
+      };
+
+      if (!_voicesCached && _synthesis.getVoices) {
+        _cachedVoices = _synthesis.getVoices() || [];
+        _voicesCached = _cachedVoices.length > 0;
+        if (_voicesCached) {
+          _selectVoice(utterance);
+          _applyCueProsody(utterance, cueSnapshot);
+        }
+      }
+
+      _synthesis.speak(utterance);
+
+    } catch (e) {
+      _setState(STATE.IDLE);
+      var sessionCErr = _sessionModule();
+      if (sessionCErr) sessionCErr.onSpeakingError();
+      if (typeof onEnd === 'function') onEnd();
+    }
+  }
+
+  /**
+   * _applyCueProsody(utterance, cue)
+   * Applies conservative rate/pitch adjustments based on the cue snapshot.
+   * Called AFTER _selectVoice so it overrides gender defaults only minimally.
+   */
+  function _applyCueProsody(utterance, cue) {
+    if (!cue || !utterance) return;
+
+    var tone     = cue.tone     || 'neutral';
+    var seriousness = cue.seriousness || 0;
+    var humor    = cue.humor    || 0;
+    var excitement = cue.excitement || 0;
+
+    // Base values — preserve whatever _selectVoice already set
+    var baseRate  = utterance.rate  || (_voiceGender === 'male' ? 0.92 : 0.95);
+    var basePitch = utterance.pitch || (_voiceGender === 'male' ? 0.75 : 1.05);
+
+    if (seriousness >= 0.60 || tone === 'serious') {
+      // Slightly slower, calm delivery for serious/supportive context
+      utterance.rate  = Math.max(0.82, baseRate  - 0.08);
+      utterance.pitch = basePitch;  // unchanged — no dramatic lowering
+
+    } else if (tone === 'playful' || tone === 'banter') {
+      // Slightly more energy for playful responses — subtle
+      utterance.rate  = Math.min(1.05, baseRate  + 0.06);
+      utterance.pitch = Math.min(basePitch + 0.10, _voiceGender === 'male' ? 0.90 : 1.20);
+
+    } else if (tone === 'excited' || excitement >= 0.60) {
+      // Slightly higher energy/rate for excited responses
+      utterance.rate  = Math.min(1.08, baseRate  + 0.10);
+      utterance.pitch = Math.min(basePitch + 0.08, _voiceGender === 'male' ? 0.88 : 1.18);
+
+    } else if (tone === 'frustrated' || tone === 'direct') {
+      // Clear, measured delivery for direct/frustrated context
+      utterance.rate  = baseRate;   // keep baseline — no changes
+      utterance.pitch = basePitch;
+
+    }
+    // All other tones (casual, neutral, calm): use the gender baseline unchanged
+  }
+
   function speak(text, onEnd) {
     if (!_ttsEnabled || !_synthesis) {
       var session0 = _sessionModule();
@@ -489,6 +618,7 @@
     startListening:  startListening,
     stopListening:   stopListening,
     speak:           speak,
+    speakWithCue:    speakWithCue,
     stopSpeaking:    stopSpeaking,
     destroy:         destroy,
     setVoiceEnabled: setVoiceEnabled,

@@ -2,7 +2,7 @@
  * shadow-reaper-v2/core/context-engine.js
  * Shadow Reaper V2 — Context Engine
  *
- * Build: SR-V2-STAGE6
+ * Build: SR-V2-STAGE6-HLC1
  *
  * Responsibilities:
  *  - Maintain session-scoped conversation context (cleared on newConversation)
@@ -62,6 +62,11 @@
 
       // TURN COUNTER
       turnCount: 0,
+
+      // Stage 5 — Natural conversation signals
+      neverMind:   false,   // user abandoned current topic ("never mind", "forget it")
+      prevTopic:   null,    // topic before most-recent switch (enables "return to X" callbacks)
+      rhetoricalQ: false,   // current turn is a rhetorical question
     };
   }
 
@@ -93,6 +98,16 @@
   // Detect temporary style instruction: "make it more X", "add X feel", "keep it X"
   var _TEMP_INSTR_RE = /\b(?:make\s+(?:it\s+)?(?:more\s+|less\s+)?|add\s+(?:a\s+|an?\s+)|keep\s+(?:it\s+)?)([a-z][a-z0-9 _\-]{2,40})(?:\s+(?:feel|vibe|look|style|mode))?/i;
 
+  // Stage 5: never-mind / abandon signal
+  var _NEVER_MIND_RE = /\b(never\s*mind|forget\s+it|forget\s+that|doesn.?t\s+matter|not\s+important|skip\s+it|ignore\s+that|move\s+on|let.?s\s+move\s+on|drop\s+it|whatever)\b/i;
+
+  // Stage 5: rhetorical question (expecting no substantive answer)
+  // Note: no trailing \b because some markers end with '?' which is non-word
+  var _RHETORICAL_RE = /\b(right\?|am\s+i\s+right\b|isn.?t\s+it\b|don.?t\s+you\s+think\b|ya\s+know\b|know\s+what\s+i\s+mean\b|you\s+know\b|see\s+what\s+i\s+mean\b)/i;
+
+  // Stage 5: topic return signal — "going back to", "about that thing earlier", "remember when"
+  var _TOPIC_RETURN_RE = /\b(going\s+back\s+to|back\s+to|return\s+to|as\s+I\s+mentioned|earlier\s+(you\s+said|I\s+said|we\s+talked)|remember\s+(when|that|what)|that\s+thing\s+(I|we)\s+(mentioned|talked))\b/i;
+
   // --- Topic stack helper ---
 
   function _pushTopic(topic) {
@@ -112,6 +127,35 @@
 
     var intent   = understood.intent;
     var entities = understood.entities;
+
+    // Stage 5 — reset per-turn signals
+    _session.neverMind   = false;
+    _session.rhetoricalQ = false;
+
+    // Stage 5 — never-mind detection: user abandons current topic
+    if (rawText && _NEVER_MIND_RE.test(rawText)) {
+      _session.neverMind = true;
+      // Preserve the topic we're abandoning so we can reference it if needed
+      if (_session.activeTopic) {
+        _session.prevTopic = _session.activeTopic;
+        _session.activeTopic = null;
+      }
+    }
+
+    // Stage 5 — rhetorical question detection
+    if (rawText && _RHETORICAL_RE.test(rawText)) {
+      _session.rhetoricalQ = true;
+    }
+
+    // Stage 5 — topic return detection: "going back to X" should restore prevTopic
+    if (rawText && _TOPIC_RETURN_RE.test(rawText) && _session.prevTopic) {
+      // If no explicit topic switch is detected below, restore prevTopic
+      if (!rawText.match(_TOPIC_SWITCH_RE)) {
+        _pushTopic(_session.prevTopic);
+        _session.activeTopic = _session.prevTopic;
+        _session.prevTopic   = null;
+      }
+    }
 
     // NEGATION / TOPIC SWITCH -- process BEFORE project name extraction
     // "Actually, don't change the homepage. Let's work on the menu instead."
@@ -271,6 +315,11 @@
       lastUserSubject: _session.lastUserSubject,
       recentSubjects:  _session.recentSubjects.slice(),
       turnCount:       _session.turnCount,
+
+      // Stage 5 — natural conversation signals (per-turn)
+      neverMind:       _session.neverMind,
+      rhetoricalQ:     _session.rhetoricalQ,
+      prevTopic:       _session.prevTopic,
     };
   }
 

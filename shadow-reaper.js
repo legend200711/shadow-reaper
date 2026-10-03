@@ -100,6 +100,9 @@
   // Last response source for diagnostics
   var _lastResponseSource = 'NONE';
 
+  // Stage 6: last conversational cue snapshot (for ui.html TTS prosody access)
+  var _lastConversationalCue = null;
+
   // ── Per-request diagnostics (reset each turn) ────────────────────────────────
   var _lastDiag = {
     LANGUAGE_FOUNDATION:     'UNKNOWN',
@@ -403,6 +406,7 @@
       try {
         var _recentForCue = global.SRConversation.getRecentTurns(6);
         conversationalCue = cueAnalyzer.analyze(message, understood, _recentForCue);
+        _lastConversationalCue = conversationalCue;  // Stage 6: expose for UI/TTS
       } catch (_) {}
     }
 
@@ -1233,6 +1237,9 @@
 
         // Stage 6: Last request diagnostics (copy, not live reference)
         lastDiagnostics: Object.assign({}, _lastDiag),
+
+        // Stage 6: Last conversational cue snapshot (for expressive TTS in UI)
+        _lastConversationalCue: _lastConversationalCue,
 
         responseEngine: {
           lastSource:      _lastResponseSource,

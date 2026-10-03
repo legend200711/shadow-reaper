@@ -776,12 +776,19 @@
 <!-- Routes all conversations through MY Shadow API as the backbone -->
 <script src="./sr-shadow-api-client.js"></script>
 
+<!-- 10. Stage 5+6 modules (personality + voice) -->
+<script src="core/sr-conversational-cue.js"></script>
+<script src="core/personality-engine.js"></script>
+
 <script>
   /* ─────────────────────────────────────────────────────────────
-     SHADOW REAPER V2 UI — SR-V2-UI-2 (API-first)
+     SHADOW REAPER V2 UI — SR-V2-UI-3 (Human-Like Companion)
+     Build: SHADOW-HUMAN-1
      Mobile-first. XSS-safe. No innerHTML from user data.
      All user content is rendered via textContent only.
-  ───────────────────────────────────────────────────────────────*/
+     Stage 6: speakWithCue() for expressive TTS delivery.
+     Stage 7: PWA session persistence via sessionStorage.
+   ───────────────────────────────────────────────────────────────*/
   (function () {
     'use strict';
 
@@ -813,6 +820,64 @@
     var _msgCount        = 0;
     var _lastGeneration  = 'unknown';  // 'hosted' | 'local-gpu' | 'local-cpu' | 'emergency'
 
+    // ── Stage 6: last conversational cue for expressive TTS ──────
+    // Populated by SRConversationalCue.analyze() in the local pipeline.
+    // For API-first path we use the local cue analysis result.
+    var _lastCue = null;
+
+    // ── Stage 7: PWA session persistence ─────────────────────────
+    // Preserve conversation context across screen-off / Android suspend
+    var SESSION_KEY = 'srSessionSnapshot';
+    var SESSION_MAX_MSGS = 20;  // max messages to persist in sessionStorage
+
+    function _saveSessionSnapshot() {
+      try {
+        var msgs = [];
+        var msgEls = $conv.querySelectorAll('.sr-msg');
+        var startIdx = Math.max(0, msgEls.length - SESSION_MAX_MSGS);
+        for (var i = startIdx; i < msgEls.length; i++) {
+          var el = msgEls[i];
+          var bodyEl = el.querySelector('.sr-msg-body');
+          if (!bodyEl) continue;
+          msgs.push({
+            role: el.classList.contains('user') ? 'user' : 'sr',
+            text: bodyEl.textContent,
+          });
+        }
+        var snap = {
+          msgs: msgs,
+          msgCount: _msgCount,
+          lastGeneration: _lastGeneration,
+          ts: Date.now(),
+        };
+        sessionStorage.setItem(SESSION_KEY, JSON.stringify(snap));
+      } catch (_) {}
+    }
+
+    function _restoreSessionSnapshot() {
+      try {
+        var raw = sessionStorage.getItem(SESSION_KEY);
+        if (!raw) return;
+        var snap = JSON.parse(raw);
+        if (!snap || !snap.msgs || !snap.msgs.length) return;
+        // Only restore if the snapshot is < 2 hours old
+        if (snap.ts && (Date.now() - snap.ts) > 7200000) {
+          sessionStorage.removeItem(SESSION_KEY);
+          return;
+        }
+        // Restore messages to UI
+        if ($welcome) $welcome.style.display = 'none';
+        snap.msgs.forEach(function (m) {
+          _appendMessage(m.role, m.text);
+        });
+        _msgCount        = snap.msgCount || snap.msgs.length;
+        _lastGeneration  = snap.lastGeneration || 'unknown';
+        _appendDivider('Session resumed');
+      } catch (_) {
+        try { sessionStorage.removeItem(SESSION_KEY); } catch (_2) {}
+      }
+    }
+
     // ── INIT ─────────────────────────────────────────────────────
     function init() {
       if (!SR) {
@@ -840,6 +905,9 @@
 
       _updateStatusChips();
       _syncToggles();
+
+      // Stage 7: restore session snapshot if available (PWA resume after suspend)
+      _restoreSessionSnapshot();
     }
 
     // ── STATUS ────────────────────────────────────────────────────
@@ -1027,9 +1095,23 @@
               } catch (_) {}
             }
 
+            // Stage 6: run local cue analysis on the user's message for expressive TTS
+            try {
+              if (window.SRConversationalCue) {
+                var _recentForCue = window.SRConversation ? window.SRConversation.getRecentTurns(6) : [];
+                _lastCue = window.SRConversationalCue.analyze(msg,
+                  { intent: 'API', tone: 'neutral' }, _recentForCue);
+              }
+            } catch (_) {}
+
             if (SRVoice && SRVoice.isTTSEnabled()) {
-              SRVoice.speak(apiResult.text);
+              if (SRVoice.speakWithCue) {
+                SRVoice.speakWithCue(apiResult.text, _lastCue);
+              } else {
+                SRVoice.speak(apiResult.text);
+              }
             }
+            _saveSessionSnapshot();
             return;
           }
 
@@ -1067,9 +1149,22 @@
         $sendBtn.disabled = $input.value.trim() === '';
         _updateStatusChips();
 
+        // Stage 6: retrieve last conversational cue from ShadowReaper pipeline
+        try {
+          var _srStatus = SR.getStatus && SR.getStatus();
+          if (_srStatus && _srStatus._lastConversationalCue) {
+            _lastCue = _srStatus._lastConversationalCue;
+          }
+        } catch (_) {}
+
         if (SRVoice && SRVoice.isTTSEnabled()) {
-          SRVoice.speak(response);
+          if (SRVoice.speakWithCue) {
+            SRVoice.speakWithCue(response, _lastCue);
+          } else {
+            SRVoice.speak(response);
+          }
         }
+        _saveSessionSnapshot();
       });
     }
 
@@ -1218,6 +1313,28 @@
     } else {
       $voiceBtn.classList.add('unavailable');
     }
+
+    // ── Stage 7: PWA lifecycle hooks ─────────────────────────────
+    // pageshow with persisted=true fires when Android restores from BFCache
+    window.addEventListener('pageshow', function (e) {
+      if (e.persisted) {
+        // Page was restored from back/forward cache — try to restore snapshot
+        _restoreSessionSnapshot();
+      }
+    });
+
+    // visibilitychange fires when screen turns on/off or app is backgrounded
+    // Save snapshot when hidden so it's available on resume
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'hidden') {
+        _saveSessionSnapshot();
+      }
+    });
+
+    // Clear snapshot when user starts a new conversation
+    document.getElementById('srNewConvoBtn').addEventListener('click', function () {
+      try { sessionStorage.removeItem(SESSION_KEY); } catch (_) {}
+    });
 
     // ── START ─────────────────────────────────────────────────────
     init();
