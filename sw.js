@@ -34,7 +34,7 @@
 // Transformers.js into IndexedDB/Cache Storage under their own namespaces)
 // are managed independently so an app-shell update never forces a re-download
 // of the ~200-600MB model weights.
-const CACHE_VERSION = 'sr-shell-v15';
+const CACHE_VERSION = 'sr-shell-v16';
 
 // Inference runtime model assets use a separate cache namespace.
 // Bumping this version forces a re-download of model weights on next session.

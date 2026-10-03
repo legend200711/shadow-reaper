@@ -85,6 +85,9 @@ var SUITES = [
   { name: 'knowledge-expansion',     file: 'sr-knowledge-expansion.test.js' },
   { name: 'model-adapter',           file: 'sr-model-adapter.test.js' },
   { name: 'standalone-validation',   file: 'sr-standalone-validation.test.js' },
+  // SR-V2-KNOWLEDGE-2 — Creator Knowledge Expansion + Shared Learning
+  { name: 'creator-knowledge-expansion', file: 'sr-creator-knowledge-expansion.test.js' },
+  { name: 'shared-learning',             file: 'sr-shared-learning.test.js' },
 ];
 
 var TESTS_DIR = __dirname;
