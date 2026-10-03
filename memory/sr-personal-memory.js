@@ -37,6 +37,28 @@
   function _uid() { return _fb() ? _fb().getUID() : null; }
   function _isGuest() { return !_uid(); }
 
+  // Anonymous auth is automatic in Shadow Edition, but Firebase may still be
+  // restoring/creating the UID when a user sends a memory command immediately
+  // after launch. Never tell the user to sign in: wait briefly for the invisible
+  // anonymous identity to become ready, then continue the memory operation.
+  function _withIdentity(callback) {
+    if (_uid()) { callback(true); return; }
+    var authUI = global.SRAuthUI || null;
+    if (!authUI || typeof authUI.onAuthChange !== 'function') { callback(false); return; }
+    var settled = false;
+    var timer = setTimeout(function () {
+      if (settled) return;
+      settled = true;
+      callback(!!_uid());
+    }, 5000);
+    authUI.onAuthChange(function (user) {
+      if (settled || !user) return;
+      settled = true;
+      clearTimeout(timer);
+      callback(true);
+    });
+  }
+
   // ─── Intent detection ─────────────────────────────────────────────────────
   var _INTENTS = {
     SAVE:       [/\bremember\s+that\b/i, /\bplease\s+remember\b/i, /\bdon'?t\s+forget\s+that\b/i, /\bmake\s+a\s+note\b/i],
@@ -67,7 +89,13 @@
   function save(text, callback) {
     callback = callback || function () {};
     if (!_enabled) { callback({ success: false, message: "Memory is currently disabled." }); return; }
-    if (_isGuest()) { callback({ success: false, message: "Sign in to save memories." }); return; }
+    if (_isGuest()) {
+      _withIdentity(function (ready) {
+        if (!ready) { callback({ success: false, message: "Personal memory isn't available right now. Please try again in a moment." }); return; }
+        save(text, callback);
+      });
+      return;
+    }
 
     var sec = _sec();
     if (sec && sec.containsSensitiveData(text)) {
@@ -136,7 +164,13 @@
   // ─── Forget ───────────────────────────────────────────────────────────────
   function forget(text, callback) {
     callback = callback || function () {};
-    if (_isGuest()) { callback({ success: false, message: "Sign in to manage memories." }); return; }
+    if (_isGuest()) {
+      _withIdentity(function (ready) {
+        if (!ready) { callback({ success: false, message: "Personal memory isn't available right now." }); return; }
+        forget(text, callback);
+      });
+      return;
+    }
     // Implementation: query for matching content and delete
     // Placeholder — full text-match delete to be implemented with full feature build
     callback({ success: true, message: "I've noted that. Full forget-by-content will be available in the next build." });

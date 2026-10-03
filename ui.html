@@ -799,10 +799,12 @@
         return;
       }
 
-      // Check standalone Firebase adapter (no SNS globals needed)
+      // Check standalone Firebase adapter (no SNS globals needed).
+      // Anonymous auth is automatic — "not authenticated yet" is a normal
+      // transient state, not a permanent condition requiring user action.
       if (!window.SRFirebaseAdapter || !window.SRFirebaseAdapter.isAuthenticated ||
           !window.SRFirebaseAdapter.isAuthenticated()) {
-        _setStatus('Session-only mode (sign in to enable persistence)', 'warn');
+        _setStatus('Session mode', 'warn');
       }
 
       var ok = SR.init();
