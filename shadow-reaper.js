@@ -565,6 +565,27 @@
       global.SRResponse.composeAsync(understood, context, composeOpts, function (response, source) {
         _lastResponseSource = source || 'DETERMINISTIC';
 
+        // ── ERROR SOURCE INTERCEPTION (Stage 3A) ─────────────────────────────────
+        // composeAsync returns source=ERROR with a "LOCAL MODEL ERROR: ..." diagnostic
+        // when no inference module is loaded or the model is FAILED. This is correct
+        // diagnostic behavior for direct composeAsync callers (tests, dev tools).
+        // At the user-facing layer, we convert ERROR responses to a graceful
+        // deterministic fallback — raw diagnostic messages NEVER reach end users.
+        if (source === 'ERROR' && response && response.indexOf('LOCAL MODEL ERROR') !== -1) {
+          // Try to give a graceful response using the deterministic compose path
+          var _graceful = global.SRResponse.compose(understood, context);
+          if (_graceful && _graceful.length > 0 &&
+              _graceful.indexOf('LOCAL MODEL ERROR') === -1) {
+            response = _graceful;
+            _lastResponseSource = 'DETERMINISTIC';
+          }
+          // If compose() also failed (shouldn't happen), use a safe static fallback
+          if (!response || response.indexOf('LOCAL MODEL ERROR') !== -1) {
+            response = "I'm here — go ahead.";
+            _lastResponseSource = 'DETERMINISTIC';
+          }
+        }
+
         // ── KNOWLEDGE SUBSTITUTION ────────────────────────────────────────────────
         // If static knowledge is relevant and the response is a generic/unhelpful
         // fallback from ANY source path, replace with the knowledge snippet.

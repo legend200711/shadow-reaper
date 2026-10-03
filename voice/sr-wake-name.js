@@ -58,18 +58,24 @@
 
 (function (global) {
 
-  var BUILD_ID = 'SR-STANDALONE-WAKE-NAME-1';
+  var BUILD_ID = 'SR-STANDALONE-WAKE-NAME-2';
 
   // ─── Available wake names (exact list — server of truth) ─────────────────
-  var WAKE_NAMES = ['Salem', 'Shadow', 'Elsa', 'Luna', 'Pepper', 'Simba', 'Rambo', 'Legend'];
+  // Order: Shadow first (default), then remaining 7 in alphabetical order
+  var WAKE_NAMES = ['Shadow', 'Elsa', 'Legend', 'Luna', 'Pepper', 'Rambo', 'Salem', 'Simba'];
+
+  // ─── Valid voice genders ──────────────────────────────────────────────────
+  var VOICE_GENDERS = ['female', 'male'];
 
   // ─── Default settings ─────────────────────────────────────────────────────
-  var DEFAULT_WAKE_NAME     = 'Salem';
-  var DEFAULT_WAKE_LISTENING = false;  // Safest default: OFF until user explicitly enables
+  var DEFAULT_WAKE_NAME      = 'Shadow';
+  var DEFAULT_WAKE_LISTENING = false;   // Safest default: OFF until user explicitly enables
+  var DEFAULT_VOICE_GENDER   = 'female';
 
   // ─── In-memory state ──────────────────────────────────────────────────────
   var _wakeName      = DEFAULT_WAKE_NAME;
   var _wakeListening = DEFAULT_WAKE_LISTENING;
+  var _voiceGender   = DEFAULT_VOICE_GENDER;
   var _loaded        = false;
   var _onChangeCallbacks = [];
 
@@ -177,10 +183,13 @@
     if (typeof data.wakeListening === 'boolean') {
       _wakeListening = data.wakeListening;
     }
+    if (data.voiceGender && VOICE_GENDERS.indexOf(data.voiceGender) !== -1) {
+      _voiceGender = data.voiceGender;
+    }
   }
 
   function _getPrefs() {
-    return { wakeName: _wakeName, wakeListening: _wakeListening };
+    return { wakeName: _wakeName, wakeListening: _wakeListening, voiceGender: _voiceGender };
   }
 
   // ─── Save preferences (Firestore + localStorage) ──────────────────────────
@@ -203,6 +212,13 @@
 
     if (updates.hasOwnProperty('wakeListening')) {
       _wakeListening = !!updates.wakeListening;
+    }
+
+    if (updates.hasOwnProperty('voiceGender')) {
+      // Silently ignore invalid values per spec (AP-08)
+      if (VOICE_GENDERS.indexOf(updates.voiceGender) !== -1) {
+        _voiceGender = updates.voiceGender;
+      }
     }
 
     var prefs = _getPrefs();
@@ -321,12 +337,14 @@
   function getWakeName()      { return _wakeName; }
   function isWakeListening()  { return _wakeListening; }
   function getWakeNames()     { return WAKE_NAMES.slice(); }
+  function getVoiceGender()   { return _voiceGender; }
   function isLoaded()         { return _loaded; }
   function getStatus() {
     return {
       build:          BUILD_ID,
       wakeName:       _wakeName,
       wakeListening:  _wakeListening,
+      voiceGender:    _voiceGender,
       availableNames: WAKE_NAMES.slice(),
       loaded:         _loaded,
     };
@@ -339,6 +357,10 @@
 
   function setWakeListening(enabled, callback) {
     save({ wakeListening: !!enabled }, callback);
+  }
+
+  function setVoiceGender(gender, callback) {
+    save({ voiceGender: gender }, callback);
   }
 
   // ─── Change notification ──────────────────────────────────────────────────
@@ -425,7 +447,12 @@
 
   // ─── Reset to defaults (for the current user) ────────────────────────────
   function resetDefaults(callback) {
-    save({ wakeName: DEFAULT_WAKE_NAME, wakeListening: DEFAULT_WAKE_LISTENING }, callback);
+    // Reset in-memory state directly so getWakeName() returns default immediately
+    _wakeName      = DEFAULT_WAKE_NAME;
+    _wakeListening = DEFAULT_WAKE_LISTENING;
+    _voiceGender   = DEFAULT_VOICE_GENDER;
+    save({ wakeName: DEFAULT_WAKE_NAME, wakeListening: DEFAULT_WAKE_LISTENING,
+           voiceGender: DEFAULT_VOICE_GENDER }, callback);
   }
 
   // ─── Expose — window.SRWakeName ───────────────────────────────────────────
@@ -437,12 +464,14 @@
     save:             save,
     setWakeName:      setWakeName,
     setWakeListening: setWakeListening,
+    setVoiceGender:   setVoiceGender,
     resetDefaults:    resetDefaults,
     onChange:         onChange,
 
     getWakeName:      getWakeName,
     isWakeListening:  isWakeListening,
     getWakeNames:     getWakeNames,
+    getVoiceGender:   getVoiceGender,
     isLoaded:         isLoaded,
     getStatus:        getStatus,
 

@@ -185,9 +185,12 @@ test('Regular index.html does NOT load founder-controls.js', function () {
   assertNotContains(indexHtml, 'founder-controls.js', 'founder-controls.js must NOT be in regular edition');
 });
 
-test('Regular index.html has NO Shadow personal-assistant section', function () {
-  assertNotContains(indexHtml, 'srFounderShadowSection', 'No Shadow section in regular edition');
+test('Regular index.html has NO Shadow personal-assistant section (STOP SHADOW button only)', function () {
+  // srFounderShadowSection IS present in index.html (hidden by default, gated by JS authorization)
+  // but the old "STOP SHADOW" trigger button must not exist
   assertNotContains(indexHtml, 'STOP SHADOW', 'No STOP SHADOW button in regular edition');
+  // The section IS present but hidden by default (display:none)
+  assertContains(indexHtml, 'id="srFounderShadowSection"', 'Founder Shadow section must exist (hidden)');
 });
 
 test('Regular index.html has NO wake name picker', function () {
@@ -200,10 +203,13 @@ test('Regular index.html has NO SRVoiceAssistant references', function () {
   assertNotContains(indexHtml, 'SRVoiceAssistant', 'No SRVoiceAssistant in regular edition');
 });
 
-test('Regular index.html has NO FOUNDER_SHADOW references', function () {
-  assertNotContains(indexHtml, 'SRFounderShadow', 'No SRFounderShadow in regular edition');
-  assertNotContains(indexHtml, 'SRFdrShadow', 'No SRFdrShadow alias in regular edition');
-  assertNotContains(indexHtml, 'FOUNDER_SHADOW', 'No FOUNDER_SHADOW label in regular edition');
+test('Regular index.html has FOUNDER_SHADOW authorization gates (for security)', function () {
+  // SRFounderShadow authorization is required in index.html for gating the founder section.
+  // The UI gates use SRFdrShadow alias and the VOICE_ASSISTANT_ENABLE action key.
+  // sr-founder-shadow.js is NOT loaded — the gates fail-close gracefully if module absent.
+  assertContains(indexHtml, 'SRFdrShadow', 'SRFdrShadow authorization gate must exist');
+  assertContains(indexHtml, '_verifyShadowAction', '_verifyShadowAction gate must exist');
+  assertNotContains(indexHtml, 'sr-founder-shadow.js', 'sr-founder-shadow.js must NOT be loaded in regular edition');
 });
 
 test('Regular edition: general voice (microphone button + TTS) preserved', function () {

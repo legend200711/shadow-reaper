@@ -1348,6 +1348,16 @@ body::before {
           </div>
         </div>
 
+        <!-- Founder Shadow Section — hidden by default; only visible after authorization -->
+        <!-- Visibility is controlled exclusively by SRFounderShadow.resolveCapability() -->
+        <!-- Static display:none is intentional — JS gates all visibility changes -->
+        <div id="srFounderShadowSection" style="display:none;border-top:1px solid var(--border);padding-top:14px;margin-top:6px;">
+          <div class="sr-settings-label" style="color:var(--electric);">&#9673; Founder Shadow</div>
+          <div style="font-size:11px;color:var(--text-muted);line-height:1.5;padding:2px 0 8px;">
+            Authorized founder access to Shadow's development mode.
+          </div>
+        </div>
+
         <!-- Build info -->
         <div class="sr-build-info" id="srBuildInfo">
           Shadow Reaper — Shadow Edition<br>
@@ -2294,6 +2304,66 @@ body::before {
   // being submitted twice if the STT fires multiple times.
   var _lastVoiceTranscript = '';
   var _lastVoiceTranscriptTime = 0;
+
+  // ── FOUNDER SHADOW AUTHORIZATION ──────────────────────────────────────────
+  // SRFounderShadow gates visibility of the Founder Shadow section and actions.
+  // The section is hidden by default in HTML; JS only shows it after authorization.
+  // This is NOT a security boundary in itself — security is enforced server-side.
+  // The UI gates prevent accidental exposure of the founder interface.
+
+  var SRFdrShadow = window.SRFounderShadow || null;
+
+  function _applyFounderShadowVisibility(granted) {
+    var section = document.getElementById('srFounderShadowSection');
+    if (section) {
+      section.style.display = granted ? '' : 'none';
+    }
+  }
+
+  function _resolveFounderShadow() {
+    if (!SRFdrShadow) {
+      _applyFounderShadowVisibility(false);
+      return;
+    }
+    SRFdrShadow.resolveCapability(function (result) {
+      _applyFounderShadowVisibility(result && result.granted === true);
+    });
+    // Subscribe to future changes (e.g. revocation on sign-out)
+    SRFdrShadow.onChange(function (granted) {
+      _applyFounderShadowVisibility(granted === true);
+    });
+  }
+
+  function _verifyShadowAction(actionKey, callback) {
+    // Gate privileged actions through SRFounderShadow.verifyAction().
+    // If not loaded, deny by default (fail-closed).
+    if (!SRFdrShadow) {
+      if (typeof callback === 'function') callback({ ok: false, reason: 'SRFS_NOT_LOADED' });
+      return;
+    }
+    SRFdrShadow.verifyAction(actionKey, callback);
+  }
+
+  // Called on sign-out / auth state change to revoke Founder Shadow
+  function _onSignOut() {
+    if (SRFdrShadow) SRFdrShadow.revoke();
+    _applyFounderShadowVisibility(false);
+  }
+
+  // Resolve Founder Shadow on startup (non-blocking)
+  try { _resolveFounderShadow(); } catch (_e) {}
+
+  // Wire voice toggle through action gate (VOICE_ASSISTANT_ENABLE)
+  function _guardedToggleVoice() {
+    _verifyShadowAction('VOICE_ASSISTANT_ENABLE', function (result) {
+      if (result && result.ok === false && result.reason && result.reason !== 'SRFS_NOT_LOADED') {
+        // Only block if actively denied by a loaded SRFounderShadow that is not in degraded mode
+        // In normal user mode, SRFounderShadow is not loaded → passes through
+        return;
+      }
+      _toggleVoice();
+    });
+  }
 
   function _toggleVoice() {
     if (!SRVoice || !SRVoice.isSupported()) {

@@ -62,6 +62,10 @@ var SUITES = [
   { name: 'hosted-inference',      file: 'hosted-inference.test.js' },
   { name: 'pipeline-live',         file: 'pipeline-live-test.js' },
   { name: 'api-first',             file: 'api-first.test.js' },
+  { name: 'personality-session',   file: 'personality-session.test.js' },
+  { name: 'sns-launcher',          file: 'sns-launcher-tests.js' },
+  { name: 'founder-shadow',        file: 'founder-shadow.test.js' },
+  { name: 'conversation-regression', file: 'sr-conversation-regression.test.js' },
 ];
 
 var TESTS_DIR = __dirname;

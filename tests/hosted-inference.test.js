@@ -525,7 +525,11 @@ try {
   console.warn('[test] Could not load response engine:', e.message);
 }
 
-test('G1: composeAsync with no inference modules → no LOCAL MODEL ERROR in response', function () {
+test('G1: composeAsync with no inference modules → returns source=ERROR with diagnostic (Stage 3A)', function () {
+  // Stage 3A: when both SRInferenceRuntime and SRLocalModel are absent,
+  // composeAsync must return source=ERROR and a "LOCAL MODEL ERROR: ..." diagnostic.
+  // The user-facing layer (ShadowReaper._continueWithResearch) converts ERROR to
+  // a graceful response — but composeAsync itself must surface the diagnostic.
   var SR_resp = global.SRResponse;
   if (!SR_resp || !SR_resp.composeAsync) return; // Skip if not loaded
 
@@ -539,19 +543,23 @@ test('G1: composeAsync with no inference modules → no LOCAL MODEL ERROR in res
   var context    = {};
   var gotResponse = false;
   var responseText = '';
+  var responseSource = '';
 
   SR_resp.composeAsync(understood, context, {}, function (resp, source) {
-    gotResponse  = true;
-    responseText = resp;
+    gotResponse    = true;
+    responseText   = resp;
+    responseSource = source;
   });
 
   global.SRInferenceRuntime = savedRuntime;
   global.SRLocalModel       = savedModel;
 
   assert.ok(gotResponse, 'composeAsync should call the callback');
-  assert.ok(!responseText.includes('LOCAL MODEL ERROR'),
-    'Response must not contain LOCAL MODEL ERROR. Got: ' + responseText);
   assert.ok(responseText.length > 0, 'Response should be non-empty');
+  assert.strictEqual(responseSource, 'ERROR',
+    'Stage 3A: source must be ERROR when no inference module loaded, got: ' + responseSource);
+  assert.ok(responseText.includes('LOCAL MODEL ERROR'),
+    'Stage 3A: response must contain LOCAL MODEL ERROR diagnostic. Got: ' + responseText);
 });
 
 test('G2: composeAsync with degraded runtime → no technical error in response', function () {

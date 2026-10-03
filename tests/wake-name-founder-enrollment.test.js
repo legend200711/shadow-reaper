@@ -8,7 +8,7 @@
  * Tests:
  *   WAKE NAME:
  *     WN-01  All eight wake names available
- *     WN-02  Default wake name is Salem
+ *     WN-02  Default wake name is Shadow
  *     WN-03  Set wake name persists to localStorage (simulated Firestore offline)
  *     WN-04  Invalid wake name rejected
  *     WN-05  Wake listening default is OFF
@@ -155,17 +155,15 @@ test('WN-01', 'All eight wake names available', function () {
   });
 });
 
-test('WN-02', 'Default wake name is Salem', function () {
+test('WN-02', 'Default wake name is Shadow', function () {
   // Reset module state via resetDefaults (loads defaults)
   // Since we can't reload the module, check initial state
-  var status = global.SRWakeName.getStatus();
-  // After any previous test operations, re-reset to defaults
   global.localStorage.clear();
   // The module was already initialized — test the reset path
   var called = false;
   global.SRWakeName.resetDefaults(function (err, prefs) {
     called = true;
-    assertEqual(prefs.wakeName, 'Salem', 'default wake name');
+    assertEqual(prefs.wakeName, 'Shadow', 'default wake name must be Shadow');
     assert(prefs.wakeListening === false, 'default wakeListening should be OFF');
   });
   assert(called, 'resetDefaults callback should be synchronous when Firestore unavailable');

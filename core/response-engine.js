@@ -440,12 +440,31 @@
     // QUESTION — meta questions about session context
     if (intent === 'QUESTION') {
 
+      // "What's your name?" / "Who are you?" / "What do I call you?"
+      if (/what(\'?s| is) your name/i.test(raw) ||
+          /who are you|what are you called|what do i call you/i.test(raw) ||
+          /what should i call you/i.test(raw)) {
+        // Read the current assistant name from personality engine, wake name, or default
+        var _aName = 'Shadow';
+        if (global.SRPersonality && typeof global.SRPersonality.getAssistantName === 'function') {
+          _aName = global.SRPersonality.getAssistantName() || _aName;
+        } else if (global.SRWakeName && typeof global.SRWakeName.getWakeName === 'function') {
+          _aName = global.SRWakeName.getWakeName() || _aName;
+        }
+        return 'My name is ' + _aName + '. What can I help you with?';
+      }
+
       // "What project am I working on?" / "What is my project called?" / "What's my project?"
       if (/what (project|am i working on|are we working on)/i.test(raw) ||
           /what(\'?s| is) my project/i.test(raw) ||
           /what (is|was) (the |my )?project (called|named|name)/i.test(raw)) {
         if (context.projectName) {
-          return fill(pickVaried(POOLS.whatProject), ctx);
+          var _pResp = fill(pickVaried(POOLS.whatProject), ctx);
+          // If the query also asks about color/design AND we have a tracked color, append it.
+          if (/color|colour|design/.test(lower) && context.designColor) {
+            _pResp += ' You said it uses a ' + context.designColor + ' design.';
+          }
+          return _pResp;
         }
         return pickVaried(POOLS.whatProjectNone);
       }
@@ -727,7 +746,10 @@
       /what (was i|did i|were we|have i been) (talking|working|doing|saying)/i.test(raw) ||
       /what (am i|are we) (talking|working|doing)/i.test(raw) ||
       /what (did i|was i) (doing|asking|ask|want|change|tell)/i.test(raw) ||
-      /how are you|how('?re| are) you doing|you doing/i.test(raw)
+      /how are you|how('?re| are) you doing|you doing/i.test(raw) ||
+      // Identity questions — deterministic (returns current wake name)
+      /what(\'?s| is) your name/i.test(raw) ||
+      /who are you|what are you called|what do i call you|what should i call you/i.test(raw)
     );
   }
 
@@ -965,7 +987,10 @@
 
     // ── No inference module at all ────────────────────────────────────────────
     // SRInferenceRuntime not loaded AND SRLocalModel not loaded.
-    // Use research snippet if available, otherwise graceful deterministic response.
+    // Use research snippet if available, otherwise return ERROR with diagnostic message.
+    // Stage 3A: this path MUST return source=ERROR so the caller (e.g. shadow-reaper.js)
+    // can convert it to a graceful user-facing response. Conversational fallback here
+    // would mask the failure from diagnostic/dev callers (composeAsync direct callers).
     if (!_inferRuntime && !_lm) {
       if (_researchSnippet && _researchSnippet.trim().length > 0) {
         var _nmsLower = _researchSnippet.toLowerCase();
@@ -985,10 +1010,10 @@
         callback(_researchSnippet.trim(), 'DETERMINISTIC');
         return;
       }
-      // No inference module and no research snippet — use graceful deterministic response.
-      // Raw "LOCAL MODEL ERROR" strings are never shown to users.
-      var _noModDet2 = compose(understood, context);
-      callback(_noModDet2, 'DETERMINISTIC');
+      // Stage 3A: No inference module and no research snippet.
+      // Return ERROR + diagnostic. The user-facing layer (ShadowReaper._continueWithResearch)
+      // intercepts ERROR and converts to a graceful response before the user sees it.
+      callback('LOCAL MODEL ERROR: No inference module loaded [NO_INFERENCE_MODULE].', 'ERROR');
       return;
     }
 
@@ -1100,7 +1125,7 @@
     // included in the page (e.g., test environments that load only SRLocalModel).
     var localModel = _lm;
     if (!localModel) {
-      // No inference at all — use graceful deterministic response, not a raw error string.
+      // Stage 3A: No model on legacy path — return ERROR + diagnostic.
       if (_researchSnippet && _researchSnippet.trim().length > 0) {
         var _norsLower = _researchSnippet.toLowerCase();
         if (_norsLower.indexOf('[weather') !== -1 || _norsLower.indexOf('temperature') !== -1 ||
@@ -1111,8 +1136,7 @@
         callback(_researchSnippet.trim(), 'DETERMINISTIC');
         return;
       }
-      var _noModDet = compose(understood, context);
-      callback(_noModDet, 'DETERMINISTIC');
+      callback('LOCAL MODEL ERROR: No inference module loaded [NO_INFERENCE_MODULE].', 'ERROR');
       return;
     }
 
@@ -1140,10 +1164,18 @@
       return;
     }
 
-    if (modelStatus.state === 'FAILED' || modelStatus.state !== 'READY') {
-      // Model not ready — use graceful deterministic response, never a raw error string.
-      var detFallbackLm = compose(understood, context);
-      callback(detFallbackLm, 'DETERMINISTIC');
+    if (modelStatus.state === 'FAILED') {
+      // Stage 3A: FAILED model — return ERROR + diagnostic.
+      // The user-facing layer intercepts this and shows a graceful response.
+      var _failedDiag = localModel.getDiagnostics ? localModel.getDiagnostics() : {};
+      var _failedCode = _failedDiag.errorCode || 'UNKNOWN_LOAD_ERROR';
+      callback('LOCAL MODEL ERROR: Model in FAILED state [' + _failedCode + '].', 'ERROR');
+      return;
+    }
+    if (modelStatus.state !== 'READY') {
+      // UNINITIALIZED / LOADING / VERIFYING — not yet failed, but not ready.
+      // Return ERROR + diagnostic so caller can distinguish from DETERMINISTIC.
+      callback('LOCAL MODEL ERROR: Model not ready [state=' + modelStatus.state + '].', 'ERROR');
       return;
     }
 
